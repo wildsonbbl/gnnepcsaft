@@ -79,29 +79,9 @@ Phase Equilibria, vol. 270, no. 1, pp. 87–96, Aug. 2008.
 revised,” Chem. Eng. Res. Des., vol. 92, no. 12, pp. 2884–2897, Dec. 2014.
 """
 import jax.numpy as np
-from scipy.optimize import fsolve
+from jaxopt import LevenbergMarquardt as LM
 from jax.scipy.optimize import minimize
-
-
-class InputError(Exception):
-    """Exception raised for errors in the input.
-    """
-
-    def __init__(self, message):
-        self.message = message
-
-
-def check_input(x, name1, var1, name2, var2):
-    ''' Perform a few basic checks to make sure the input is reasonable. '''
-    if np.abs(np.sum(x) - 1) > 1e-7:
-        raise InputError(
-            'The mole fractions do not sum to 1. x = {}'.format(x))
-    if var1 <= 0:
-        raise InputError(
-            'The {} must be a positive number. {} = {}'.format(name1, name1, var1))
-    if var2 <= 0:
-        raise InputError(
-            'The {} must be a positive number. {} = {}'.format(name2, name2, var2))
+import jax
 
 
 def pcsaft_vaporP(p_guess, x, m, s, e, t, **kwargs):
@@ -156,15 +136,15 @@ def pcsaft_vaporP(p_guess, x, m, s, e, t, **kwargs):
     Pvap : float
         Vapor pressure (Pa)    
     """
-    check_input(x, 'guess pressure', p_guess, 'temperature', t)
+
     result = minimize(vaporPfit, p_guess, args=(x, m, s, e, t, kwargs),
-                      tol=1e-10, method='Nelder-Mead', options={'maxiter': 100})
+                      tol=1e-10, options={'maxiter': 100})
 
     p_guess = 1e-2
     # Sometimes optimization doesn't work if p_guess is not close
     while (result.fun > 1e-3) and (p_guess < 1e10):
         result = minimize(vaporPfit, p_guess, args=(
-            x, m, s, e, t, kwargs), tol=1e-10, method='Nelder-Mead', options={'maxiter': 100})
+            x, m, s, e, t, kwargs), tol=1e-10, options={'maxiter': 100})
         p_guess = p_guess * 10
 
     Pvap = result.x
@@ -225,7 +205,7 @@ def pcsaft_bubbleP(p_guess, xv_guess, x, m, s, e, t, **kwargs):
             0 : Bubble point pressure (Pa)
             1 : Composition of the liquid phase
     """
-    check_input(x, 'guess pressure', p_guess, 'temperature', t)
+
     result = minimize(bubblePfit, p_guess, args=(xv_guess, x, m, s, e, t,
                       kwargs), tol=1e-10, method='Nelder-Mead', options={'maxiter': 100})
 
@@ -335,7 +315,7 @@ def pcsaft_Hvap(p_guess, x, m, s, e, t, **kwargs):
             0 : enthalpy of vaporization (J/mol), float            
             1 : vapor pressure (Pa), float
     """
-    check_input(x, 'guess pressure', p_guess, 'temperature', t)
+    
     Pvap = minimize(vaporPfit, p_guess, args=(x, m, s, e, t, kwargs),
                     tol=1e-10, method='Nelder-Mead', options={'maxiter': 100}).x
 
@@ -401,7 +381,7 @@ def pcsaft_osmoticC(x, m, s, e, t, rho, **kwargs):
     osmC : float
         Molal osmotic coefficient
     """
-    check_input(x, 'density', rho, 'temperature', t)
+    
     indx_water = np.where(e == 353.9449)[0]  # to find index for water
     molality = x/(x[indx_water]*18.0153/1000.)
     molality[indx_water] = 0
@@ -478,7 +458,7 @@ def pcsaft_cp(x, m, s, e, t, rho, params, **kwargs):
     cp : float
         Specific molar isobaric heat capacity (J mol^-1 K^-1)
     """
-    check_input(x, 'density', rho, 'temperature', t)
+    
 
     if rho > 900:
         ph = 'liq'
@@ -562,7 +542,7 @@ def pcsaft_PTz(p_guess, x_guess, beta_guess, mol, vol, x_total, m, s, e, t, **kw
             2 : composition of the vapor phase, ndarray, shape (n,)
             3 : mole fraction of the mixture vaporized
     """
-    check_input(x_total, 'guess pressure', p_guess, 'temperature', t)
+    
     result = minimize(PTzfit, p_guess, args=(x_guess, beta_guess, mol, vol, x_total,
                       m, s, e, t, kwargs), tol=1e-10, method='Nelder-Mead', options={'maxiter': 100})
     p = result.x
@@ -694,19 +674,13 @@ def pcsaft_den(x, m, s, e, t, p, phase='liq', **kwargs):
     else:
         ValueError('The phase must be specified as either "liq" or "vap".')
 
-    N_AV = 6.022140857e23  # Avagadro's number
+    N_AV = 6.022140857e23  # Avogadro's number
 
     d = s*(1-0.12*np.exp(-3*e/t))
     den_guess = 6/np.pi*eta_guess/np.sum(x*m*d**3)
     rho_guess = np.asarray([den_guess*1.0e30/N_AV])
-    
-    gtol = (rho_guess*1/100)[0]
 
-    result = minimize(denfit, rho_guess, args=(
-        x, m, s, e, t, p, kwargs), method='BFGS', options={'maxiter': 100, 'gtol':gtol})
-    
-    rho = result.x
-    return rho
+    return den_solver(rho_guess, x, m, s, e, t, p, kwargs)
 
 
 def pcsaft_p(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
@@ -769,7 +743,7 @@ def pcsaft_p(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
     P = Z*kb*t*den*1.0e30  # Pa
     return P
 
-
+@jax.jit
 def pcsaft_dadt(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
                 dip_num=None, z=None, dielc=None):
     """
@@ -820,7 +794,7 @@ def pcsaft_dadt(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     dadt : float
         Temperature derivative of residual Helmholtz energy at constant density (J mol^{-1} K^{-1})
     """
-    check_input(x, 'density', rho, 'temperature', t)
+    
 
     ncomp = x.shape[0]  # number of components
     kb = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
@@ -1129,7 +1103,7 @@ def pcsaft_hres(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     hres : float
         Residual enthalpy (J mol^{-1})
     """
-    check_input(x, 'density', rho, 'temperature', t)
+    
 
     kb = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
     N_AV = 6.022140857e23  # Avagadro's number
@@ -1195,8 +1169,7 @@ def pcsaft_sres(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     sres : float
         Residual entropy (J mol^{-1} K^{-1})
     """
-    check_input(x, 'density', rho, 'temperature', t)
-
+    
     gres = pcsaft_gres(x, m, s, e, t, rho, k_ij, e_assoc,
                        vol_a, dipm, dip_num, z, dielc)
     hres = pcsaft_hres(x, m, s, e, t, rho, k_ij, e_assoc,
@@ -1255,7 +1228,7 @@ def pcsaft_gres(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     gres : float
         Residual Gibbs energy (J mol^{-1})
     """
-    check_input(x, 'density', rho, 'temperature', t)
+    
 
     kb = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
     N_AV = 6.022140857e23  # Avagadro's number
@@ -1269,7 +1242,7 @@ def pcsaft_gres(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     gres = (ares + (Z - 1) - np.log(Z))*kb*N_AV*t
     return gres
 
-
+@jax.jit
 def pcsaft_fugcoef(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
                    dip_num=None, z=None, dielc=None):
     """
@@ -1662,7 +1635,7 @@ def pcsaft_fugcoef(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm
     fugcoef = np.exp(mu - np.log(Z))  # the fugacity coefficients
     return fugcoef
 
-
+@jax.jit
 def pcsaft_Z(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
              dip_num=None, z=None, dielc=None):
     """
@@ -1712,7 +1685,6 @@ def pcsaft_Z(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
     Z : float
         Compressibility factor
     """
-    # check_input(x, 'density', rho, 'temperature', t)
 
     ncomp = x.shape[0]  # number of components
     kb = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
@@ -1751,6 +1723,9 @@ def pcsaft_Z(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
     b2 = np.asarray([0.097688312, -0.255757498, -9.155856153,
                     20.64207597, -38.80443005, 93.62677408, -29.66690559])
     
+    
+ 
+
  
     for i in range(4):
         zeta = zeta.at[i].set(np.pi/6.*den*np.sum(x*m*d**i))
@@ -1956,8 +1931,8 @@ def pcsaft_Z(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
     Z = Zid + Zhc + Zdisp + Zpolar + Zassoc + Zion
     return Z
 
-
-def pcsaft_ares(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=None,
+@jax.jit
+def pcsaft_ares(x, m, s, e, t, rho, k_ij=None, l_ij = None, khb_ij= None, e_assoc=None, vol_a=None, dipm=None,
                 dip_num=None, z=None, dielc=None):
     """
     Calculates the residual Helmholtz energy.
@@ -2006,21 +1981,26 @@ def pcsaft_ares(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     ares : float
         Residual Helmholtz energy (J mol^{-1})
     """
-    check_input(x, 'density', rho, 'temperature', t)
+    
 
     ncomp = x.shape[0]  # number of components
     kb = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
     N_AV = 6.022140857e23  # Avagadro's number
 
-    d = s*(1-0.12*np.exp(-3*e/t))
-    if type(z) == np.ndarray:
+    d = (s*(1-0.12*np.exp(-3*e/t)))
+
+    ##if type(z) == np.ndarray:
         # for ions the diameter is assumed to be temperature independent (see Held et al. 2014)
-        d[np.where(z != 0)[0]] = s[np.where(z != 0)[0]]*(1-0.12)
+    ##    d[np.where(z != 0)[0]] = s[np.where(z != 0)[0]]*(1-0.12)
 
     den = rho*N_AV/1.0e30
 
     if type(k_ij) != np.ndarray:
         k_ij = np.zeros((ncomp, ncomp), dtype='float32')
+    if type(l_ij) != np.ndarray:
+        l_ij = np.zeros((ncomp, ncomp), dtype='float32')
+    if type(khb_ij) != np.ndarray:
+        khb_ij = np.zeros((ncomp, ncomp), dtype='float32')
 
     zeta = np.zeros((4,), dtype='float32')
     ghs = np.zeros((ncomp, ncomp), dtype='float32')
@@ -2028,42 +2008,55 @@ def pcsaft_ares(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     s_ij = np.zeros_like(ghs)
     m2es3 = 0.
     m2e2s3 = 0.
-    a0 = np.asarray([0.910563145, 0.636128145, 2.686134789, -
-                    26.54736249, 97.75920878, -159.5915409, 91.29777408])
+    a0 = np.asarray([0.910563145, 0.636128145, 2.686134789,
+                    -26.54736249, 97.75920878, -159.5915409, 91.29777408])
     a1 = np.asarray([-0.308401692, 0.186053116, -2.503004726,
                     21.41979363, -65.25588533, 83.31868048, -33.74692293])
-    a2 = np.asarray([-0.090614835, 0.452784281, 0.596270073, -
-                    1.724182913, -4.130211253, 13.77663187, -8.672847037])
-    b0 = np.asarray([0.724094694, 2.238279186, -4.002584949, -
-                    21.00357682, 26.85564136, 206.5513384, -355.6023561])
-    b1 = np.asarray([-0.575549808, 0.699509552, 3.892567339, -
-                    17.21547165, 192.6722645, -161.8264617, -165.2076935])
+    a2 = np.asarray([-0.090614835, 0.452784281, 0.596270073,
+                    -1.724182913, -4.130211253, 13.77663187, -8.672847037])
+    b0 = np.asarray([0.724094694, 2.238279186, -4.002584949,
+                    -21.00357682, 26.85564136, 206.5513384, -355.6023561])
+    b1 = np.asarray([-0.575549808, 0.699509552, 3.892567339,
+                    -17.21547165, 192.6722645, -161.8264617, -165.2076935])
     b2 = np.asarray([0.097688312, -0.255757498, -9.155856153,
                     20.64207597, -38.80443005, 93.62677408, -29.66690559])
 
-    for i in range(4):
-        zeta[i] = np.pi/6.*den*np.sum(x*m*d**i)
+#    for i in range(4):
+#        zeta = zeta.at[i].set(np.pi/6.*den*np.sum(x*m*d**i))
+
+    n = np.arange(4).reshape((4,1))
+    zeta = np.pi/6.*den*(d.T**n) @ (x*m)
 
     eta = zeta[3]
-    m_avg = np.sum(x*m)
+    m_avg = x.T @ m
 
-    for i in range(ncomp):
-        for j in range(ncomp):
-            s_ij[i, j] = (s[i] + s[j])/2.
-            if type(z) == np.ndarray:
+    s_ij = (s + s.T) / 2 * (1 - l_ij)
+    e_ij = np.sqrt(e @ e.T) * (1-k_ij)
+    m2es3 = np.sum((x@x.T) * (m@m.T)*(e_ij/t)*s_ij**3)
+    m2e2s3 = np.sum((x@x.T) * (m@m.T)*(e_ij/t)**2*s_ij**3)
+    ghs = 1/(1-zeta[3]) + (d @ d.T)/(d + d.T)*3*zeta[2]/(1-zeta[3])**2 + ((d @ d.T)/(d + d.T))**2*2*zeta[2]**2/(1-zeta[3])**3
+
+    
+
+#    for i in range(ncomp):
+#        for j in range(ncomp):
+#            s_ij[i, j] = (s[i] + s[j])/2*(1-l_ij[i,j])
+#           if type(z) == np.ndarray:
                 # for two cations or two anions e_ij is kept at zero to avoid dispersion between like ions (see Held et al. 2014)
-                if z[i]*z[j] <= 0:
-                    e_ij[i, j] = np.sqrt(e[i]*e[j])*(1-k_ij[i, j])
-            else:
-                e_ij[i, j] = np.sqrt(e[i]*e[j])*(1-k_ij[i, j])
-            m2es3 = m2es3 + x[i]*x[j]*m[i]*m[j]*e_ij[i, j]/t*s_ij[i, j]**3
-            m2e2s3 = m2e2s3 + x[i]*x[j]*m[i] * \
-                m[j]*(e_ij[i, j]/t)**2*s_ij[i, j]**3
-            ghs[i, j] = 1/(1-zeta[3]) + (d[i]*d[j]/(d[i]+d[j]))*3*zeta[2]/(1-zeta[3])**2 + \
-                (d[i]*d[j]/(d[i]+d[j]))**2*2*zeta[2]**2/(1-zeta[3])**3
+#                if z[i]*z[j] <= 0:
+#                    e_ij[i, j] = np.sqrt(e[i]*e[j])*(1-k_ij[i, j])
+#            else:
+#                e_ij[i, j] = np.sqrt(e[i]*e[j])*(1-k_ij[i, j])
 
-    ares_hs = 1/zeta[0]*(3*zeta[1]*zeta[2]/(1-zeta[3]) + zeta[2]**3/(zeta[3]*(1-zeta[3])**2)
-                         + (zeta[2]**3/zeta[3]**2 - zeta[0])*np.log(1-zeta[3]))
+#           m2es3 = m2es3 + x[i]*x[j]*m[i]*m[j]*e_ij[i, j]/t*s_ij[i, j]**3
+
+#           m2e2s3 = m2e2s3 + x[i]*x[j]*m[i] * m[j]*(e_ij[i, j]/t)**2*s_ij[i, j]**3
+            
+#            ghs[i, j] = 1/(1-zeta[3]) + (d[i]*d[j]/(d[i]+d[j]))*3*zeta[2]/(1-zeta[3])**2 + \
+#               (d[i]*d[j]/(d[i]+d[j]))**2*2*zeta[2]**2/(1-zeta[3])**3
+
+    ares_hs = 1/zeta[0]*(3*zeta[1]*zeta[2]/(1-zeta[3]) + zeta[2]**3/(zeta[3]*(1-zeta[3])**2) + 
+                         (zeta[2]**3/zeta[3]**2 - zeta[0])*np.log(1-zeta[3]))
 
     a = a0 + (m_avg-1)/m_avg*a1 + (m_avg-1)/m_avg*(m_avg-2)/m_avg*a2
     b = b0 + (m_avg-1)/m_avg*b1 + (m_avg-1)/m_avg*(m_avg-2)/m_avg*b2
@@ -2072,11 +2065,13 @@ def pcsaft_ares(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     I1 = np.sum(a*eta**idx)
     I2 = np.sum(b*eta**idx)
     C1 = 1/(1 + m_avg*(8*eta-2*eta**2)/(1-eta)**4 + (1-m_avg) *
-            (20*eta-27*eta**2+12*eta**3-2*eta**4)/((1-eta)*(2-eta))**2)
+            (20*eta-27*eta**2+12*eta**3-2*eta**4)/((1-eta)*(2-eta))**2) # is it 1/ or not? have to check!
 
-    summ = 0.
-    for i in range(ncomp):
-        summ += x[i]*(m[i]-1)*np.log(ghs[i, i])
+#    summ = 0.
+#    for i in range(ncomp):
+#        summ += x[i]*(m[i]-1)*np.log(ghs[i, i])
+    
+    summ = np.sum((x @ (m.T-1))*(np.log(ghs)*np.identity(ghs.shape[0])))
 
     ares_hc = m_avg*ares_hs - summ
     ares_disp = -2*np.pi*den*I1*m2es3 - np.pi*den*m_avg*C1*I2*m2e2s3
@@ -2212,7 +2207,7 @@ def pcsaft_ares(x, m, s, e, t, rho, k_ij=None, e_assoc=None, vol_a=None, dipm=No
     ares = ares_hc + ares_disp + ares_polar + ares_assoc + ares_ion
     return ares
 
-
+@jax.jit
 def XA_find(XA_guess, ncomp, delta_ij, den, x):
     """Iterate over this function in order to solve for XA"""
     n_sites = int(XA_guess.shape[1]/ncomp)
@@ -2230,7 +2225,7 @@ def XA_find(XA_guess, ncomp, delta_ij, den, x):
 
     return XA
 
-
+@jax.jit
 def dXA_find(ncA, ncomp, iA, delta_ij, den, XA, ddelta_dd, x, n_sites):
     """Solve for the derivative of XA with respect to density."""
     B = np.zeros((n_sites*ncA*ncomp,), dtype='float32')
@@ -2274,7 +2269,7 @@ def dXA_find(ncA, ncomp, iA, delta_ij, den, XA, ddelta_dd, x, n_sites):
     dXA_dd = np.reshape(dXA_dd, (-1, ncomp), order='F')
     return dXA_dd
 
-
+@jax.jit
 def dXAdt_find(ncA, delta_ij, den, XA, ddelta_dt, x, n_sites):
     """Solve for the derivative of XA with respect to temperature."""
     B = np.zeros((n_sites*ncA,), dtype='float32')
@@ -2298,7 +2293,7 @@ def dXAdt_find(ncA, delta_ij, den, XA, ddelta_dt, x, n_sites):
     dXA_dt = np.linalg.solve(A, B)  # Solves linear system of equations
     return dXA_dt
 
-
+@jax.jit
 def d2XAdt_find(ncA, delta_ij, den, XA, dXA_dt, ddelta_dt, d2delta_dt, x, n_sites):
     """Solve for the second derivative of XA with respect to temperature."""
     B = np.zeros((n_sites*ncA,), dtype='float32')
@@ -2392,12 +2387,6 @@ def vaporPfit(p_guess, x, m, s, e, t, kwargs):
         if np.isnan(error):
             error = 100000000.
     return error
-
-
-def denfit(rho_guess, x, m, s, e, t, p, kwargs):
-    """Minimize this function to calculate the density."""
-    P_fit = pcsaft_p(x, m, s, e, t, rho_guess, **kwargs)
-    return np.sum(((P_fit-p)/p*100)**2)
 
 
 def PTzfit(p_guess, x_guess, beta_guess, mol, vol, x_total, m, s, e, t, kwargs):
@@ -2558,3 +2547,17 @@ def pcsaft_fit_pure(params, prop, T, P, molden, **kwargs):
                 str(params[2]) + '\t' + str(np.sum(error**2)) + '\n')
 
     return np.sum(error**2)
+
+
+def denfit(rho_guess, x, m, s, e, t, p, kwargs):
+    """Minimize this function to calculate the density."""
+    P_fit = pcsaft_p(x, m, s, e, t, rho_guess, **kwargs)
+    return (P_fit-p)/p*100
+
+@jax.jit
+def den_solver(rho_guess, x, m, s, e, t, p, kwargs):
+    
+    solver = LM(residual_fun = denfit , maxiter=100)
+    sol = solver.run(rho_guess, x, m, s, e, t, p, kwargs).params
+    
+    return sol
