@@ -1,3 +1,8 @@
+# Inspired by https://github.com/zmeri/PC-SAFT
+
+# @author: Wildson Lima
+
+
 import jax.numpy as np
 import jax
 

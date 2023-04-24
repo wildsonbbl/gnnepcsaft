@@ -11,6 +11,7 @@ from torch_geometric.data import Dataset, download_url
 import polars as pl
 from tqdm.notebook import tqdm as ntqdm
 from tqdm import tqdm
+import glob
 
 
 def BinaryGraph(InChI1: str, InChI2: str):
@@ -76,16 +77,12 @@ class ThermoMLDataset(Dataset):
 
     Notebook (bool, optional) - Whether to use tqdm.notebook progress bar while processing data.
 
-    VP (bool, optional) - Whether is being used for vapor pressure data.
-
-    nrow (int, optional) - How many rows of raw data to process. None is for all data.
     """
 
     def __init__(self, root, transform=None, pre_transform=None,
-                 pre_filter=None, log=True, Notebook=True, VP=False, nrow: int = None):
+                 pre_filter=None, log=True, Notebook=True):
         self.Notebook = Notebook
-        self.VP = VP
-        self.nrow = nrow
+        
         super().__init__(root, transform, pre_transform, pre_filter, log)
 
     @property
@@ -95,34 +92,37 @@ class ThermoMLDataset(Dataset):
     @property
     def processed_file_names(self):
         try:
-            files = os.listdir(self.processed_dir)
+            path = osp.join(self.processed_dir,'data*.pt')
+            files = [file.split('/')[-1] for file in glob.glob(path)]
         except:
             os.mkdir(self.processed_dir)
-            files = os.listdir(self.processed_dir)
+            path = osp.join(self.processed_dir,'data*.pt')
+            files = [file.split('/')[-1] for file in glob.glob(path)]
         return files
 
     def download(self):
         return print('no url to download from')
 
-    def process(self):
+    def process(self, nrow: int = None):
         idx = 0
-        cols = ['TK', 'PkPa',
-                'mlc1', 'mlc2', 'm1', 'm2']
-        if self.VP:
-            cols.remove("PkPa")
+        cols = ['mlc1', 'mlc2', 'TK', 'PPa',
+                'phase', 'type', 'm']
 
         progressbar = [ntqdm if self.Notebook else tqdm][0]
 
         for raw_path in self.raw_paths:
             # Read data from `raw_path`.
-            self.dataframe = pl.read_parquet(raw_path)
-            total = int([self.dataframe.shape[0] if self.nrow == None else self.nrow][0])
+            if nrow != None:
+                self.dataframe = pl.read_parquet(raw_path, n_rows = nrow)
+            else:
+                self.dataframe = pl.read_parquet(raw_path)
 
+            total = self.dataframe.shape[0]
+            
             for datapoint in progressbar(self.dataframe.iter_rows(named=True),
                                          desc='data points',
                                          total=total):
-                if idx >= self.nrow:
-                    break
+                
                 y = [datapoint[col] for col in cols]
 
                 graph = BinaryGraph(datapoint['inchi1'], datapoint['inchi2'])
@@ -130,14 +130,13 @@ class ThermoMLDataset(Dataset):
                 graph.y = torch.tensor(y, dtype=torch.float64)
                 graph.c1 = datapoint['c1']
                 graph.c2 = datapoint['c2']
-                graph.phase = datapoint['phase']
-                graph.type = datapoint['type']
 
                 torch.save(graph, osp.join(
                     self.processed_dir, f'data_{idx}.pt'))
                 
 
                 idx += 1
+        print('Done!')
 
     def len(self):
         return len(self.processed_file_names)
