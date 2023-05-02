@@ -676,51 +676,26 @@ def pcsaft_den(x, m, s, e, t, p, k_ij, l_ij,
                           khb_ij, e_assoc, vol_a, dipm,
                           dip_num, z, dielc, phase)
 
-    nu = np.zeros((1, 2))
-    nu = nu.at[0, 0].set((b+a)/2)
-    f = den_errSQ(nu[0, 0], x, m, s, e, t, p, k_ij, l_ij,
-                  khb_ij, e_assoc, vol_a, dipm,
-                  dip_num, z, dielc)
-    nu = nu.at[0, 1].set(f)
+    nu = (b+a)/2
 
     def updater(i, nu):
-        f = nu[0, 1]
-        gradf = dden_errSQ_dnu(nu[0, 0], x, m, s, e, t, p, k_ij, l_ij,
-                               khb_ij, e_assoc, vol_a, dipm,
-                               dip_num, z, dielc)
-
-        nu = nu.at[0, 0].set(nu[0, 0] - f/gradf)
-
-        f = den_errSQ(nu[0, 0], x, m, s, e, t, p, k_ij, l_ij,
+        f = den_errSQ(nu, x, m, s, e, t, p, k_ij, l_ij,
                       khb_ij, e_assoc, vol_a, dipm,
                       dip_num, z, dielc)
-
-        nu = nu.at[0, 1].set(f)
+        f = f * (f >= 1.0e-6)
+        gradf = dden_errSQ_dnu(nu, x, m, s, e, t, p, k_ij, l_ij,
+                               khb_ij, e_assoc, vol_a, dipm,
+                               dip_num, z, dielc)
+        nu = nu - f/gradf
         return nu
 
     nu = jax.lax.fori_loop(
         0, 40,
-        lambda i, nu: jax.lax.cond(
-            nu[0, 1] > 1.0e-6,
-            updater,
-            lambda i, nu: nu,
-            i, nu
-        ),
+        updater,
         nu
     )
 
-    # for i in range(40):
-    #    if f < 1.0e-5:
-    #        break
-    #    gradf = dden_errSQ_dnu(nu[0, 0], x, m, s, e, t, p, k_ij, l_ij,
-    #                       khb_ij, e_assoc, vol_a, dipm,
-    #                       dip_num, z, dielc)
-    #    nu = nu.at[0,0].set(nu[0,0] - f /gradf)
-    #    f = den_errSQ(nu[0, 0], x, m, s, e, t, p, k_ij, l_ij,
-    #              khb_ij, e_assoc, vol_a, dipm,
-    #              dip_num, z, dielc)
-
-    rho = density_from_nu(nu[0, 0], t, x, m, s, e)
+    rho = density_from_nu(nu, t, x, m, s, e)
 
     return rho
 
@@ -738,18 +713,18 @@ def bainterval_den(x, m, s, e, t, p, k_ij, l_ij,
                    khb_ij, e_assoc, vol_a, dipm,
                    dip_num, z, dielc, phase):
 
-    n = np.arange(30, dtype=np.float64)[..., np.newaxis]
-    nu = 0.7405*n/29 + 1.0e-13
-    nu = nu.at[1, 0].set(6.0e-3)
+    n = np.arange(0.1, 0.7405, 0.1, dtype=np.float64)
+    nu = n*10**np.arange(-12.0, 1.0)[..., np.newaxis]
+    nu = nu.flatten()[..., np.newaxis]
 
     err = root_den(nu, x, m, s, e, t, p, k_ij, l_ij,
                    khb_ij, e_assoc, vol_a, dipm,
                    dip_num, z, dielc)
 
-    nul = np.zeros((30, 2))
+    nul = np.zeros((91, 2))
 
     nul = jax.lax.fori_loop(
-        0, 29,
+        0, 90,
         lambda i, nul: jax.lax.cond(
             err[i+1, 0]*err[i, 0] < 0,
             lambda i, nul: nul.at[(i, i+1), 0].set(
@@ -1030,41 +1005,33 @@ fungcoef_phase = jax.jit(jax.vmap(
      None, None, None)
 ))
 
-
 @jax.jit
-def VP_err(p_guess, x, m, s, e, t, k_ij, l_ij,
-           khb_ij, e_assoc, vol_a, dipm,
-           dip_num, z, dielc):
+def fugVP_err(p_guess, x, m, s, e, t, k_ij, l_ij,
+             khb_ij, e_assoc, vol_a, dipm,
+             dip_num, z, dielc):
     """Minimize this function to calculate the vapor pressure."""
-
     phases = np.asarray([1.0, 0.0])
     rho = den_phase(x, m, s, e, t, p_guess, k_ij, l_ij,
                     khb_ij, e_assoc, vol_a, dipm,
                     dip_num, z, dielc, phases)
-
+    
     fugcoef_l, fugcoef_v = fungcoef_phase(x, m, s, e, t, rho, k_ij, l_ij,
                                           khb_ij, e_assoc, vol_a, dipm,
                                           dip_num, z, dielc)
+    err = np.abs(fugcoef_l[0,0] - fugcoef_v[0,0])
 
-    return np.log(np.mean(fugcoef_l/fugcoef_v))
-
-
-@jax.jit
-def VP_errSQ(p_guess, x, m, s, e, t, k_ij, l_ij,
-             khb_ij, e_assoc, vol_a, dipm,
-             dip_num, z, dielc):
-    """Minimize this function to calculate the vapor pressure."""
-
-    return VP_err(p_guess, x, m, s, e, t, k_ij, l_ij,
-                  khb_ij, e_assoc, vol_a, dipm,
-                  dip_num, z, dielc)**2
+    err = jax.lax.cond(err > 0,
+                       lambda err: err,
+                        lambda err: 1.0e5,
+                         err)
+    return err
 
 
-dVP_errSQ_dp = jax.jit(jax.jacfwd(VP_errSQ))
+dfugVP_errSQ_dp = jax.jit(jax.jacfwd(fugVP_err))
 
 
 @jax.jit
-def pcsaft_VP(x, m, s, e, t, k_ij, l_ij,
+def pcsaft_VP(x, m, s, e, t, p, k_ij, l_ij,
               khb_ij, e_assoc, vol_a, dipm,
               dip_num, z, dielc):
     """
@@ -1083,6 +1050,8 @@ def pcsaft_VP(x, m, s, e, t, k_ij, l_ij,
         energy of the hydrated ion. Units of K.
     t : float
         Temperature (K)
+    p : float
+        A guess for Vapor Pressure (Pa)
     k_ij : ndarray, shape (n,n)
         Binary interaction parameters between components in the mixture for dispersion energy.
         (dimensions: ncomp x ncomp)
@@ -1117,44 +1086,32 @@ def pcsaft_VP(x, m, s, e, t, k_ij, l_ij,
     """
 
     p = Pguess_VP(x, m, s, e, t, k_ij, l_ij,
-                         khb_ij, e_assoc, vol_a, dipm,
-                         dip_num, z, dielc)
-    
-    # f = VP_errSQ(p, x, m, s, e, t, k_ij, l_ij, khb_ij,
-    #             e_assoc, vol_a, dipm, dip_num, z, dielc)
-#
-    # for i in range(20):
-    #    if f < 1.0e-5:
-    #        break
-    #    gradf = dVP_errSQ_dp(p,x, m, s, e, t, k_ij, l_ij, khb_ij,
-    #                e_assoc, vol_a, dipm, dip_num, z, dielc)
-    #    p = p - f / gradf
-    #    f = VP_errSQ(p,x, m, s, e, t, k_ij, l_ij, khb_ij,
-    #                e_assoc, vol_a, dipm, dip_num, z, dielc)
+                        khb_ij, e_assoc, vol_a, dipm,
+                        dip_num, z, dielc)
 
-    p = jax.lax.fori_loop(0, 7,
-                          lambda i, p: jax.lax.cond(
-                              VP_errSQ(p, x, m, s, e, t, k_ij, l_ij, khb_ij,
-                                       e_assoc, vol_a, dipm, dip_num, z, dielc) > 1.0e-4,
-                              lambda i, p: p - VP_errSQ(p, x, m, s, e, t, 
-                                                        k_ij, l_ij, khb_ij,
-                                                        e_assoc, vol_a, dipm, 
-                                                        dip_num, z, dielc) / 
-                                                        dVP_errSQ_dp(p, x, m, s, e, t, 
-                                                                    k_ij, l_ij, khb_ij,
-                                                                    e_assoc, vol_a, dipm,
-                                                                    dip_num, z, dielc),
-                              lambda i, p: p,
-                              i, p
-                          ),
+    def update(i, p):
+        f = fugVP_err(p, x, m, s, e, t,
+                     k_ij, l_ij, khb_ij,
+                     e_assoc, vol_a, dipm,
+                     dip_num, z, dielc)
+        f = f * (f > 1.0e-5)
+        gradf = dfugVP_errSQ_dp(p, x, m, s, e, t,
+                             k_ij, l_ij, khb_ij,
+                             e_assoc, vol_a, dipm,
+                             dip_num, z, dielc)
+        p = p - f / gradf
+        return p 
+
+    p = jax.lax.fori_loop(0, 5,
+                          update,
                           p
                           )
 
     return p
 
 
-root_vp = jax.jit(jax.vmap(
-    VP_err,
+root_fugvp = jax.jit(jax.vmap(
+    fugVP_err,
     in_axes=(0, None, None, None, None,
              None, None, None, None, None,
              None, None, None, None, None)
@@ -1163,17 +1120,134 @@ root_vp = jax.jit(jax.vmap(
 
 @jax.jit
 def Pguess_VP(x, m, s, e, t, k_ij, l_ij, khb_ij,
-                  e_assoc, vol_a, dipm, dip_num, z, dielc):
+              e_assoc, vol_a, dipm, dip_num, z, dielc):
 
     p = (10**np.arange(-5.0, 7)[..., np.newaxis]
          * np.arange(1, 10, 0.1)).flatten()
 
-    err = root_vp(p, x, m, s, e, t, k_ij, l_ij,
+    err = root_fugvp(p, x, m, s, e, t, k_ij, l_ij,
                   khb_ij, e_assoc, vol_a, dipm,
                   dip_num, z, dielc)
 
-    pl = (err > 0.0)*(p < 5.5e6) * p
+    pl = p[err.argmin()]
 
-    pl = jax.lax.sort(pl, 0)
+    return pl
 
-    return pl[-1]
+
+den_phase2 = jax.jit(jax.vmap(
+    pcsaft_den,
+    in_axes=(0, None, None, None,
+             None, None, None, None,
+             None, None, None, None,
+             None, None, None, 0)
+))
+
+
+fungcoef_phase2 = jax.jit(jax.vmap(
+    pcsaft_fugcoef,
+    (0, None, None, None,
+     None, 0, None, None,
+     None, None, None, None,
+     None, None, None)
+))
+
+@jax.jit
+def BP_err(yp_guess, x, m, s, e, t, k_ij, l_ij,
+           khb_ij, e_assoc, vol_a, dipm,
+           dip_num, z, dielc):
+    """Minimize this function to calculate the Bubble pressure."""
+
+    phases = np.asarray([1.0, 0.0])
+    y = yp_guess
+    y = y.at[-1, 0].set(1.0-yp_guess[:-1, 0].sum())
+    xyguess = np.concatenate([x[np.newaxis, ...], y[np.newaxis, ...]], 0)
+    p = yp_guess[-1, 0]
+    rho = den_phase2(xyguess, m, s, e, t, p, k_ij, l_ij,
+                     khb_ij, e_assoc, vol_a, dipm,
+                     dip_num, z, dielc, phases)
+
+    fugcoef_l, fugcoef_v = fungcoef_phase2(xyguess, m, s, e, t, rho, k_ij, l_ij,
+                                           khb_ij, e_assoc, vol_a, dipm,
+                                           dip_num, z, dielc)
+
+    return np.sum((x*fugcoef_l - y*fugcoef_v)**2)
+
+dBP_err_dyp = jax.jit(jax.jacfwd(BP_err))
+
+@jax.jit
+def pcsaft_BP(x, m, s, e, t, p, k_ij, l_ij,
+              khb_ij, e_assoc, vol_a, dipm,
+              dip_num, z, dielc):
+    """
+    Bubble pressure calculation
+
+    x : ndarray, shape (n,1)
+        Mole fractions of each component. It has a length of n, where n is
+        the number of components in the system.
+    m : ndarray, shape (n,1)
+        Segment number for each component.
+    s : ndarray, shape (n,1)
+        Segment diameter for each component. For ions this is the diameter of
+        the hydrated ion. Units of Angstrom.
+    e : ndarray, shape (n,1)
+        Dispersion energy of each component. For ions this is the dispersion
+        energy of the hydrated ion. Units of K.
+    t : float
+        Temperature (K)
+    p : float
+        A guess for Bubble Pressure (Pa)
+    k_ij : ndarray, shape (n,n)
+        Binary interaction parameters between components in the mixture for dispersion energy.
+        (dimensions: ncomp x ncomp)
+    l_ij : ndarray, shape (n,n)
+        Binary interaction parameters between components in the mixture for segment diameter.
+        (dimensions: ncomp x ncomp)
+    khb_ij : ndarray, shape (n,n)
+        Binary interaction parameters between components in the mixture for association energy.
+        (dimensions: ncomp x ncomp)
+    e_assoc : ndarray, shape (n,1)
+        Association energy of the associating components. For non associating
+        compounds this is set to 0. Units of K.
+    vol_a : ndarray, shape (n,1)
+        Effective association volume of the associating components. For non
+        associating compounds this is set to 0.
+    dipm : ndarray, shape (n,1)
+        Dipole moment of the polar components. For components where the dipole
+        term is not used this is set to 0. Units of Debye.
+    dip_num : ndarray, shape (n,1)
+        The effective number of dipole functional groups on each component
+        molecule. 
+    z : ndarray, shape (n,1)
+        Charge number of the ions
+    dielc : ndarray, shape (n,1)
+        permittivity of each component of the medium to be used for electrolyte
+        calculations.
+
+    Returns
+    -------
+    BP : float
+        Bubble Pressure (Pa)
+    """
+    n = x.shape[0]
+    yp_guess = np.ones((n, 1))
+    yp_guess = yp_guess * (1.0/n)
+    yp_guess = yp_guess.at[-1, 0].set(p)
+
+    def updater(i, yp_guess):
+        f = BP_err(yp_guess, x, m, s, e, t, k_ij, l_ij,
+                   khb_ij, e_assoc, vol_a, dipm,
+                   dip_num, z, dielc)
+        f = f * (f >= 1.0e-5)
+        gradf = dBP_err_dyp(yp_guess, x, m, s, e, t, k_ij, l_ij,
+                            khb_ij, e_assoc, vol_a, dipm,
+                            dip_num, z, dielc)
+        yp_guess = yp_guess - f / gradf
+        return yp_guess
+
+    yp_guess = jax.lax.fori_loop(
+        0, 10,
+        updater,
+        yp_guess
+    )
+    return yp_guess
+

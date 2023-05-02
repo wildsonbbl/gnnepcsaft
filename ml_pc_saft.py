@@ -102,7 +102,7 @@ def gamma(x, m, s, e, t, p, k_ij, l_ij,
 def VP(x, m, s, e, t, p, k_ij, l_ij,
           khb_ij, e_assoc, vol_a, dipm,
           dip_num, z, dielc, phase):
-    return epcsaft.pcsaft_VP(x, m, s, e, t, k_ij, l_ij,
+    return epcsaft.pcsaft_VP(x, m, s, e, t, p, k_ij, l_ij,
               khb_ij, e_assoc, vol_a, dipm,
               dip_num, z, dielc)
 

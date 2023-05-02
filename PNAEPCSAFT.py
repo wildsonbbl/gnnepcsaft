@@ -14,11 +14,13 @@ from torch_geometric.utils import degree
 
 import ml_pc_saft
 
-path = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', 'thermoml')
+path = osp.join('data', 'thermoml','train')
 dataset = ThermoMLDataset(path, Notebook=False)
+path = osp.join('data', 'thermoml','test')
+test_dataset = ThermoMLDataset(path, Notebook=False)
 
 gen = torch.Generator().manual_seed(77)
-train_dataset, val_dataset, test_dataset = random_split(dataset,[0.8,0.1,0.1],gen)
+train_dataset, val_dataset = random_split(dataset,[0.9,0.1], gen)
 
 batch_size = 128
 
