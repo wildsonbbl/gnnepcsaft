@@ -1,4 +1,4 @@
-# Inspired by https://github.com/zmeri/PC-SAFT
+# Reference: https://github.com/zmeri/PC-SAFT
 
 # @author: Wildson Lima
 
@@ -379,20 +379,6 @@ def pcsaft_Z(x, m, s, e, t, rho, k_ij, l_ij,
                               dip_num, z, dielc)
 
 
-@jax.jit
-def ares_eta(x, m, s, e, t, eta, k_ij, l_ij,
-             khb_ij, e_assoc, vol_a, dipm,
-             dip_num, z, dielc):
-    """
-    Calculates residual Helmholtz energy with reduced density"""
-
-    rho = density_from_nu(eta, t, x, m, s, e)
-
-    return pcsaft_ares(x, m, s, e, t, rho, k_ij, l_ij,
-                       khb_ij, e_assoc, vol_a, dipm,
-                       dip_num, z, dielc)
-
-
 dares_dx = jax.jit(jax.jacfwd(pcsaft_ares, 0))
 
 
@@ -468,26 +454,6 @@ def pcsaft_fugcoef(x, m, s, e, t, rho, k_ij, l_ij,
     return np.exp(
         ares + (Z - 1) + grad - (x.T @ grad) - lnZ
     )
-
-
-@jax.jit
-def pcsaft_gamma(x, m, s, e, t, rho, k_ij, l_ij,
-                 khb_ij, e_assoc, vol_a, dipm,
-                 dip_num, z, dielc):
-    """
-    Activity coefficient calculation.
-
-
-    """
-    kb = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
-    N_AV = 6.022140857e23  # Avogadro's number
-
-    ares = pcsaft_ares(x, m, s, e, t, rho, k_ij, l_ij,
-                       khb_ij, e_assoc, vol_a, dipm,
-                       dip_num, z, dielc)
-
-    return np.exp(-ares/t/(kb*N_AV))
-
 
 @jax.jit
 def pcsaft_p(x, m, s, e, t, rho, k_ij, l_ij,
@@ -617,7 +583,7 @@ def pcsaft_den(x, m, s, e, t, p, k_ij, l_ij,
                khb_ij, e_assoc, vol_a, dipm,
                dip_num, z, dielc, phase):
     """
-    Solve for the molar density when temperature and pressure are given.
+    Molar density at temperature and pressure given.
 
     Parameters
     ----------
@@ -700,7 +666,7 @@ def pcsaft_den(x, m, s, e, t, p, k_ij, l_ij,
     return rho
 
 
-root_den = jax.jit(jax.vmap(
+vden = jax.jit(jax.vmap(
     den_err,
     in_axes=(0, None, None, None, None, None,
              None, None, None, None, None, None,
@@ -717,7 +683,7 @@ def bainterval_den(x, m, s, e, t, p, k_ij, l_ij,
     nu = n*10**np.arange(-12.0, 1.0)[..., np.newaxis]
     nu = nu.flatten()[..., np.newaxis]
 
-    err = root_den(nu, x, m, s, e, t, p, k_ij, l_ij,
+    err = vden(nu, x, m, s, e, t, p, k_ij, l_ij,
                    khb_ij, e_assoc, vol_a, dipm,
                    dip_num, z, dielc)
 
@@ -1029,9 +995,8 @@ def VP_err(p_guess, x, m, s, e, t, k_ij, l_ij,
                        err)
     return err
 
-
 @jax.jit
-def pcsaft_VP(x, m, s, e, t, p, k_ij, l_ij,
+def pcsaft_VP(x, m, s, e, t, k_ij, l_ij,
               khb_ij, e_assoc, vol_a, dipm,
               dip_num, z, dielc):
     """
@@ -1050,8 +1015,6 @@ def pcsaft_VP(x, m, s, e, t, p, k_ij, l_ij,
         energy of the hydrated ion. Units of K.
     t : float
         Temperature (K)
-    p : float
-        A guess for Vapor Pressure (Pa)
     k_ij : ndarray, shape (n,n)
         Binary interaction parameters between components in the mixture for dispersion energy.
         (dimensions: ncomp x ncomp)

@@ -1,2 +1,3 @@
 # GNN-ePC-SAFT
-Project to use graph neural networks to calculate ePC-SAFT parameters.
+
+Project to use graph neural networks along with ePC-SAFT to calculate thermodynamic properties.
