@@ -64,8 +64,9 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
 
     return result
 
-epcsaft_layer_batch = jax.vmap(epcsaft_layer)
+epcsaft_layer_batch = jax.jit(jax.vmap(epcsaft_layer))
 
+@jax.jit
 def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:,6]
     results = epcsaft_layer_batch(parameters, state)
