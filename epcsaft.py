@@ -1005,29 +1005,29 @@ fungcoef_phase = jax.jit(jax.vmap(
      None, None, None)
 ))
 
+
 @jax.jit
-def fugVP_err(p_guess, x, m, s, e, t, k_ij, l_ij,
-             khb_ij, e_assoc, vol_a, dipm,
-             dip_num, z, dielc):
+def VP_err(p_guess, x, m, s, e, t, k_ij, l_ij,
+              khb_ij, e_assoc, vol_a, dipm,
+              dip_num, z, dielc):
     """Minimize this function to calculate the vapor pressure."""
     phases = np.asarray([1.0, 0.0])
+
     rho = den_phase(x, m, s, e, t, p_guess, k_ij, l_ij,
                     khb_ij, e_assoc, vol_a, dipm,
                     dip_num, z, dielc, phases)
-    
+
     fugcoef_l, fugcoef_v = fungcoef_phase(x, m, s, e, t, rho, k_ij, l_ij,
                                           khb_ij, e_assoc, vol_a, dipm,
                                           dip_num, z, dielc)
-    err = np.abs(fugcoef_l[0,0] - fugcoef_v[0,0])
+    
+    err = (fugcoef_l[0, 0] - fugcoef_v[0, 0])**2
 
-    err = jax.lax.cond(err > 0,
+    err = jax.lax.cond(err > 1.0e-7,
                        lambda err: err,
-                        lambda err: 1.0e5,
-                         err)
+                       lambda err: np.float64('inf'),
+                       err)
     return err
-
-
-dfugVP_errSQ_dp = jax.jit(jax.jacfwd(fugVP_err))
 
 
 @jax.jit
@@ -1085,53 +1085,31 @@ def pcsaft_VP(x, m, s, e, t, p, k_ij, l_ij,
         Vapor Pressure (Pa)
     """
 
-    p = Pguess_VP(x, m, s, e, t, k_ij, l_ij,
-                        khb_ij, e_assoc, vol_a, dipm,
-                        dip_num, z, dielc)
+    p = (10**np.arange(-5.0, 7)[..., np.newaxis]
+         * np.arange(1, 10, 0.1)).flatten()
 
-    def update(i, p):
-        f = fugVP_err(p, x, m, s, e, t,
-                     k_ij, l_ij, khb_ij,
-                     e_assoc, vol_a, dipm,
+    err = vperr(p, x, m, s, e, t, k_ij, l_ij,
+                     khb_ij, e_assoc, vol_a, dipm,
                      dip_num, z, dielc)
-        f = f * (f > 1.0e-5)
-        gradf = dfugVP_errSQ_dp(p, x, m, s, e, t,
-                             k_ij, l_ij, khb_ij,
-                             e_assoc, vol_a, dipm,
-                             dip_num, z, dielc)
-        p = p - f / gradf
-        return p 
 
-    p = jax.lax.fori_loop(0, 5,
-                          update,
-                          p
-                          )
+    a = p[err.argmin()]
+    b = p[err.argmin()+2]
+    n = np.arange(0, 1, 1/1080)
+    newp = b * n + a * (1-n)
 
-    return p
+    newerr = vperr(newp, x, m, s, e, t, k_ij, l_ij,
+                     khb_ij, e_assoc, vol_a, dipm,
+                     dip_num, z, dielc)
+
+    return newp[newerr.argmin()]
 
 
-root_fugvp = jax.jit(jax.vmap(
-    fugVP_err,
+vperr = jax.jit(jax.vmap(
+    VP_err,
     in_axes=(0, None, None, None, None,
              None, None, None, None, None,
              None, None, None, None, None)
 ))
-
-
-@jax.jit
-def Pguess_VP(x, m, s, e, t, k_ij, l_ij, khb_ij,
-              e_assoc, vol_a, dipm, dip_num, z, dielc):
-
-    p = (10**np.arange(-5.0, 7)[..., np.newaxis]
-         * np.arange(1, 10, 0.1)).flatten()
-
-    err = root_fugvp(p, x, m, s, e, t, k_ij, l_ij,
-                  khb_ij, e_assoc, vol_a, dipm,
-                  dip_num, z, dielc)
-
-    pl = p[err.argmin()]
-
-    return pl
 
 
 den_phase2 = jax.jit(jax.vmap(
@@ -1151,17 +1129,37 @@ fungcoef_phase2 = jax.jit(jax.vmap(
      None, None, None)
 ))
 
+
 @jax.jit
-def BP_err(yp_guess, x, m, s, e, t, k_ij, l_ij,
+def BP_err(p, x, m, s, e, t, k_ij, l_ij,
            khb_ij, e_assoc, vol_a, dipm,
            dip_num, z, dielc):
     """Minimize this function to calculate the Bubble pressure."""
 
     phases = np.asarray([1.0, 0.0])
-    y = yp_guess
-    y = y.at[-1, 0].set(1.0-yp_guess[:-1, 0].sum())
+    y = x
+
+    def update(i, y):
+        xyguess = np.concatenate([x[np.newaxis, ...], y[np.newaxis, ...]], 0)
+
+        rho = den_phase2(xyguess, m, s, e, t, p, k_ij, l_ij,
+                         khb_ij, e_assoc, vol_a, dipm,
+                         dip_num, z, dielc, phases)
+
+        fugcoef_l, fugcoef_v = fungcoef_phase2(xyguess, m, s, e, t, rho, k_ij, l_ij,
+                                               khb_ij, e_assoc, vol_a, dipm,
+                                               dip_num, z, dielc)
+
+        y = x*fugcoef_l/fugcoef_v
+
+        return y/y.sum()
+
+    y = jax.lax.fori_loop(
+        0, 2, update, y
+    )
+
     xyguess = np.concatenate([x[np.newaxis, ...], y[np.newaxis, ...]], 0)
-    p = yp_guess[-1, 0]
+
     rho = den_phase2(xyguess, m, s, e, t, p, k_ij, l_ij,
                      khb_ij, e_assoc, vol_a, dipm,
                      dip_num, z, dielc, phases)
@@ -1170,14 +1168,27 @@ def BP_err(yp_guess, x, m, s, e, t, k_ij, l_ij,
                                            khb_ij, e_assoc, vol_a, dipm,
                                            dip_num, z, dielc)
 
-    return np.sum((x*fugcoef_l - y*fugcoef_v)**2)
+    err = np.sum((x*fugcoef_l - y*fugcoef_v)**2)
 
-dBP_err_dyp = jax.jit(jax.jacfwd(BP_err))
+    err = jax.lax.cond(err > 1.0e-7,
+                       lambda err: err,
+                       lambda err: np.float64('inf'),
+                       err)
+
+    return err, y
+
+
+vbperr = jax.jit(jax.vmap(
+    BP_err,
+    in_axes=(0, None, None, None, None,
+             None, None, None, None, None,
+             None, None, None, None, None)
+))
+
 
 @jax.jit
-def pcsaft_BP(x, m, s, e, t, p, k_ij, l_ij,
-              khb_ij, e_assoc, vol_a, dipm,
-              dip_num, z, dielc):
+def pcsaft_BP(x, m, s, e, t, k_ij, l_ij, khb_ij,
+              e_assoc, vol_a, dipm, dip_num, z, dielc):
     """
     Bubble pressure calculation
 
@@ -1194,8 +1205,6 @@ def pcsaft_BP(x, m, s, e, t, p, k_ij, l_ij,
         energy of the hydrated ion. Units of K.
     t : float
         Temperature (K)
-    p : float
-        A guess for Bubble Pressure (Pa)
     k_ij : ndarray, shape (n,n)
         Binary interaction parameters between components in the mixture for dispersion energy.
         (dimensions: ncomp x ncomp)
@@ -1228,26 +1237,21 @@ def pcsaft_BP(x, m, s, e, t, p, k_ij, l_ij,
     BP : float
         Bubble Pressure (Pa)
     """
-    n = x.shape[0]
-    yp_guess = np.ones((n, 1))
-    yp_guess = yp_guess * (1.0/n)
-    yp_guess = yp_guess.at[-1, 0].set(p)
 
-    def updater(i, yp_guess):
-        f = BP_err(yp_guess, x, m, s, e, t, k_ij, l_ij,
-                   khb_ij, e_assoc, vol_a, dipm,
-                   dip_num, z, dielc)
-        f = f * (f >= 1.0e-5)
-        gradf = dBP_err_dyp(yp_guess, x, m, s, e, t, k_ij, l_ij,
-                            khb_ij, e_assoc, vol_a, dipm,
-                            dip_num, z, dielc)
-        yp_guess = yp_guess - f / gradf
-        return yp_guess
+    p = (10**np.arange(-5.0, 7)[..., np.newaxis]
+         * np.arange(1, 10, 0.1)).flatten()
 
-    yp_guess = jax.lax.fori_loop(
-        0, 10,
-        updater,
-        yp_guess
-    )
-    return yp_guess
+    err, _ = vbperr(p, x, m, s, e, t, k_ij, l_ij,
+                 khb_ij, e_assoc, vol_a, dipm,
+                 dip_num, z, dielc)
 
+    a = p[err.argmin()]
+    b = p[err.argmin()+2]
+    n = np.arange(0, 1, 1/1080)
+    newp = b * n + a * (1-n)
+
+    newerr, y = vbperr(newp, x, m, s, e, t, k_ij, l_ij,
+                    khb_ij, e_assoc, vol_a, dipm,
+                    dip_num, z, dielc)
+
+    return newp[newerr.argmin()], y[newerr.argmin()]
