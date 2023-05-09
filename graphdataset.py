@@ -15,6 +15,7 @@ import glob
 
 
 def BinaryGraph(InChI1: str, InChI2: str):
+
     """
     Make one graph out of 2 InChI keys for a binary system
 
@@ -31,8 +32,8 @@ def BinaryGraph(InChI1: str, InChI2: str):
         Graph of binary system
     """
 
-    mol1 = Chem.MolFromInchi(InChI1, removeHs=False)
-    mol2 = Chem.MolFromInchi(InChI2, removeHs=False)
+    mol1 = Chem.MolFromInchi(InChI1, removeHs=False, treatWarningAsError=True)
+    mol2 = Chem.MolFromInchi(InChI2, removeHs=False, treatWarningAsError=True)
 
     mol1 = Chem.AddHs(mol1)
     mol2 = Chem.AddHs(mol2)
@@ -53,6 +54,7 @@ def BinaryGraph(InChI1: str, InChI2: str):
 
 
 class ThermoMLDataset(Dataset):
+
     """
     Molecular Graph dataset creator/manipulator.
 
@@ -125,14 +127,21 @@ class ThermoMLDataset(Dataset):
                 
                 y = [datapoint[col] for col in cols]
 
-                graph = BinaryGraph(datapoint['inchi1'], datapoint['inchi2'])
-                graph = graph.to_pyg_graph()
-                graph.y = torch.tensor(y, dtype=torch.float64)
-                graph.c1 = datapoint['c1']
-                graph.c2 = datapoint['c2']
+                try:
+                        
+                    graph = BinaryGraph(datapoint['inchi1'], datapoint['inchi2'])
+                    graph = graph.to_pyg_graph()
+                    graph.x = graph.x.to(torch.float64)
+                    graph.edge_attr = graph.edge_attr.to(torch.float64)
+                    graph.edge_index = graph.edge_index.to(torch.long)
+                    graph.y = torch.tensor(y, dtype=torch.float64)
+                    graph.c1 = datapoint['c1']
+                    graph.c2 = datapoint['c2']
 
-                torch.save(graph, osp.join(
+                    torch.save(graph, osp.join(
                     self.processed_dir, f'data_{idx}.pt'))
+                except:
+                    continue
                 
 
                 idx += 1

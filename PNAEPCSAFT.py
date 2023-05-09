@@ -2,7 +2,7 @@ import os.path as osp
 
 import torch
 import torch.nn.functional as F
-from torch.nn import Embedding, Linear, ModuleList, ReLU, Sequential
+from torch.nn import Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import random_split
 
@@ -12,7 +12,9 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import degree
 
+
 import ml_pc_saft
+
 
 path = osp.join('data', 'thermoml','train')
 dataset = ThermoMLDataset(path, Notebook=False)
@@ -22,11 +24,11 @@ test_dataset = ThermoMLDataset(path, Notebook=False)
 gen = torch.Generator().manual_seed(77)
 train_dataset, val_dataset = random_split(dataset,[0.9,0.1], gen)
 
-batch_size = 128
+batch_size = 2**2
 
-train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=128)
-test_loader = DataLoader(test_dataset, batch_size=128)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size)
+test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
 # Compute the maximum in-degree in the training data.
 max_degree = -1
@@ -45,18 +47,21 @@ class PNAEPCSAFT(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.node_emb = Embedding(30, 75)
-        self.edge_emb = Embedding(11, 50)
-
         aggregators = ['mean', 'min', 'max', 'std']
         scalers = ['identity', 'amplification', 'attenuation']
 
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
+        conv = PNAConv(in_channels=30, out_channels=75,
+                           aggregators=aggregators, scalers=scalers, deg=deg,
+                           edge_dim=11, towers=5, pre_layers=1, post_layers=1,
+                           divide_input=False)
+        self.convs.append(conv)
+        self.batch_norms.append(BatchNorm(75))
         for _ in range(4):
             conv = PNAConv(in_channels=75, out_channels=75,
                            aggregators=aggregators, scalers=scalers, deg=deg,
-                           edge_dim=50, towers=5, pre_layers=1, post_layers=1,
+                           edge_dim=11, towers=5, pre_layers=1, post_layers=1,
                            divide_input=False)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(75))
@@ -67,8 +72,6 @@ class PNAEPCSAFT(torch.nn.Module):
                               Linear(25, 12))
 
     def forward(self, x, edge_index, edge_attr, batch):
-        x = self.node_emb(x.squeeze())
-        edge_attr = self.edge_emb(edge_attr)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
@@ -81,8 +84,20 @@ class PNAEPCSAFT(torch.nn.Module):
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = PNAEPCSAFT().to(device)
+model = PNAEPCSAFT().to(device, torch.float64)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+epoch = 0
+best_val_loss = float('inf')
+
+if osp.exists('training/last_checkpoint.pth'):
+    PATH = 'training/last_checkpoint.pth'
+    checkpoint = torch.load(PATH)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    loss = checkpoint['loss']
+    best_val_loss = checkpoint['best_val_loss']
+
 scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
                               min_lr=0.00001)
 lossfn = ml_pc_saft.PCSAFTLOSS.apply
@@ -97,7 +112,7 @@ def train():
         optimizer.zero_grad()
         out = model(data.x, data.edge_index, data.edge_attr, data.batch)
         n = out.shape[0]
-        loss = lossfn(out, data.y.reshape(int(n/7),7))
+        loss = lossfn(out, data.y.reshape(n,7))
         loss.backward()
         total_loss += loss.item()
         optimizer.step()
@@ -113,14 +128,28 @@ def test(loader):
         data = data.to(device)
         out = model(data.x, data.edge_index, data.edge_attr, data.batch)
         n = out.shape[0]
-        total_error += lossfn(out, data.y.reshape(int(n/7),7)).item()
+        loss = lossfn(out, data.y.reshape(n,7)).item()
+        total_error += loss
     return total_error / len(loader.dataset)
 
+def savemodel(model, optimizer, type, epoch, loss, best_val_loss):
+    path = osp.join('training', type)
+    torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': loss,
+            'best_val_loss': best_val_loss
+            }, path)
 
-for epoch in range(1, 301):
-    loss = train()
-    val_mae = test(val_loader)
-    test_mae = test(test_loader)
-    scheduler.step(val_mae)
-    print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}, Val: {val_mae:.4f}, '
-          f'Test: {test_mae:.4f}')
+
+
+
+
+
+
+
+
+
+
+  
