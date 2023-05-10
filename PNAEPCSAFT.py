@@ -12,6 +12,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import degree
 
+from tqdm.notebook import tqdm
 
 import ml_pc_saft
 
@@ -24,7 +25,7 @@ test_dataset = ThermoMLDataset(path, Notebook=False)
 gen = torch.Generator().manual_seed(77)
 train_dataset, val_dataset = random_split(dataset,[0.9,0.1], gen)
 
-batch_size = 2**2
+batch_size = 2**7
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size)
@@ -32,13 +33,13 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
 # Compute the maximum in-degree in the training data.
 max_degree = -1
-for data in train_dataset:
+for data in tqdm(train_dataset,'data: ', len(train_loader.dataset)):
     d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
     max_degree = max(max_degree, int(d.max()))
 
 # Compute the in-degree histogram tensor
 deg = torch.zeros(max_degree + 1, dtype=torch.long)
-for data in train_dataset:
+for data in tqdm(train_dataset,'data: ', len(train_loader.dataset)):
     d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
     deg += torch.bincount(d, minlength=deg.numel())
 
@@ -52,16 +53,16 @@ class PNAEPCSAFT(torch.nn.Module):
 
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        conv = PNAConv(in_channels=30, out_channels=75,
+        conv = PNAConv(in_channels=9, out_channels=75,
                            aggregators=aggregators, scalers=scalers, deg=deg,
-                           edge_dim=11, towers=5, pre_layers=1, post_layers=1,
+                           edge_dim=3, towers=5, pre_layers=1, post_layers=1,
                            divide_input=False)
         self.convs.append(conv)
         self.batch_norms.append(BatchNorm(75))
         for _ in range(4):
             conv = PNAConv(in_channels=75, out_channels=75,
                            aggregators=aggregators, scalers=scalers, deg=deg,
-                           edge_dim=11, towers=5, pre_layers=1, post_layers=1,
+                           edge_dim=3, towers=5, pre_layers=1, post_layers=1,
                            divide_input=False)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(75))
@@ -72,6 +73,7 @@ class PNAEPCSAFT(torch.nn.Module):
                               Linear(25, 12))
 
     def forward(self, x, edge_index, edge_attr, batch):
+        
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
@@ -107,7 +109,7 @@ def train():
     model.train()
 
     total_loss = 0
-    for data in train_loader:
+    for data in tqdm(train_loader, desc = 'step: '):
         data = data.to(device)
         optimizer.zero_grad()
         out = model(data.x, data.edge_index, data.edge_attr, data.batch)

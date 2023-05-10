@@ -1,17 +1,10 @@
-import numpy as np
-from rdkit import Chem
-import deepchem as dc
-import deepchem.feat as ft
-import torch_geometric as pyg
 from torch_geometric.data import Data
-import os.path as osp
-import os
 import torch
-from torch_geometric.data import Dataset, download_url
+from torch_geometric.data import InMemoryDataset
 import polars as pl
 from tqdm.notebook import tqdm as ntqdm
 from tqdm import tqdm
-import glob
+from graph import from_InChI
 
 
 def BinaryGraph(InChI1: str, InChI2: str):
@@ -32,28 +25,21 @@ def BinaryGraph(InChI1: str, InChI2: str):
         Graph of binary system
     """
 
-    mol1 = Chem.MolFromInchi(InChI1, removeHs=False, treatWarningAsError=True)
-    mol2 = Chem.MolFromInchi(InChI2, removeHs=False, treatWarningAsError=True)
+    graph1 = from_InChI(InChI1)
+    graph2 = from_InChI(InChI2)
 
-    mol1 = Chem.AddHs(mol1)
-    mol2 = Chem.AddHs(mol2)
-
-    featurizer = ft.MolGraphConvFeaturizer(use_edges=True)
-
-    graph = featurizer.featurize((mol1, mol2))
-
-    node_features = np.concatenate((graph[0].node_features,
-                                    graph[1].node_features))
-    edge_features = np.concatenate((graph[0].edge_features,
-                                    graph[1].edge_features))
-    edge_index = np.concatenate((graph[0].edge_index,
-                                 graph[1].edge_index + graph[0].num_nodes),
+    x = torch.concatenate((graph1.x,
+                                    graph2.x))
+    edge_attr = torch.concatenate((graph1.edge_attr,
+                                    graph2.edge_attr))
+    edge_index = torch.concatenate((graph1.edge_index,
+                                 graph2.edge_index + graph1.num_nodes),
                                 axis=1)
 
-    return ft.GraphData(node_features, edge_index, edge_features)
+    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
 
-class ThermoMLDataset(Dataset):
+class ThermoMLDataset(InMemoryDataset):
 
     """
     Molecular Graph dataset creator/manipulator.
@@ -82,46 +68,44 @@ class ThermoMLDataset(Dataset):
     """
 
     def __init__(self, root, transform=None, pre_transform=None,
-                 pre_filter=None, log=True, Notebook=True):
+                 pre_filter=None, Notebook=True, subset='train', nrow: int = None):
         self.Notebook = Notebook
-        
-        super().__init__(root, transform, pre_transform, pre_filter, log)
+        self.nrow = nrow
+        if subset in ['train', 'test']:
+            self.subset = subset
+        else:
+            raise ValueError('subset should be either train or test')
+        super().__init__(root, transform, pre_transform, pre_filter)
+        self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
     def raw_file_names(self):
-        return os.listdir(self.raw_dir)
+        return [self.subset + '.parquet']
 
     @property
     def processed_file_names(self):
-        try:
-            path = osp.join(self.processed_dir,'data*.pt')
-            files = [file.split('/')[-1] for file in glob.glob(path)]
-        except:
-            os.mkdir(self.processed_dir)
-            path = osp.join(self.processed_dir,'data*.pt')
-            files = [file.split('/')[-1] for file in glob.glob(path)]
-        return files
+        return 'tmldata.pt'
 
     def download(self):
         return print('no url to download from')
 
-    def process(self, nrow: int = None):
-        idx = 0
+    def process(self):
+        nrow = self.nrow
         cols = ['mlc1', 'mlc2', 'TK', 'PPa',
                 'phase', 'type', 'm']
 
         progressbar = [ntqdm if self.Notebook else tqdm][0]
-
+        datalist = []
         for raw_path in self.raw_paths:
             # Read data from `raw_path`.
             if nrow != None:
-                self.dataframe = pl.read_parquet(raw_path, n_rows = nrow)
+                dataframe = pl.read_parquet(raw_path, n_rows = nrow)
             else:
-                self.dataframe = pl.read_parquet(raw_path)
+                dataframe = pl.read_parquet(raw_path)
 
-            total = self.dataframe.shape[0]
+            total = dataframe.shape[0]
             
-            for datapoint in progressbar(self.dataframe.iter_rows(named=True),
+            for datapoint in progressbar(dataframe.iter_rows(named=True),
                                          desc='data points',
                                          total=total):
                 
@@ -130,26 +114,16 @@ class ThermoMLDataset(Dataset):
                 try:
                         
                     graph = BinaryGraph(datapoint['inchi1'], datapoint['inchi2'])
-                    graph = graph.to_pyg_graph()
-                    graph.x = graph.x.to(torch.float64)
-                    graph.edge_attr = graph.edge_attr.to(torch.float64)
-                    graph.edge_index = graph.edge_index.to(torch.long)
-                    graph.y = torch.tensor(y, dtype=torch.float64)
+                    graph.y = torch.tensor(y, dtype=torch.float)
                     graph.c1 = datapoint['c1']
                     graph.c2 = datapoint['c2']
 
-                    torch.save(graph, osp.join(
-                    self.processed_dir, f'data_{idx}.pt'))
+                    datalist.append(graph)
                 except:
                     continue
                 
 
-                idx += 1
+        dataframe = []
+        torch.save(self.collate(datalist), self.processed_paths[0])
+        datalist= []
         print('Done!')
-
-    def len(self):
-        return len(self.processed_file_names)
-
-    def get(self, idx):
-        data = torch.load(osp.join(self.processed_dir, f'data_{idx}.pt'))
-        return data
