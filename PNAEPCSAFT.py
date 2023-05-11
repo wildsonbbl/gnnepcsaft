@@ -9,7 +9,6 @@ from graphdataset import ThermoMLDataset
 
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
-from torch_geometric.utils import degree
 
 from tqdm.notebook import tqdm
 
@@ -31,16 +30,7 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size)
 test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
 # Compute the maximum in-degree in the training data.
-max_degree = -1
-for data in tqdm(train_dataset, 'data: ', len(train_dataset)):
-    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-    max_degree = max(max_degree, int(d.max()))
-
-# Compute the in-degree histogram tensor
-deg = torch.zeros(max_degree + 1, dtype=torch.long)
-for data in tqdm(train_dataset, 'data: ', len(train_dataset)):
-    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-    deg += torch.bincount(d, minlength=deg.numel())
+deg = 5
 
 
 class PNAEPCSAFT(torch.nn.Module):
@@ -110,7 +100,7 @@ def train():
     model.train()
 
     total_loss = 0
-    for data in tqdm(train_loader, desc='step: '):
+    for data in tqdm(train_loader, desc='step '):
         data = data.to(device)
         optimizer.zero_grad()
         out = model(data.x, data.edge_index,
