@@ -71,7 +71,7 @@ class ThermoMLDataset(InMemoryDataset):
                  pre_filter=None, Notebook=True, subset='train', nrow: int = None):
         self.Notebook = Notebook
         self.nrow = nrow
-        if subset in ['train', 'test']:
+        if subset in ['train', 'test','val']:
             self.subset = subset
         else:
             raise ValueError('subset should be either train or test')
