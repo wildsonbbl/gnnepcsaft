@@ -2,7 +2,7 @@ import os.path as osp
 
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential, Embedding
+from torch.nn import Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from graphdataset import ThermoMLDataset
@@ -30,26 +30,32 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size)
 test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
 # Compute the maximum in-degree in the training data.
-deg = 5
+deg = torch.tensor([  67167, 3157428, 5106064,  885236,  453935,       0,   11152])
+
 
 
 class PNAEPCSAFT(torch.nn.Module):
     def __init__(self):
         super().__init__()
         
-        self.node_emb = Embedding(21, 8)
-        self.edge_emb = Embedding(5, 16)
-
+        
         aggregators = ['mean', 'min', 'max', 'std']
         scalers = ['identity', 'amplification', 'attenuation']
 
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
 
-        for _ in range(4):
+        conv = PNAConv(in_channels=9, out_channels=8*9,
+                           aggregators=aggregators, scalers=scalers, deg=deg,
+                           edge_dim=3, towers=4, pre_layers=1, post_layers=1,
+                           divide_input=False)
+        self.convs.append(conv)
+        self.batch_norms.append(BatchNorm(8*9))
+
+        for _ in range(3):
             conv = PNAConv(in_channels=8*9, out_channels=8*9,
                            aggregators=aggregators, scalers=scalers, deg=deg,
-                           edge_dim=3*16, towers=5, pre_layers=1, post_layers=1,
+                           edge_dim=3, towers=4, pre_layers=1, post_layers=1,
                            divide_input=False)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(8*9))
@@ -60,10 +66,7 @@ class PNAEPCSAFT(torch.nn.Module):
                                Linear(25, 12))
 
     def forward(self, x, edge_index, edge_attr, batch):
-        x = self.node_emb(x)
-        edge_attr = self.edge_emb(edge_attr)
-        x = x.view(-1, 8*9)
-        edge_attr = edge_attr.view(-1, 3*16)
+        
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
@@ -103,8 +106,8 @@ def train():
     for data in tqdm(train_loader, desc='step '):
         data = data.to(device)
         optimizer.zero_grad()
-        out = model(data.x, data.edge_index,
-                    data.edge_attr, data.batch)
+        out = model(data.x.to(torch.float), data.edge_index,
+                    data.edge_attr.to(torch.float), data.batch)
         n = out.shape[0]
         loss = lossfn(out, data.y.reshape(n, 7))
         loss.backward()
@@ -120,8 +123,8 @@ def test(loader):
     total_error = 0
     for data in loader:
         data = data.to(device)
-        out = model(data.x, data.edge_index,
-                    data.edge_attr, data.batch)
+        out = model(data.x.to(torch.float), data.edge_index,
+                    data.edge_attr.to(torch.float), data.batch)
         n = out.shape[0]
         loss = lossfn_test(out, data.y.reshape(n, 7)).item()
         total_error += loss

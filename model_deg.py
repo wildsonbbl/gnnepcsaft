@@ -4,10 +4,9 @@ import torch
 
 from graphdataset import ThermoMLDataset
 
-from torch_geometric.loader import DataLoader
 from torch_geometric.utils import degree
 
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 
 
 
@@ -20,10 +19,6 @@ val_dataset = ThermoMLDataset(path, Notebook=True, subset='val')
 
 
 batch_size = 2**7
-
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last = True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size)
-test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
 # Compute the maximum in-degree in the training data.
 max_degree = -1
