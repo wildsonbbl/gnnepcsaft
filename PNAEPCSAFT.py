@@ -14,6 +14,9 @@ from tqdm.notebook import tqdm
 
 import ml_pc_saft
 
+from torch.utils.tensorboard import SummaryWriter
+
+
 
 path = osp.join('data', 'thermoml', 'train')
 train_dataset = ThermoMLDataset(path, Notebook=True)
@@ -82,6 +85,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = PNAEPCSAFT().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 epoch = 0
+step = 0
 best_val_loss = float('inf')
 
 if osp.exists('training/last_checkpoint.pth'):
@@ -98,21 +102,33 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
 lossfn = ml_pc_saft.PCSAFTLOSS.apply
 lossfn_test = ml_pc_saft.PCSAFTLOSS_test.apply
 
+writer = SummaryWriter('runs/exp1')
 
-def train():
+def train(step, epoch):
     model.train()
 
     total_loss = 0
     for data in tqdm(train_loader, desc='step '):
+        step = step + 1
         data = data.to(device)
         optimizer.zero_grad()
         out = model(data.x.to(torch.float), data.edge_index,
                     data.edge_attr.to(torch.float), data.batch)
         n = out.shape[0]
-        loss = lossfn(out, data.y.reshape(n, 7))
+        loss = lossfn(out, data.y.view(-1, 7))
         loss.backward()
-        total_loss += loss.item()
         optimizer.step()
+
+        loss_val = test(val_loader)
+        writer.add_scalar(f'Loss/train_{epoch}', loss.item()/n, step)
+        writer.add_scalar(f'Loss/val{epoch}', loss_val, step)
+        if loss_val < best_val_loss:
+            best_val_loss = loss_val
+            savemodel(model, optimizer, 'best_checkpoint.pth', epoch, loss, best_val_loss, step)
+        savemodel(model,  optimizer, 'last_checkpoint.pth', epoch, loss, best_val_loss, step)
+        scheduler.step(loss_val)
+        total_loss += loss.item()
+        
     return total_loss / len(train_loader.dataset)
 
 
@@ -126,17 +142,18 @@ def test(loader):
         out = model(data.x.to(torch.float), data.edge_index,
                     data.edge_attr.to(torch.float), data.batch)
         n = out.shape[0]
-        loss = lossfn_test(out, data.y.reshape(n, 7)).item()
+        loss = lossfn_test(out, data.y.view(-1, 7)).item()
         total_error += loss
     return total_error / len(loader.dataset)
 
 
-def savemodel(model, optimizer, type, epoch, loss, best_val_loss):
+def savemodel(model, optimizer, type, epoch, loss, best_val_loss, step):
     path = osp.join('training', type)
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
-        'best_val_loss': best_val_loss
+        'best_val_loss': best_val_loss,
+        'step': step
     }, path)
