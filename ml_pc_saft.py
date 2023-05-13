@@ -6,15 +6,13 @@ import epcsaft
 import torch
 
 from jax.config import config
+
 config.update("jax_enable_x64", True)
+
 
 @jax.jit
 def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
-
-    x = jnp.asarray(
-        [[state[0]],
-         [state[1]]]
-    )
+    x = jnp.asarray([[state[0]], [state[1]]])
     t = state[2]
     p = state[3]
     phase = state[4]
@@ -29,79 +27,152 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     dip_num = parameters[:, 6][..., jnp.newaxis]
     z = parameters[:, 7][..., jnp.newaxis]
     dielc = parameters[:, 8][..., jnp.newaxis]
-    
-    k_ij = jnp.asarray(
-        [[0.0, parameters[0, 9]],
-         [parameters[1, 9], 0.0]]
-    )
-    l_ij = jnp.asarray(
-        [[0.0, parameters[0, 10]],
-         [parameters[1, 10], 0.0]]
-    )
-    khb_ij = jnp.asarray(
-        [[0.0, parameters[0, 11]],
-         [parameters[1, 11], 0.0]]
-    )
-    
+
+    k_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
+    l_ij = jnp.asarray([[0.0, parameters[0, 10]], [parameters[1, 10], 0.0]])
+    khb_ij = jnp.asarray([[0.0, parameters[0, 11]], [parameters[1, 11], 0.0]])
 
     result = jax.lax.cond(
         fntype == 1,
         epcsaft.pcsaft_den,
         gamma,
-        x, m, s, e, t, p,
-        k_ij, l_ij, khb_ij,
-        e_assoc, vol_a, dipm,
-        dip_num, z, dielc, phase
+        x,
+        m,
+        s,
+        e,
+        t,
+        p,
+        k_ij,
+        l_ij,
+        khb_ij,
+        e_assoc,
+        vol_a,
+        dipm,
+        dip_num,
+        z,
+        dielc,
+        phase,
     )
+
+    failed = jnp.zeros_like(result)
+    result = jax.lax.cond(result>0, result , failed)
 
     return result
 
+
 epcsaft_layer_batch = jax.jit(jax.vmap(epcsaft_layer))
+
 
 @jax.jit
 def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
-    y = state[:,6]
+    y = state[:, 6]
     results = epcsaft_layer_batch(parameters, state)
-    results = (results > 0) * results
-    return jnp.abs(1.0 - results/y).sum()
+    results = jax.lax.cond(results > 0, results, 0)
+    return jnp.abs(1.0 - results / y).sum()
+
 
 loss_grad = jax.jit(jax.jacfwd(loss))
 
-def gamma(x, m, s, e, t, p, k_ij, l_ij,
-          khb_ij, e_assoc, vol_a, dipm,
-          dip_num, z, dielc, phase):
 
-    x1 = (x < 0.5)*1.0
+def gamma(
+    x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
+):
+    x1 = (x < 0.5) * 1.0
 
-    rho = epcsaft.pcsaft_den(x, m, s, e, t, p, k_ij, l_ij,
-                             khb_ij, e_assoc, vol_a, dipm,
-                             dip_num, z, dielc, 1.0)
+    rho = epcsaft.pcsaft_den(
+        x,
+        m,
+        s,
+        e,
+        t,
+        p,
+        k_ij,
+        l_ij,
+        khb_ij,
+        e_assoc,
+        vol_a,
+        dipm,
+        dip_num,
+        z,
+        dielc,
+        1.0,
+    )
 
-    fungcoef = epcsaft.pcsaft_fugcoef(x, m, s, e, t, rho, k_ij, l_ij,
-                                      khb_ij, e_assoc, vol_a, dipm,
-                                      dip_num, z, dielc).T @ x1
+    fungcoef = (
+        epcsaft.pcsaft_fugcoef(
+            x,
+            m,
+            s,
+            e,
+            t,
+            rho,
+            k_ij,
+            l_ij,
+            khb_ij,
+            e_assoc,
+            vol_a,
+            dipm,
+            dip_num,
+            z,
+            dielc,
+        ).T
+        @ x1
+    )
 
-    rho = epcsaft.pcsaft_den(x1, m, s, e, t, p, k_ij, l_ij,
-                             khb_ij, e_assoc, vol_a, dipm,
-                             dip_num, z, dielc, 1.0)
+    rho = epcsaft.pcsaft_den(
+        x1,
+        m,
+        s,
+        e,
+        t,
+        p,
+        k_ij,
+        l_ij,
+        khb_ij,
+        e_assoc,
+        vol_a,
+        dipm,
+        dip_num,
+        z,
+        dielc,
+        1.0,
+    )
 
-    fungcoefpure = epcsaft.pcsaft_fugcoef(x1, m, s, e, t, rho, k_ij, l_ij,
-                                        khb_ij, e_assoc, vol_a, dipm,
-                                        dip_num, z, dielc).T @ x1
+    fungcoefpure = (
+        epcsaft.pcsaft_fugcoef(
+            x1,
+            m,
+            s,
+            e,
+            t,
+            rho,
+            k_ij,
+            l_ij,
+            khb_ij,
+            e_assoc,
+            vol_a,
+            dipm,
+            dip_num,
+            z,
+            dielc,
+        ).T
+        @ x1
+    )
 
-    gamma1 = (fungcoef/fungcoefpure)
-    return gamma1[0, 0]
-
-def VP(x, m, s, e, t, p, k_ij, l_ij,
-          khb_ij, e_assoc, vol_a, dipm,
-          dip_num, z, dielc, phase):
+    gamma1 = fungcoef / fungcoefpure
     
-    return epcsaft.pcsaft_VP(x, m, s, e, t, k_ij, l_ij,
-              khb_ij, e_assoc, vol_a, dipm,
-              dip_num, z, dielc)
+    return gamma1[0,0]
+
+
+def VP(
+    x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
+):
+    return epcsaft.pcsaft_VP(
+        x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
+    )
+
 
 class PCSAFTLOSS(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, input, state):
         parameters = tdlpack.to_dlpack(input)
@@ -119,7 +190,6 @@ class PCSAFTLOSS(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dg1):
-
         grad_result = loss_grad(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
         grad_result = dg1 * tdlpack.from_dlpack(grad_result)
@@ -128,11 +198,7 @@ class PCSAFTLOSS(torch.autograd.Function):
 
 @jax.jit
 def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
-
-    x = jnp.asarray(
-        [[state[0]],
-         [state[1]]]
-    )
+    x = jnp.asarray([[state[0]], [state[1]]])
     t = state[2]
     p = state[3]
     phase = state[4]
@@ -147,39 +213,32 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     dip_num = parameters[:, 6][..., jnp.newaxis]
     z = parameters[:, 7][..., jnp.newaxis]
     dielc = parameters[:, 8][..., jnp.newaxis]
-    
-    k_ij = jnp.asarray(
-        [[0.0, parameters[0, 9]],
-         [parameters[1, 9], 0.0]]
-    )
-    l_ij = jnp.asarray(
-        [[0.0, parameters[0, 10]],
-         [parameters[1, 10], 0.0]]
-    )
-    khb_ij = jnp.asarray(
-        [[0.0, parameters[0, 11]],
-         [parameters[1, 11], 0.0]]
-    )
-    
 
-    result = epcsaft.pcsaft_VP(x, m, s, e, t, k_ij, l_ij,
-              khb_ij, e_assoc, vol_a, dipm,
-              dip_num, z, dielc)
+    k_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
+    l_ij = jnp.asarray([[0.0, parameters[0, 10]], [parameters[1, 10], 0.0]])
+    khb_ij = jnp.asarray([[0.0, parameters[0, 11]], [parameters[1, 11], 0.0]])
+
+    result = epcsaft.pcsaft_VP(
+        x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
+    )
 
     return result
 
+
 epcsaft_layer_test_batch = jax.jit(jax.vmap(epcsaft_layer_test))
+
 
 @jax.jit
 def loss_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
-    y = state[:,6]
+    y = state[:, 6]
     results = epcsaft_layer_test_batch(parameters, state)
-    return jnp.abs(1.0 - results/y).sum()
+    return jnp.abs(1.0 - results / y).sum()
+
 
 loss_test_grad = jax.jit(jax.jacfwd(loss_test))
 
-class PCSAFTLOSS_test(torch.autograd.Function):
 
+class PCSAFTLOSS_test(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, state):
         parameters = tdlpack.to_dlpack(input)
@@ -197,7 +256,6 @@ class PCSAFTLOSS_test(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dg1):
-
         grad_result = loss_test_grad(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
         grad_result = dg1 * tdlpack.from_dlpack(grad_result)
