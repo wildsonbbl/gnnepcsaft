@@ -2,7 +2,8 @@ import os.path as osp
 
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential
+from torch.nn import Linear, ModuleList, ReLU, Sequential, Tanh
+
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from graphdataset import ThermoMLDataset
@@ -46,8 +47,10 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [[[10, 10, 100, 1, 10e3, 10, 10, 10, 10, 1, 1, 1]]], dtype=torch.float,
-        device = 'cuda')
+            [[[10, 10, 100, 1, 10e3, 10, 10]]],
+            dtype=torch.float,
+            device="cuda",
+        )
 
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
@@ -84,20 +87,36 @@ class PNAEPCSAFT(torch.nn.Module):
             self.batch_norms.append(BatchNorm(8 * 9))
 
         self.mlp1 = Sequential(
-            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 12)
+            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 3), Tanh()
         )
         self.mlp2 = Sequential(
-            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 12)
+            Linear(8 * 9, 50),
+            ReLU(),
+            Linear(50, 25),
+            ReLU(),
+            Linear(25, 7),
+            ReLU(),
+        )
+        self.mlp3 = Sequential(
+            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 7), ReLU()
         )
 
-    def forward(self, x, edge_index, edge_attr, batch):
+    def forward(
+        self,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        batch: torch.Tensor,
+    ):
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
 
         x = global_add_pool(x, batch)
-        c1 = self.mlp1(x).unsqueeze(1)
-        c2 = self.mlp2(x).unsqueeze(1)
-        x = torch.concat((c1, c2), 1)*self.unitscale
+        kij = self.mlp1(x).unsqueeze(1).expand(-1, 2, -1)
+        c1 = self.mlp2(x).unsqueeze(1)
+        c2 = self.mlp3(x).unsqueeze(1)
+        x = torch.concat((c1, c2), 1) * self.unitscale
+        x = torch.concat((x, kij), -1)
         return x
 
 
@@ -140,20 +159,20 @@ def train(epoch):
             data.batch,
         )
         n = out.shape[0]
-        loss = lossfn(out, data.y.view(-1, 7))
+        loss = lossfn(out, data.y.view(-1, 7)) / n
         loss.backward()
         optimizer.step()
-
-        loss_val = test(val_loader)
-        writer.add_scalar(f'Loss/train_{epoch}', loss.item()/n, step)
-        writer.add_scalar(f'Loss/val{epoch}', loss_val, step)
-        savemodel(
-            model, optimizer, "last_checkpoint.pth", epoch, loss, step
-        )
+        if step % 500 == 0:
+            loss_val = test(val_loader)
+        else:
+            loss_val = loss.item()
+        writer.add_scalar(f"Loss/train_{epoch}", loss.item(), step)
+        writer.add_scalar(f"Loss/val{epoch}", loss_val, step)
+        savemodel(model, optimizer, "last_checkpoint.pth", epoch, loss, step)
         scheduler.step(loss_val)
         total_loss += loss.item()
 
-    return total_loss / len(train_loader.dataset)
+    return total_loss / step
 
 
 @torch.no_grad()
@@ -172,10 +191,11 @@ def test(loader):
         )
         n = out.shape[0]
         loss = lossfn_test(out, data.y.view(-1, 7)).item()
-        total_error += loss
+        total_error += loss / n
         if step >= 1000:
             break
-    return total_error / len(loader.dataset)
+        step += 1
+    return total_error / step
 
 
 def savemodel(model, optimizer, type, epoch, loss, step):

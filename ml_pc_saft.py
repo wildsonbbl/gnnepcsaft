@@ -25,12 +25,12 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     e_assoc = parameters[:, 4][..., jnp.newaxis]
     dipm = parameters[:, 5][..., jnp.newaxis]
     dip_num = parameters[:, 6][..., jnp.newaxis]
-    z = parameters[:, 7][..., jnp.newaxis]
-    dielc = parameters[:, 8][..., jnp.newaxis]
+    z = 0
+    dielc = 0
 
-    k_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
-    l_ij = jnp.asarray([[0.0, parameters[0, 10]], [parameters[1, 10], 0.0]])
-    khb_ij = jnp.asarray([[0.0, parameters[0, 11]], [parameters[1, 11], 0.0]])
+    k_ij = jnp.asarray([[0.0, parameters[0, 7]], [parameters[1, 7], 0.0]])
+    l_ij = jnp.asarray([[0.0, parameters[0, 8]], [parameters[1, 8], 0.0]])
+    khb_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
 
     result = jax.lax.cond(
         fntype == 1,
@@ -55,7 +55,7 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     )
 
     failed = jnp.zeros_like(result)
-    result = jax.lax.cond(result>0, result , failed)
+    result = jax.lax.cond(result>0, lambda result: result , lambda result: failed, result)
 
     return result
 
@@ -67,7 +67,6 @@ epcsaft_layer_batch = jax.jit(jax.vmap(epcsaft_layer))
 def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:, 6]
     results = epcsaft_layer_batch(parameters, state)
-    results = jax.lax.cond(results > 0, results, 0)
     return jnp.abs(1.0 - results / y).sum()
 
 
@@ -211,12 +210,12 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     e_assoc = parameters[:, 4][..., jnp.newaxis]
     dipm = parameters[:, 5][..., jnp.newaxis]
     dip_num = parameters[:, 6][..., jnp.newaxis]
-    z = parameters[:, 7][..., jnp.newaxis]
-    dielc = parameters[:, 8][..., jnp.newaxis]
+    z = 0
+    dielc = 0
 
-    k_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
-    l_ij = jnp.asarray([[0.0, parameters[0, 10]], [parameters[1, 10], 0.0]])
-    khb_ij = jnp.asarray([[0.0, parameters[0, 11]], [parameters[1, 11], 0.0]])
+    k_ij = jnp.asarray([[0.0, parameters[0, 7]], [parameters[1, 7], 0.0]])
+    l_ij = jnp.asarray([[0.0, parameters[0, 8]], [parameters[1, 8], 0.0]])
+    khb_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
 
     result = epcsaft.pcsaft_VP(
         x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
@@ -233,9 +232,6 @@ def loss_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:, 6]
     results = epcsaft_layer_test_batch(parameters, state)
     return jnp.abs(1.0 - results / y).sum()
-
-
-loss_test_grad = jax.jit(jax.jacfwd(loss_test))
 
 
 class PCSAFTLOSS_test(torch.autograd.Function):
@@ -256,7 +252,5 @@ class PCSAFTLOSS_test(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dg1):
-        grad_result = loss_test_grad(ctx.parameters, ctx.state)
-        grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = dg1 * tdlpack.from_dlpack(grad_result)
+        grad_result = dg1
         return grad_result, None
