@@ -106,7 +106,6 @@ model = PNAEPCSAFT().to(device)
 # model = compile(model
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 epoch = 0
-best_val_loss = float("inf")
 
 if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
@@ -115,7 +114,6 @@ if osp.exists("training/last_checkpoint.pth"):
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     epoch = checkpoint["epoch"]
     loss = checkpoint["loss"]
-    best_val_loss = checkpoint["best_val_loss"]
 
 scheduler = ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=20, min_lr=0.00001
@@ -149,19 +147,8 @@ def train(epoch):
         loss_val = test(val_loader)
         writer.add_scalar(f'Loss/train_{epoch}', loss.item()/n, step)
         writer.add_scalar(f'Loss/val{epoch}', loss_val, step)
-        if loss_val < best_val_loss:
-            best_val_loss = loss_val
-            savemodel(
-                model,
-                optimizer,
-                "best_checkpoint.pth",
-                epoch,
-                loss,
-                best_val_loss,
-                step,
-            )
         savemodel(
-            model, optimizer, "last_checkpoint.pth", epoch, loss, best_val_loss, step
+            model, optimizer, "last_checkpoint.pth", epoch, loss, step
         )
         scheduler.step(loss_val)
         total_loss += loss.item()
@@ -191,7 +178,7 @@ def test(loader):
     return total_error / len(loader.dataset)
 
 
-def savemodel(model, optimizer, type, epoch, loss, best_val_loss, step):
+def savemodel(model, optimizer, type, epoch, loss, step):
     path = osp.join("training", type)
     torch.save(
         {
@@ -199,7 +186,6 @@ def savemodel(model, optimizer, type, epoch, loss, best_val_loss, step):
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "loss": loss,
-            "best_val_loss": best_val_loss,
             "step": step,
         },
         path,

@@ -62,6 +62,7 @@ epcsaft_layer_batch = jax.jit(jax.vmap(epcsaft_layer))
 def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:,6]
     results = epcsaft_layer_batch(parameters, state)
+    results = (results > 0) * results
     return jnp.abs(1.0 - results/y).sum()
 
 loss_grad = jax.jit(jax.jacfwd(loss))
