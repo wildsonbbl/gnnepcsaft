@@ -262,17 +262,14 @@ def pcsaft_ares(
 
     J2 = np.sum((adip + bdip * e_ij_diag / t) * etan, axis=0)  # e_ij or e_ij_diag ?
 
-    A2 = (
-        np.sum(
-            (x * x.T)
-            * (e_ij_diag / t * e_ij_diag.T / t)
-            * (s_ij_diag**3 * s_ij_diag.T**3)
-            / s_ij**3
-            * (dip_num * dip_num.T)
-            * (dipmSQ * dipmSQ.T)
-            * J2
-        )
-        + 1e-10
+    A2 = np.sum(
+        (x * x.T)
+        * (e_ij_diag / t * e_ij_diag.T / t)
+        * (s_ij_diag**3 * s_ij_diag.T**3)
+        / s_ij**3
+        * (dip_num * dip_num.T)
+        * (dipmSQ * dipmSQ.T)
+        * J2
     )
 
     m_ijk = ((m * m.T)[..., np.newaxis] * m.T) ** (1 / 3.0)
@@ -288,23 +285,28 @@ def pcsaft_ares(
     etan = etan[..., np.newaxis]
     J3 = np.sum(cdip * etan, axis=0)
 
-    A3 = (
-        np.sum(
-            ((x * x.T)[..., np.newaxis] * x.T)
-            * ((e_ij_diag / t * e_ij_diag.T / t)[..., np.newaxis] * e_ij_diag.T / t)
-            * ((s_ij_diag**3 * s_ij_diag.T**3)[..., np.newaxis] * s_ij_diag.T**3)
-            / ((s_ij * s_ij.T)[..., np.newaxis] * s_ij.T)
-            * ((dip_num * dip_num.T)[..., np.newaxis] * dip_num.T)
-            * ((dipmSQ * dipmSQ.T)[..., np.newaxis] * dipmSQ.T)
-            * J3
-        )
-        + 1e-20
+    A3 = np.sum(
+        ((x * x.T)[..., np.newaxis] * x.T)
+        * ((e_ij_diag / t * e_ij_diag.T / t)[..., np.newaxis] * e_ij_diag.T / t)
+        * ((s_ij_diag**3 * s_ij_diag.T**3)[..., np.newaxis] * s_ij_diag.T**3)
+        / ((s_ij * s_ij.T)[..., np.newaxis] * s_ij.T)
+        * ((dip_num * dip_num.T)[..., np.newaxis] * dip_num.T)
+        * ((dipmSQ * dipmSQ.T)[..., np.newaxis] * dipmSQ.T)
+        * J3
     )
 
     A2 = -np.pi * den * A2
     A3 = -4 / 3.0 * np.pi**2 * den**2 * A3
 
     ares_polar = A2 / (1.0 - A3 / A2)
+    aresnan = ares_polar * 0
+
+    ares_polar = jax.lax.cond(
+        np.any(aresnan != 0),
+        lambda ares_polar: np.zeros_like(ares_polar),
+        lambda ares_polar: ares_polar,
+        ares_polar,
+    )
 
     # Association term -------------------------------------------------------
     # 2B association type
@@ -337,32 +339,56 @@ def pcsaft_ares(
 
     # Ion term ---------------------------------------------------------------
 
-    # E_CHRG = 1.6021766208  # elementary charge, units of coulomb / 1e-19
-    # perm_vac = 8.854187817  # permittivity in vacuum, C V^-1 Angstrom^-1 / 1e-22
-    #
-    # E_CHRG_P10 = 1e-19
-    # perm_vac_P10 = 1e-22
-    # kb_P10 = 1e-23
-    # kb = kb/kb_P10
-    #
-    # P10 = E_CHRG_P10**2/kb_P10/perm_vac_P10
-    #
-    # q = z*E_CHRG
-    # dielc = x.T @ dielc
-    ## the inverse Debye screening length. Equation 4 in Held et al. 2008.
-    # kappa = np.sqrt(
-    #    den*E_CHRG**2/kb/t/(dielc*perm_vac) *
-    #    (x.T @ z**2) * P10
-    # ) + 1e-10
-    #
-    # chi = 3./(kappa*s)**3 *\
-    #    (1.5 + np.log(1+kappa*s) - 2.*(1. + kappa*s) +
-    #     0.5*(1. + kappa*s)**2)
-    #
-    # ares_ion = -1/12./np.pi/kb/t/(dielc*perm_vac) * \
-    #    np.sum(x*q**2*chi) * kappa * P10
+    E_CHRG = 1.6021766208  # elementary charge, units of coulomb / 1e-19
+    perm_vac = 8.854187817  # permittivity in vacuum, C V^-1 Angstrom^-1 / 1e-22
 
-    ares = ares_hc + ares_disp + ares_polar + ares_assoc
+    E_CHRG_P10 = 1e-19
+    perm_vac_P10 = 1e-22
+    kb_P10 = 1e-23
+    kb = kb / kb_P10
+
+    P10 = E_CHRG_P10**2 / kb_P10 / perm_vac_P10
+
+    q = z * E_CHRG
+    dielc = x.T @ dielc
+    # the inverse Debye screening length. Equation 4 in Held et al. 2008.
+    kappa = np.sqrt(
+        den * E_CHRG**2 / kb / t / (dielc * perm_vac) * (x.T @ z**2) * P10
+    )
+
+    chi = (
+        3.0
+        / (kappa * s) ** 3
+        * (
+            1.5
+            + np.log(1 + kappa * s)
+            - 2.0 * (1.0 + kappa * s)
+            + 0.5 * (1.0 + kappa * s) ** 2
+        )
+    )
+
+    ares_ion = (
+        -1
+        / 12.0
+        / np.pi
+        / kb
+        / t
+        / (dielc * perm_vac)
+        * np.sum(x * q**2 * chi)
+        * kappa
+        * P10
+    )
+
+    aresnan = ares_ion * 0
+
+    ares_ion = jax.lax.cond(
+        np.any(aresnan != 0),
+        lambda ares_ion: np.zeros_like(ares_ion),
+        lambda ares_ion: ares_ion,
+        ares_ion,
+    )
+
+    ares = ares_hc + ares_disp + ares_polar + ares_assoc + ares_ion
 
     return ares[0, 0]
 
@@ -771,7 +797,7 @@ def pcsaft_den(
             z,
             dielc,
         )
-        f = f * (f >= 1.0e-6)
+
         gradf = dden_errSQ_dnu(
             nu,
             x,
@@ -790,7 +816,9 @@ def pcsaft_den(
             z,
             dielc,
         )
-        nu = nu - f / gradf
+        tmp = nu - f / gradf
+        nu = jax.lax.cond(np.any(tmp > 0), lambda nu: tmp, lambda nu: nu, nu)
+
         return nu
 
     nu = jax.lax.fori_loop(0, 40, updater, nu)

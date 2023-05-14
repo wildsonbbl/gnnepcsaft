@@ -47,7 +47,7 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [[[1, 1, 100, 0.01, 1e3, 1, 1]]],
+            [[[1, 1, 100, 0.01, 1e3, 0, 1]]],
             dtype=torch.float,
             device="cuda",
         )
