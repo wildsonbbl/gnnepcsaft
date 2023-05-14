@@ -47,7 +47,7 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [[[10, 10, 100, 1, 10e3, 10, 10]]],
+            [[[1, 1, 100, 0.01, 1e3, 1, 1]]],
             dtype=torch.float,
             device="cuda",
         )
@@ -115,7 +115,7 @@ class PNAEPCSAFT(torch.nn.Module):
         kij = self.mlp1(x).unsqueeze(1).expand(-1, 2, -1)
         c1 = self.mlp2(x).unsqueeze(1)
         c2 = self.mlp3(x).unsqueeze(1)
-        x = torch.concat((c1, c2), 1) * self.unitscale
+        x = torch.concat((c1, c2), 1) + self.unitscale
         x = torch.concat((x, kij), -1)
         return x
 
@@ -162,7 +162,7 @@ def train(epoch):
         loss = lossfn(out, data.y.view(-1, 7)) / n
         loss.backward()
         optimizer.step()
-        if step % 500 == 0:
+        if step % 1000 == 0:
             loss_val = test(val_loader)
         else:
             loss_val = loss.item()
@@ -192,7 +192,7 @@ def test(loader):
         n = out.shape[0]
         loss = lossfn_test(out, data.y.view(-1, 7)).item()
         total_error += loss / n
-        if step >= 1000:
+        if step >= 100:
             break
         step += 1
     return total_error / step

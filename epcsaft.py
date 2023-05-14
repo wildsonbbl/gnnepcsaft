@@ -69,17 +69,6 @@ def pcsaft_ares(
         Residual Helmholtz energy (J mol^{-1})
     """
 
-    x = np.minimum(np.abs(x) + 1.0e-10, 1.0)
-    m = np.abs(m)
-    s = np.abs(s)
-    e = np.abs(e)
-    t = np.abs(t)
-    rho = np.abs(rho)
-    e_assoc = np.abs(e_assoc)
-    vol_a = np.abs(vol_a)
-    dipm = np.abs(dipm)
-    dip_num = np.abs(dip_num)
-
     ncomp = x.shape[0]  # number of components
     kb = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
     N_AV = 6.022140857e23  # Avogadro's number

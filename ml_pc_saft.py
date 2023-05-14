@@ -54,9 +54,6 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
         phase,
     )
 
-    failed = jnp.zeros_like(result)
-    result = jax.lax.cond(result>0, lambda result: result , lambda result: failed, result)
-
     return result
 
 
@@ -67,7 +64,7 @@ epcsaft_layer_batch = jax.jit(jax.vmap(epcsaft_layer))
 def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:, 6]
     results = epcsaft_layer_batch(parameters, state)
-    return jnp.abs(1.0 - results / y).sum()
+    return ((results - y)**2).sum()
 
 
 loss_grad = jax.jit(jax.jacfwd(loss))
@@ -231,7 +228,7 @@ epcsaft_layer_test_batch = jax.jit(jax.vmap(epcsaft_layer_test))
 def loss_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:, 6]
     results = epcsaft_layer_test_batch(parameters, state)
-    return jnp.abs(1.0 - results / y).sum()
+    return ((results - y)**2).sum()
 
 
 class PCSAFTLOSS_test(torch.autograd.Function):
