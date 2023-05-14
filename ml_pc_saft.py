@@ -25,8 +25,8 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     e_assoc = parameters[:, 4][..., jnp.newaxis]
     dipm = parameters[:, 5][..., jnp.newaxis]
     dip_num = parameters[:, 6][..., jnp.newaxis]
-    z = 0
-    dielc = 0
+    z = jnp.zeros_like(m)
+    dielc = jnp.zeros_like(m)
 
     k_ij = jnp.asarray([[0.0, parameters[0, 7]], [parameters[1, 7], 0.0]])
     l_ij = jnp.asarray([[0.0, parameters[0, 8]], [parameters[1, 8], 0.0]])
@@ -64,7 +64,13 @@ epcsaft_layer_batch = jax.jit(jax.vmap(epcsaft_layer))
 def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:, 6]
     results = epcsaft_layer_batch(parameters, state)
-    return ((results - y)**2).sum()
+    ls = ((1 - results/y)**2).sum()
+    ls = jax.lax.cond(
+        jnp.any(ls > 0 ),
+        ls,
+        1e20
+    )
+    return ls
 
 
 loss_grad = jax.jit(jax.jacfwd(loss))
@@ -207,8 +213,8 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     e_assoc = parameters[:, 4][..., jnp.newaxis]
     dipm = parameters[:, 5][..., jnp.newaxis]
     dip_num = parameters[:, 6][..., jnp.newaxis]
-    z = 0
-    dielc = 0
+    z = jnp.zeros_like(m)
+    dielc = jnp.zeros_like(m)
 
     k_ij = jnp.asarray([[0.0, parameters[0, 7]], [parameters[1, 7], 0.0]])
     l_ij = jnp.asarray([[0.0, parameters[0, 8]], [parameters[1, 8], 0.0]])
@@ -228,7 +234,13 @@ epcsaft_layer_test_batch = jax.jit(jax.vmap(epcsaft_layer_test))
 def loss_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     y = state[:, 6]
     results = epcsaft_layer_test_batch(parameters, state)
-    return ((results - y)**2).sum()
+    ls = ((1 - results/y)**2).sum()
+    ls = jax.lax.cond(
+        jnp.any(ls > 0 ),
+        ls,
+        1e20
+    )
+    return ls
 
 
 class PCSAFTLOSS_test(torch.autograd.Function):

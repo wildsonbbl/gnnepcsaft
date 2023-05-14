@@ -329,7 +329,6 @@ def pcsaft_ares(
         / (4 * den * delta_ij_diag)
     )
 
-    ctr = 0
 
     XA = jax.lax.fori_loop(
         0, 50, lambda i, XA: (XA + XA_find(XA, delta_ij, den, x)) / 2.0, XA
