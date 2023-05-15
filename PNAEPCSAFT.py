@@ -27,7 +27,7 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 
-batch_size = 2**7
+batch_size = 2**8
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, drop_last=True
@@ -47,7 +47,7 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [[[1, 1, 100, 0.01, 1e3, 1e-5, 1e-5]]],
+            [[[1, 1, 100, 0.01, 1e3, 1e-5, 1e-5, 1e-5, 1e-5]]],
             dtype=torch.float,
             device="cuda",
         )
@@ -94,11 +94,11 @@ class PNAEPCSAFT(torch.nn.Module):
             ReLU(),
             Linear(50, 25),
             ReLU(),
-            Linear(25, 7),
+            Linear(25, 9),
             ReLU(),
         )
         self.mlp3 = Sequential(
-            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 7), ReLU()
+            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 9), ReLU()
         )
 
     def forward(
@@ -122,9 +122,9 @@ class PNAEPCSAFT(torch.nn.Module):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = PNAEPCSAFT().to(device)
-# model = compile(model
+# model = compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-epoch = 0
+
 
 if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
@@ -145,11 +145,8 @@ writer = SummaryWriter("runs/exp1")
 
 def train(epoch):
     model.train()
-
-    total_loss = 0
     step = 0
     for data in tqdm(train_loader, desc="step "):
-        step += 1
         data = data.to(device)
         optimizer.zero_grad()
         out = model(
@@ -160,7 +157,10 @@ def train(epoch):
         )
         n = out.shape[0]
         loss = lossfn(out, data.y.view(-1, 7)) / n
+        if loss.item() * 0 != 0:
+            continue
         loss.backward()
+        step += 1
         optimizer.step()
         if step % 1000 == 0:
             loss_val = test(val_loader)
@@ -168,20 +168,26 @@ def train(epoch):
             loss_val = loss.item()
         writer.add_scalar(f"Loss/train_{epoch}", loss.item(), step)
         writer.add_scalar(f"Loss/val{epoch}", loss_val, step)
-        savemodel(model, optimizer, "last_checkpoint.pth", epoch, loss, step)
+        if step % 2 == 0:
+            savemodel(
+                model,
+                optimizer,
+                "/content/drive/MyDrive/last_checkpoint.pth",
+                epoch,
+                loss,
+                step,
+            )
         scheduler.step(loss_val)
-        total_loss += loss.item()
-
-    return total_loss / step
 
 
 @torch.no_grad()
 def test(loader):
     model.eval()
-
     total_error = 0
     step = 1
     for data in loader:
+        if step >= 100:
+            break
         data = data.to(device)
         out = model(
             data.x.to(torch.float),
@@ -191,15 +197,14 @@ def test(loader):
         )
         n = out.shape[0]
         loss = lossfn_test(out, data.y.view(-1, 7)).item()
+        if loss.item() * 0 != 0:
+            continue
         total_error += loss / n
-        if step >= 100:
-            break
         step += 1
     return total_error / step
 
 
-def savemodel(model, optimizer, type, epoch, loss, step):
-    path = osp.join("training", type)
+def savemodel(model, optimizer, path, epoch, loss, step):
     torch.save(
         {
             "epoch": epoch,
