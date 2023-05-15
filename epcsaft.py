@@ -338,56 +338,56 @@ def pcsaft_ares(
 
     # Ion term ---------------------------------------------------------------
 
-    E_CHRG = 1.6021766208  # elementary charge, units of coulomb / 1e-19
-    perm_vac = 8.854187817  # permittivity in vacuum, C V^-1 Angstrom^-1 / 1e-22
+    #E_CHRG = 1.6021766208  # elementary charge, units of coulomb / 1e-19
+    #perm_vac = 8.854187817  # permittivity in vacuum, C V^-1 Angstrom^-1 / 1e-22
+#
+    #E_CHRG_P10 = 1e-19
+    #perm_vac_P10 = 1e-22
+    #kb_P10 = 1e-23
+    #kb = kb / kb_P10
+#
+    #P10 = E_CHRG_P10**2 / kb_P10 / perm_vac_P10
+#
+    #q = z * E_CHRG
+    #dielc = x.T @ dielc
+    ## the inverse Debye screening length. Equation 4 in Held et al. 2008.
+    #kappa = np.sqrt(
+    #    den * E_CHRG**2 / kb / t / (dielc * perm_vac) * (x.T @ z**2) * P10
+    #)
+#
+    #chi = (
+    #    3.0
+    #    / (kappa * s) ** 3
+    #    * (
+    #        1.5
+    #        + np.log(1 + kappa * s)
+    #        - 2.0 * (1.0 + kappa * s)
+    #        + 0.5 * (1.0 + kappa * s) ** 2
+    #    )
+    #)
+#
+    #ares_ion = (
+    #    -1
+    #    / 12.0
+    #    / np.pi
+    #    / kb
+    #    / t
+    #    / (dielc * perm_vac)
+    #    * np.sum(x * q**2 * chi)
+    #    * kappa
+    #    * P10
+    #)
+#
+    #aresnan = ares_ion * 0
+#
+    #ares_ion = jax.lax.cond(
+    #    np.any(aresnan != 0),
+    #    lambda ares_ion: np.zeros_like(ares_ion),
+    #    lambda ares_ion: ares_ion,
+    #    ares_ion,
+    #)
 
-    E_CHRG_P10 = 1e-19
-    perm_vac_P10 = 1e-22
-    kb_P10 = 1e-23
-    kb = kb / kb_P10
-
-    P10 = E_CHRG_P10**2 / kb_P10 / perm_vac_P10
-
-    q = z * E_CHRG
-    dielc = x.T @ dielc
-    # the inverse Debye screening length. Equation 4 in Held et al. 2008.
-    kappa = np.sqrt(
-        den * E_CHRG**2 / kb / t / (dielc * perm_vac) * (x.T @ z**2) * P10
-    )
-
-    chi = (
-        3.0
-        / (kappa * s) ** 3
-        * (
-            1.5
-            + np.log(1 + kappa * s)
-            - 2.0 * (1.0 + kappa * s)
-            + 0.5 * (1.0 + kappa * s) ** 2
-        )
-    )
-
-    ares_ion = (
-        -1
-        / 12.0
-        / np.pi
-        / kb
-        / t
-        / (dielc * perm_vac)
-        * np.sum(x * q**2 * chi)
-        * kappa
-        * P10
-    )
-
-    aresnan = ares_ion * 0
-
-    ares_ion = jax.lax.cond(
-        np.any(aresnan != 0),
-        lambda ares_ion: np.zeros_like(ares_ion),
-        lambda ares_ion: ares_ion,
-        ares_ion,
-    )
-
-    ares = ares_hc + ares_disp + ares_polar + ares_assoc + ares_ion
+    ares = ares_hc + ares_disp + ares_polar + ares_assoc
 
     return ares[0, 0]
 

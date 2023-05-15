@@ -47,7 +47,7 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [[[1, 1, 100, 0.01, 1e3, 1e-5, 1e-5, 1e-5, 1e-5]]],
+            [[[1, 1, 100, 0.01, 1e3, 0, 1e-5]]],
             dtype=torch.float,
             device="cuda",
         )
@@ -94,11 +94,11 @@ class PNAEPCSAFT(torch.nn.Module):
             ReLU(),
             Linear(50, 25),
             ReLU(),
-            Linear(25, 9),
+            Linear(25, 7),
             ReLU(),
         )
         self.mlp3 = Sequential(
-            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 9), ReLU()
+            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 7), ReLU()
         )
 
     def forward(
