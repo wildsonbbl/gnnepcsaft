@@ -8,7 +8,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from graphdataset import ThermoMLDataset
 
-from torch_geometric import compile
 
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
@@ -17,8 +16,9 @@ from tqdm.notebook import tqdm
 
 import ml_pc_saft
 
-from torch.utils.tensorboard import SummaryWriter
+import wandb
 
+wandb.login()
 
 path = osp.join("data", "thermoml", "train")
 train_dataset = ThermoMLDataset(path, Notebook=True, subset="train")
@@ -27,7 +27,7 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 
-batch_size = 2*7
+batch_size = 2**7
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, drop_last=True
@@ -140,8 +140,14 @@ scheduler = ReduceLROnPlateau(
 lossfn = ml_pc_saft.PCSAFTLOSS.apply
 lossfn_test = ml_pc_saft.PCSAFTLOSS_test.apply
 
-writer = SummaryWriter("runs/exp1")
-
+run = wandb.init(
+    # Set the project where this run will be logged
+    project="gnn-pc-saft",
+    # Track hyperparameters and run metadata
+    config={
+        "learning_rate": 0.001,
+        "epochs": 10,
+    })
 
 def train(epoch, path):
     model.train()
@@ -163,11 +169,11 @@ def train(epoch, path):
         optimizer.step()
         if step % 1000 == -1:
             loss_val = test(val_loader)
-            writer.add_scalar(f"Loss/val{epoch}", loss_val, step)
+            wandb.log(f"Loss/val{epoch}", loss_val, step)
         else:
             loss_val = loss.item()
-        writer.add_scalar(f"Loss/train_{epoch}", loss.item(), step)
-        if step % 100 == 0:
+        wandb.log(f"Loss/train{epoch}", loss.item(), step)
+        if step % 500 == 0:
             savemodel(
                 model,
                 optimizer,
