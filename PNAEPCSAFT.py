@@ -27,7 +27,7 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 
-batch_size = 2**9
+batch_size = 2*7
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, drop_last=True
@@ -143,7 +143,7 @@ lossfn_test = ml_pc_saft.PCSAFTLOSS_test.apply
 writer = SummaryWriter("runs/exp1")
 
 
-def train(epoch):
+def train(epoch, path):
     model.train()
     step = 0
     for data in tqdm(train_loader, desc="step "):
@@ -155,24 +155,23 @@ def train(epoch):
             data.edge_attr.to(torch.float),
             data.batch,
         )
-        n = out.shape[0]
         loss = torch.nanmean(lossfn(out, data.y.view(-1, 7)))
         if loss.item() * 0 != 0:
             continue
         loss.backward()
         step += 1
         optimizer.step()
-        if step % 1000 == 0:
+        if step % 1000 == -1:
             loss_val = test(val_loader)
+            writer.add_scalar(f"Loss/val{epoch}", loss_val, step)
         else:
             loss_val = loss.item()
         writer.add_scalar(f"Loss/train_{epoch}", loss.item(), step)
-        writer.add_scalar(f"Loss/val{epoch}", loss_val, step)
-        if step % 2 == 0:
+        if step % 100 == 0:
             savemodel(
                 model,
                 optimizer,
-                "/content/drive/MyDrive/last_checkpoint.pth",
+                path,
                 epoch,
                 loss,
                 step,
@@ -184,7 +183,7 @@ def train(epoch):
 def test(loader):
     model.eval()
     total_error = 0
-    step = 1
+    step = 0
     for data in loader:
         if step >= 100:
             break

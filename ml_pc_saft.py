@@ -177,12 +177,12 @@ class PCSAFTLOSS(torch.autograd.Function):
         return result
 
     @staticmethod
-    def backward(ctx, dg1):
+    def backward(ctx, dg1: torch.Tensor):
         grad_result = loss_grad(ctx.parameters, ctx.state)
         checknan = grad_result * 0 == 0
         grad_result = checknan * grad_result
         grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = tdlpack.from_dlpack(grad_result)
+        grad_result = tdlpack.from_dlpack(grad_result) * dg1[..., None, None]
         return grad_result, None
 
 def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
