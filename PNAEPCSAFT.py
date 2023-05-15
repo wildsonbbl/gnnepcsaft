@@ -27,7 +27,7 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 
-batch_size = 2**8
+batch_size = 2**9
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, drop_last=True

@@ -55,10 +55,10 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     return result
 
 def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
-    y = state[:, 6]
+    y = state[6]
     results = epcsaft_layer(parameters, state)
     ls = (1 - results/y)**2
-    return ls.flatten()
+    return ls.squeeze()
 
 batch_loss = jax.jit(jax.vmap(loss,(0,0)))
 
@@ -151,7 +151,7 @@ def gamma(
     
     gamma1 = fungcoef / fungcoefpure
     
-    return gamma1.flatten()
+    return gamma1.squeeze()
 
 def VP(
     x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
@@ -182,7 +182,7 @@ class PCSAFTLOSS(torch.autograd.Function):
         checknan = grad_result * 0 == 0
         grad_result = checknan * grad_result
         grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = dg1 * tdlpack.from_dlpack(grad_result)
+        grad_result = tdlpack.from_dlpack(grad_result)
         return grad_result, None
 
 def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
@@ -213,10 +213,10 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     return result
 
 def loss_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
-    y = state[:, 6]
+    y = state[6]
     results = epcsaft_layer_test(parameters, state)
     ls = (1 - results/y)**2
-    return ls.flatten()
+    return ls.squeeze()
 
 batch_loss_test = jax.jit(jax.vmap(loss_test,(0,0)))
 
