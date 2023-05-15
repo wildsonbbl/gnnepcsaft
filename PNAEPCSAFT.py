@@ -169,10 +169,10 @@ def train(epoch, path):
         optimizer.step()
         if step % 1000 == -1:
             loss_val = test(val_loader)
-            wandb.log(f"Loss/val{epoch}", loss_val, step)
+            wandb.log({f"Loss/val{epoch}": loss_val})
         else:
             loss_val = loss.item()
-        wandb.log(f"Loss/train{epoch}", loss.item(), step)
+        wandb.log({f"Loss/train{epoch}": loss.item()})
         if step % 500 == 0:
             savemodel(
                 model,
