@@ -146,8 +146,13 @@ run = wandb.init(
     # Track hyperparameters and run metadata
     config={
         "learning_rate": 0.001,
-        "epochs": 10,
-    })
+        "epochs": 5,
+        "batch": batch_size,
+        "LR_patience": 20,
+        "checkpoint_log": 500,
+    },
+)
+
 
 def train(epoch, path):
     model.train()
@@ -169,10 +174,10 @@ def train(epoch, path):
         optimizer.step()
         if step % 1000 == -1:
             loss_val = test(val_loader)
-            wandb.log({f"Loss/val{epoch}": loss_val})
+            wandb.log({"Loss_val": loss_val})
         else:
             loss_val = loss.item()
-        wandb.log({f"Loss/train{epoch}": loss.item()})
+        wandb.log({"Loss_train": loss.item()})
         if step % 500 == 0:
             savemodel(
                 model,
@@ -182,7 +187,7 @@ def train(epoch, path):
                 loss,
                 step,
             )
-        scheduler.step(loss_val)
+            scheduler.step(loss_val)
 
 
 @torch.no_grad()
@@ -200,7 +205,6 @@ def test(loader):
             data.edge_attr.to(torch.float),
             data.batch,
         )
-        n = out.shape[0]
         loss = torch.nanmean(lossfn_test(out, data.y.view(-1, 7)))
         if loss.item() * 0 != 0:
             continue
