@@ -156,7 +156,7 @@ def train(epoch):
             data.batch,
         )
         n = out.shape[0]
-        loss = lossfn(out, data.y.view(-1, 7)) / n
+        loss = torch.nanmean(lossfn(out, data.y.view(-1, 7)))
         if loss.item() * 0 != 0:
             continue
         loss.backward()
@@ -196,10 +196,10 @@ def test(loader):
             data.batch,
         )
         n = out.shape[0]
-        loss = lossfn_test(out, data.y.view(-1, 7)).item()
+        loss = torch.nanmean(lossfn_test(out, data.y.view(-1, 7)))
         if loss.item() * 0 != 0:
             continue
-        total_error += loss / n
+        total_error += loss.item()
         step += 1
     return total_error / step
 
