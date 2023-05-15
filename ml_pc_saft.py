@@ -94,7 +94,7 @@ def gamma(
         dielc,
         1.0,
     )
-    print(rho)
+    
     fungcoef = (
         epcsaft.pcsaft_fugcoef(
             x,
@@ -134,7 +134,7 @@ def gamma(
         dielc,
         1.0,
     )
-    print(rho)
+    
     fungcoefpure = (
         epcsaft.pcsaft_fugcoef(
             x1,
@@ -155,7 +155,7 @@ def gamma(
         ).T
         @ x1
     )
-    print(fungcoef, fungcoefpure)
+    
     gamma1 = fungcoef / fungcoefpure
     
     return gamma1[0,0]
