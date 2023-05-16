@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from torch.nn import Linear, ModuleList, ReLU, Sequential, Tanh
 
+from torchmetrics import MeanSquaredLogError
+
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from graphdataset import ThermoMLDataset
@@ -137,8 +139,9 @@ if osp.exists("training/last_checkpoint.pth"):
 scheduler = ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=20, min_lr=0.00001
 )
-lossfn = ml_pc_saft.PCSAFTLOSS.apply
-lossfn_test = ml_pc_saft.PCSAFTLOSS_test.apply
+pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
+pcsaft_layer_test = ml_pc_saft.PCSAFT_layer_test.apply
+lossfn = MeanSquaredLogError()
 
 run = wandb.init(
     # Set the project where this run will be logged
@@ -150,6 +153,7 @@ run = wandb.init(
         "batch": batch_size,
         "LR_patience": 20,
         "checkpoint_log": 500,
+        "Loss_function": "MSLE"
     },
 )
 
@@ -166,7 +170,8 @@ def train(epoch, path):
             data.edge_attr.to(torch.float),
             data.batch,
         )
-        loss = torch.nanmean(lossfn(out, data.y.view(-1, 7)))
+        pred = pcsaft_layer(out, data.y.view(-1, 7))
+        loss = lossfn(pred, data.y.view(-1,7)[:,6])
         if loss.item() * 0 != 0:
             continue
         loss.backward()
@@ -205,7 +210,8 @@ def test(loader):
             data.edge_attr.to(torch.float),
             data.batch,
         )
-        loss = torch.nanmean(lossfn_test(out, data.y.view(-1, 7)))
+        pred = pcsaft_layer_test(out, data.y.view(-1, 7))
+        loss = lossfn(pred, data.y.view(-1,7)[:,6])
         if loss.item() * 0 != 0:
             continue
         total_error += loss.item()

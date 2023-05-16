@@ -52,17 +52,11 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
         phase,
     )
 
-    return result
+    return result.squeeze()
 
-def loss(parameters: jax.Array, state: jax.Array) -> jax.Array:
-    y = state[6]
-    results = epcsaft_layer(parameters, state)
-    ls = (1 - results/y)**2
-    return ls.squeeze()
+batch_pcsaft_layer = jax.jit(jax.vmap(epcsaft_layer,(0,0)))
 
-batch_loss = jax.jit(jax.vmap(loss,(0,0)))
-
-loss_grad = jax.jit(jax.vmap(jax.jacfwd(loss),(0,0)))
+grad_pcsaft_layer = jax.jit(jax.vmap(jax.jacfwd(epcsaft_layer),(0,0)))
 
 def gamma(
     x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
@@ -158,9 +152,9 @@ def VP(
 ):
     return epcsaft.pcsaft_VP(
         x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-    )
+    ).squeeze()
 
-class PCSAFTLOSS(torch.autograd.Function):
+class PCSAFT_layer(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         parameters = tdlpack.to_dlpack(input)
@@ -171,14 +165,14 @@ class PCSAFTLOSS(torch.autograd.Function):
 
         ctx.parameters = parameters
         ctx.state = state
-        result = batch_loss(parameters, state)
+        result = batch_pcsaft_layer(parameters, state)
         result = jdlpack.to_dlpack(result)
         result = tdlpack.from_dlpack(result)
         return result
 
     @staticmethod
     def backward(ctx, dg1: torch.Tensor):
-        grad_result = loss_grad(ctx.parameters, ctx.state)
+        grad_result = grad_pcsaft_layer(ctx.parameters, ctx.state)
         checknan = grad_result * 0 == 0
         grad_result = checknan * grad_result
         grad_result = jdlpack.to_dlpack(grad_result)
@@ -210,17 +204,11 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
         x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    return result
+    return result.squeeze()
 
-def loss_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
-    y = state[6]
-    results = epcsaft_layer_test(parameters, state)
-    ls = (1 - results/y)**2
-    return ls.squeeze()
+batch_epcsaft_layer_test = jax.jit(jax.vmap(epcsaft_layer_test,(0,0)))
 
-batch_loss_test = jax.jit(jax.vmap(loss_test,(0,0)))
-
-class PCSAFTLOSS_test(torch.autograd.Function):
+class PCSAFT_layer_test(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         parameters = tdlpack.to_dlpack(input)
@@ -229,12 +217,12 @@ class PCSAFTLOSS_test(torch.autograd.Function):
         state = tdlpack.to_dlpack(state)
         state = jdlpack.from_dlpack(state)
         
-        result = batch_loss_test(parameters, state)
+        result = batch_epcsaft_layer_test(parameters, state)
         result = jdlpack.to_dlpack(result)
         result = tdlpack.from_dlpack(result)
         return result
 
     @staticmethod
     def backward(ctx, dg1):
-        grad_result = dg1
+        grad_result = dg1[..., None, None]
         return grad_result, None
