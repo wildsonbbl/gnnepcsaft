@@ -183,6 +183,7 @@ def train(epoch, path):
         else:
             loss_val = loss.item()
         wandb.log({"Loss_train": loss.item()})
+        wandb.log({"nan_number": pred.isnan().sum().item()})
         if step % 500 == 0:
             savemodel(
                 model,
