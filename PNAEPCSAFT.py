@@ -141,7 +141,7 @@ scheduler = ReduceLROnPlateau(
 )
 pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
 pcsaft_layer_test = ml_pc_saft.PCSAFT_layer_test.apply
-lossfn = MeanSquaredLogError()
+lossfn = MeanSquaredLogError().to(device)
 
 run = wandb.init(
     # Set the project where this run will be logged
