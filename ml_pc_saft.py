@@ -9,6 +9,7 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 
+
 def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     x = jnp.asarray([[state[0]], [state[1]]])
     t = state[2]
@@ -54,9 +55,11 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
 
     return result.squeeze()
 
-batch_pcsaft_layer = jax.jit(jax.vmap(epcsaft_layer,(0,0)))
 
-grad_pcsaft_layer = jax.jit(jax.vmap(jax.jacfwd(epcsaft_layer),(0,0)))
+batch_pcsaft_layer = jax.jit(jax.vmap(epcsaft_layer, (0, 0)))
+
+grad_pcsaft_layer = jax.jit(jax.vmap(jax.jacfwd(epcsaft_layer), (0, 0)))
+
 
 def gamma(
     x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
@@ -81,7 +84,7 @@ def gamma(
         dielc,
         1.0,
     )
-    
+
     fungcoef = (
         epcsaft.pcsaft_fugcoef(
             x,
@@ -121,7 +124,7 @@ def gamma(
         dielc,
         1.0,
     )
-    
+
     fungcoefpure = (
         epcsaft.pcsaft_fugcoef(
             x1,
@@ -142,10 +145,11 @@ def gamma(
         ).T
         @ x1
     )
-    
+
     gamma1 = fungcoef / fungcoefpure
-    
+
     return gamma1.squeeze()
+
 
 def VP(
     x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
@@ -153,6 +157,7 @@ def VP(
     return epcsaft.pcsaft_VP(
         x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     ).squeeze()
+
 
 class PCSAFT_layer(torch.autograd.Function):
     @staticmethod
@@ -173,11 +178,11 @@ class PCSAFT_layer(torch.autograd.Function):
     @staticmethod
     def backward(ctx, dg1: torch.Tensor):
         grad_result = grad_pcsaft_layer(ctx.parameters, ctx.state)
-        checknan = grad_result * 0 == 0
-        grad_result = checknan * grad_result
         grad_result = jdlpack.to_dlpack(grad_result)
         grad_result = tdlpack.from_dlpack(grad_result) * dg1[..., None, None]
+        grad_result = grad_result.nan_to_num(0.0, 0.0, 0.0)
         return grad_result, None
+
 
 def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     x = jnp.asarray([[state[0]], [state[1]]])
@@ -206,7 +211,9 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
 
     return result.squeeze()
 
-batch_epcsaft_layer_test = jax.jit(jax.vmap(epcsaft_layer_test,(0,0)))
+
+batch_epcsaft_layer_test = jax.jit(jax.vmap(epcsaft_layer_test, (0, 0)))
+
 
 class PCSAFT_layer_test(torch.autograd.Function):
     @staticmethod
@@ -216,7 +223,7 @@ class PCSAFT_layer_test(torch.autograd.Function):
 
         state = tdlpack.to_dlpack(state)
         state = jdlpack.from_dlpack(state)
-        
+
         result = batch_epcsaft_layer_test(parameters, state)
         result = jdlpack.to_dlpack(result)
         result = tdlpack.from_dlpack(result)

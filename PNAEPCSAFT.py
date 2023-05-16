@@ -171,8 +171,8 @@ def train(epoch, path):
             data.batch,
         )
         pred = pcsaft_layer(out, data.y.view(-1, 7))
-        loss = lossfn(pred, data.y.view(-1,7)[:,6])
-        if loss.item() * 0 != 0:
+        loss = lossfn(pred[~pred.isnan()], data.y.view(-1,7)[~pred.isnan(),6])
+        if loss.isnan():
             continue
         loss.backward()
         step += 1
@@ -211,8 +211,8 @@ def test(loader):
             data.batch,
         )
         pred = pcsaft_layer_test(out, data.y.view(-1, 7))
-        loss = lossfn(pred, data.y.view(-1,7)[:,6])
-        if loss.item() * 0 != 0:
+        loss = lossfn(pred[~pred.isnan()], data.y.view(-1,7)[~pred.isnan(),6])
+        if loss.isnan():
             continue
         total_error += loss.item()
         step += 1
