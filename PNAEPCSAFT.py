@@ -193,6 +193,14 @@ def train(epoch, path):
                 step,
             )
             scheduler.step(loss_val)
+    savemodel(
+                model,
+                optimizer,
+                path,
+                epoch,
+                loss,
+                step,
+            )
 
 
 @torch.no_grad()
