@@ -153,7 +153,7 @@ run = wandb.init(
         "batch": batch_size,
         "LR_patience": 20,
         "checkpoint_log": 500,
-        "Loss_function": "MSLE"
+        "Loss_function": "MSLE",
     },
 )
 
@@ -171,7 +171,7 @@ def train(epoch, path):
             data.batch,
         )
         pred = pcsaft_layer(out, data.y.view(-1, 7))
-        loss = lossfn(pred[~pred.isnan()], data.y.view(-1,7)[~pred.isnan(),6])
+        loss = lossfn(pred[~pred.isnan()], data.y.view(-1, 7)[~pred.isnan(), 6])
         if loss.isnan():
             continue
         loss.backward()
@@ -182,8 +182,7 @@ def train(epoch, path):
             wandb.log({"Loss_val": loss_val})
         else:
             loss_val = loss.item()
-        wandb.log({"Loss_train": loss.item()})
-        wandb.log({"nan_number": pred.isnan().sum().item()})
+        wandb.log({"Loss_train": loss.item(), "nan_number": pred.isnan().sum().item()})
         if step % 500 == 0:
             savemodel(
                 model,
@@ -212,7 +211,7 @@ def test(loader):
             data.batch,
         )
         pred = pcsaft_layer_test(out, data.y.view(-1, 7))
-        loss = lossfn(pred[~pred.isnan()], data.y.view(-1,7)[~pred.isnan(),6])
+        loss = lossfn(pred[~pred.isnan()], data.y.view(-1, 7)[~pred.isnan(), 6])
         if loss.isnan():
             continue
         total_error += loss.item()
