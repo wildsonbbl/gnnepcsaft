@@ -152,8 +152,9 @@ run = wandb.init(
         "epochs": 5,
         "batch": batch_size,
         "LR_patience": 20,
-        "checkpoint_log": 500,
+        "checkpoint_save": '1 epoch',
         "Loss_function": "MSLE",
+        "scheduler_step": 20,
     },
 )
 
@@ -182,25 +183,24 @@ def train(epoch, path):
             wandb.log({"Loss_val": loss_val})
         else:
             loss_val = loss.item()
-        wandb.log({"Loss_train": loss.item(), "nan_number": pred.isnan().sum().item()})
-        if step % 500 == 0:
-            savemodel(
-                model,
-                optimizer,
-                path,
-                epoch,
-                loss,
-                step,
-            )
+        errp = (pred / data.y.view(-1, 7)[:, 6]).nanmean().item()
+        wandb.log(
+            {
+                "Loss_train": loss.item(),
+                "nan_number": pred.isnan().sum().item(),
+                "pred/target_fraction": errp
+            }
+        )
+        if step % 20 == 0:
             scheduler.step(loss_val)
     savemodel(
-                model,
-                optimizer,
-                path,
-                epoch,
-                loss,
-                step,
-            )
+        model,
+        optimizer,
+        path,
+        epoch,
+        loss,
+        step,
+    )
 
 
 @torch.no_grad()
