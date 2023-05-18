@@ -30,6 +30,9 @@ val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 
 batch_size = 2**7
+lr = 0.1
+patience = 1
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, drop_last=True
@@ -51,7 +54,7 @@ class PNAEPCSAFT(torch.nn.Module):
         self.unitscale = torch.tensor(
             [[[1, 1, 100, 0.01, 1e3, 0, 1e-5]]],
             dtype=torch.float,
-            device="cuda",
+            device=device,
         )
 
         self.convs = ModuleList()
@@ -122,10 +125,10 @@ class PNAEPCSAFT(torch.nn.Module):
         return x
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 model = PNAEPCSAFT().to(device)
 # model = compile(model)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 
 if osp.exists("training/last_checkpoint.pth"):
@@ -137,7 +140,7 @@ if osp.exists("training/last_checkpoint.pth"):
     loss = checkpoint["loss"]
 
 scheduler = ReduceLROnPlateau(
-    optimizer, mode="min", factor=0.5, patience=20, min_lr=0.00001
+    optimizer, mode="min", factor=0.5, patience=patience, min_lr=0.00001
 )
 pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
 pcsaft_layer_test = ml_pc_saft.PCSAFT_layer_test.apply
@@ -148,13 +151,13 @@ run = wandb.init(
     project="gnn-pc-saft",
     # Track hyperparameters and run metadata
     config={
-        "learning_rate": 0.001,
+        "learning_rate": lr,
         "epochs": 5,
         "batch": batch_size,
-        "LR_patience": 20,
+        "LR_patience": patience,
         "checkpoint_save": '1 epoch',
         "Loss_function": "MSLE",
-        "scheduler_step": 20,
+        "scheduler_step": '1 epoch',
     },
 )
 
@@ -162,6 +165,7 @@ run = wandb.init(
 def train(epoch, path):
     model.train()
     step = 0
+    epoch_loss = []
     for data in tqdm(train_loader, desc="step "):
         data = data.to(device)
         optimizer.zero_grad()
@@ -191,8 +195,11 @@ def train(epoch, path):
                 "pred/target_fraction": errp
             }
         )
-        if step % 20 == 0:
-            scheduler.step(loss_val)
+        epoch_loss.append(loss_val)
+    wandb.log({
+        "epoch_loss": torch.as_tensor(epoch_loss).mean().item()
+    })
+    scheduler.step(loss_val)
     savemodel(
         model,
         optimizer,
