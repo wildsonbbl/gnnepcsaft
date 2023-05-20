@@ -2,7 +2,7 @@ import os.path as osp
 
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential, Tanh
+from torch.nn import Linear, ModuleList, ReLU, Sequential, Tanh, BatchNorm1d
 
 from torchmetrics import MeanSquaredLogError
 
@@ -13,6 +13,7 @@ from graphdataset import ThermoMLDataset
 
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
+from torch_geometric.data import Data
 
 from tqdm.notebook import tqdm
 
@@ -27,7 +28,6 @@ train_dataset = ThermoMLDataset(path, Notebook=True, subset="train")
 
 path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
-
 
 batch_size = 2**7
 lr = 0.1
@@ -92,27 +92,47 @@ class PNAEPCSAFT(torch.nn.Module):
             self.batch_norms.append(BatchNorm(8 * 9))
 
         self.mlp1 = Sequential(
-            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 3), Tanh()
+            Linear(8 * 9, 50),
+            BatchNorm1d(50),
+            ReLU(),
+            Linear(50, 25),
+            BatchNorm1d(25),
+            ReLU(),
+            Linear(25, 3),
+            Tanh(),
         )
         self.mlp2 = Sequential(
             Linear(8 * 9, 50),
+            BatchNorm1d(50),
             ReLU(),
             Linear(50, 25),
+            BatchNorm1d(25),
             ReLU(),
             Linear(25, 7),
             ReLU(),
         )
         self.mlp3 = Sequential(
-            Linear(8 * 9, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 7), ReLU()
+            Linear(8 * 9, 50),
+            BatchNorm1d(50),
+            ReLU(),
+            Linear(50, 25),
+            BatchNorm1d(25),
+            ReLU(),
+            Linear(25, 7),
+            ReLU(),
         )
 
     def forward(
         self,
-        x: torch.Tensor,
-        edge_index: torch.Tensor,
-        edge_attr: torch.Tensor,
-        batch: torch.Tensor,
+        data: Data,
     ):
+        x, edge_index, edge_attr, batch = (
+            data.x.to(torch.float),
+            data.edge_index,
+            data.edge_attr.to(torch.float),
+            data.batch,
+        )
+
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
 
@@ -125,7 +145,6 @@ class PNAEPCSAFT(torch.nn.Module):
         return x
 
 
-
 model = PNAEPCSAFT().to(device)
 # model = compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -136,8 +155,6 @@ if osp.exists("training/last_checkpoint.pth"):
     checkpoint = torch.load(PATH)
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    epoch = checkpoint["epoch"]
-    loss = checkpoint["loss"]
 
 scheduler = ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=patience, min_lr=0.00001
@@ -152,12 +169,11 @@ run = wandb.init(
     # Track hyperparameters and run metadata
     config={
         "learning_rate": lr,
-        "epochs": 5,
         "batch": batch_size,
         "LR_patience": patience,
-        "checkpoint_save": '1 epoch',
+        "checkpoint_save": "1 epoch",
         "Loss_function": "MSLE",
-        "scheduler_step": '1 epoch',
+        "scheduler_step": "1 epoch",
     },
 )
 
@@ -165,48 +181,39 @@ run = wandb.init(
 def train(epoch, path):
     model.train()
     step = 0
-    epoch_loss = []
+    total_loss = 0
     for data in tqdm(train_loader, desc="step "):
         data = data.to(device)
+        y = data.y.view(-1, 7)[:, -1].squeeze()
+        state = data.y.view(-1, 7)[:, :-1]
         optimizer.zero_grad()
-        out = model(
-            data.x.to(torch.float),
-            data.edge_index,
-            data.edge_attr.to(torch.float),
-            data.batch,
-        )
-        pred = pcsaft_layer(out, data.y.view(-1, 7))
-        loss = lossfn(pred[~pred.isnan()], data.y.view(-1, 7)[~pred.isnan(), 6])
+        para = model(data)
+        pred = pcsaft_layer(para, state)
+        loss = lossfn(pred[~pred.isnan()], y[~pred.isnan()])
         if loss.isnan():
             continue
         loss.backward()
         step += 1
+        total_loss += loss.item() * data.num_graphs
         optimizer.step()
-        if step % 1000 == -1:
-            loss_val = test(val_loader)
-            wandb.log({"Loss_val": loss_val})
-        else:
-            loss_val = loss.item()
-        errp = (pred / data.y.view(-1, 7)[:, 6]).nanmean().item()
+        errp = (pred / y).nanmean().item() * data.num_graphs
         wandb.log(
             {
-                "Loss_train": loss.item(),
+                "Loss_train": loss.item() * data.num_graphs,
                 "nan_number": pred.isnan().sum().item(),
-                "pred/target_fraction": errp
+                "pred/target_fraction": errp,
             }
         )
-        epoch_loss.append(loss_val)
-    wandb.log({
-        "epoch_loss": torch.as_tensor(epoch_loss).mean().item()
-    })
+    loss_train = total_loss / len(train_loader.dataset)
+    loss_val = loss_train #test(val_loader)
+    wandb.log({"Loss_val": loss_val, "Loss_train_ep": loss_train})
     scheduler.step(loss_val)
     savemodel(
         model,
         optimizer,
         path,
         epoch,
-        loss,
-        step,
+        loss_train,
     )
 
 
@@ -216,32 +223,26 @@ def test(loader):
     total_error = 0
     step = 0
     for data in loader:
-        if step >= 100:
-            break
         data = data.to(device)
-        out = model(
-            data.x.to(torch.float),
-            data.edge_index,
-            data.edge_attr.to(torch.float),
-            data.batch,
-        )
-        pred = pcsaft_layer_test(out, data.y.view(-1, 7))
-        loss = lossfn(pred[~pred.isnan()], data.y.view(-1, 7)[~pred.isnan(), 6])
+        y = data.y.view(-1, 7)[:, -1].squeeze()
+        state = data.y.view(-1, 7)[:, :-1]
+        para = model(data)
+        pred = pcsaft_layer_test(para, state)
+        loss = lossfn(pred[~pred.isnan()], y[~pred.isnan()])
         if loss.isnan():
             continue
-        total_error += loss.item()
+        total_error += loss.item() * data.num_graphs
         step += 1
-    return total_error / step
+    return total_error / len(loader.dataset)
 
 
-def savemodel(model, optimizer, path, epoch, loss, step):
+def savemodel(model, optimizer, path, epoch, loss):
     torch.save(
         {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "loss": loss,
-            "step": step,
+            "loss": loss
         },
         path,
     )
