@@ -8,17 +8,8 @@ from torch_geometric.utils import degree
 
 from tqdm import tqdm
 
-
-
 path = osp.join('data', 'thermoml', 'train')
-train_dataset = ThermoMLDataset(path, Notebook=True)
-path = osp.join('data', 'thermoml', 'test')
-test_dataset = ThermoMLDataset(path, Notebook=True, subset='test')
-path = osp.join('data', 'thermoml', 'val')
-val_dataset = ThermoMLDataset(path, Notebook=True, subset='val')
-
-
-batch_size = 2**7
+train_dataset = ThermoMLDataset(root = './data/thermoml/train', subset='train')
 
 # Compute the maximum in-degree in the training data.
 max_degree = -1

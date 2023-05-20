@@ -185,7 +185,7 @@ def train(epoch, path):
     for data in tqdm(train_loader, desc="step "):
         data = data.to(device)
         y = data.y.view(-1, 7)[:, -1].squeeze()
-        state = data.y.view(-1, 7)[:, :-1]
+        state = data.y.view(-1, 7)
         optimizer.zero_grad()
         para = model(data)
         pred = pcsaft_layer(para, state)
@@ -225,7 +225,7 @@ def test(loader):
     for data in loader:
         data = data.to(device)
         y = data.y.view(-1, 7)[:, -1].squeeze()
-        state = data.y.view(-1, 7)[:, :-1]
+        state = data.y.view(-1, 7)
         para = model(data)
         pred = pcsaft_layer_test(para, state)
         loss = lossfn(pred[~pred.isnan()], y[~pred.isnan()])
