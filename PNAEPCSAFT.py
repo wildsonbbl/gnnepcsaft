@@ -201,7 +201,7 @@ def train(epoch, path):
         errp = (pred / y).nanmean().item() * 100.0
         wandb.log(
             {
-                "Loss_train": loss.item() * data.num_graphs,
+                "Loss_train": loss.item(),
                 "nan_number": pred.isnan().sum().item(),
                 "pred/target_fraction": errp,
             }
