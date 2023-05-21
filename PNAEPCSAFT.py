@@ -30,7 +30,7 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 batch_size = 2**7
-lr = 0.1
+lr = 0.01
 patience = 1
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -149,16 +149,18 @@ model = PNAEPCSAFT().to(device)
 # model = compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+scheduler = ReduceLROnPlateau(
+    optimizer, mode="min", factor=0.5, patience=patience, min_lr=0.00001
+)
 
 if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
     checkpoint = torch.load(PATH)
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    scheduler.step(checkpoint['loss'])
 
-scheduler = ReduceLROnPlateau(
-    optimizer, mode="min", factor=0.5, patience=patience, min_lr=0.00001
-)
+
 pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
 pcsaft_layer_test = ml_pc_saft.PCSAFT_layer_test.apply
 lossfn = MeanSquaredLogError().to(device)
@@ -196,7 +198,7 @@ def train(epoch, path):
         step += 1
         total_loss += loss.item() * data.num_graphs
         optimizer.step()
-        errp = (pred / y).nanmean().item() * data.num_graphs
+        errp = (pred / y).nanmean().item() * 100.0
         wandb.log(
             {
                 "Loss_train": loss.item() * data.num_graphs,
@@ -213,7 +215,7 @@ def train(epoch, path):
         optimizer,
         path,
         epoch,
-        loss_train,
+        loss_val,
     )
 
 
