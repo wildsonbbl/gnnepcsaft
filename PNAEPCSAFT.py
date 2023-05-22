@@ -153,7 +153,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 #    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.00001
 # )
 
-scheduler = CyclicLR(optimizer, 0.001, 1.0, 500)
+scheduler = CyclicLR(optimizer, 0.001, 1.0, 500, cycle_momentum=False)
 
 if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
