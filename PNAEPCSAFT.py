@@ -6,7 +6,7 @@ from torch.nn import Linear, ModuleList, ReLU, Sequential, Tanh, BatchNorm1d
 
 from torchmetrics import MeanSquaredLogError
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CyclicLR
 
 from graphdataset import ThermoMLDataset
 
@@ -30,7 +30,7 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 batch_size = 2**7
-lr = 0.01
+lr = 0.5
 patience = 1
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -149,16 +149,18 @@ model = PNAEPCSAFT().to(device)
 # model = compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-scheduler = ReduceLROnPlateau(
-    optimizer, mode="min", factor=0.5, patience=patience, min_lr=0.00001
-)
+# scheduler = ReduceLROnPlateau(
+#    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.00001
+# )
+
+scheduler = CyclicLR(optimizer, 0.001, 1.0, 500)
 
 if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
     checkpoint = torch.load(PATH)
     model.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    scheduler.step(checkpoint['loss'])
+    # scheduler.step(checkpoint['loss'])
 
 
 pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
@@ -175,7 +177,7 @@ run = wandb.init(
         "LR_patience": patience,
         "checkpoint_save": "1 epoch",
         "Loss_function": "MSLE",
-        "scheduler_step": "1 epoch",
+        "scheduler_step": 500,
     },
 )
 
@@ -206,10 +208,11 @@ def train(epoch, path):
                 "pred/target_fraction": errp,
             }
         )
+        scheduler.step()
     loss_train = total_loss / len(train_loader.dataset)
-    loss_val = loss_train #test(val_loader)
+    loss_val = loss_train  # test(val_loader)
     wandb.log({"Loss_val": loss_val, "Loss_train_ep": loss_train})
-    scheduler.step(loss_val)
+
     savemodel(
         model,
         optimizer,
@@ -244,7 +247,7 @@ def savemodel(model, optimizer, path, epoch, loss):
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "loss": loss
+            "loss": loss,
         },
         path,
     )
