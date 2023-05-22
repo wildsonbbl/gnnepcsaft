@@ -30,8 +30,10 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 batch_size = 2**7
-lr = 0.5
+lr = 0.001
 patience = 1
+hidden_dim = 200
+propagation_depth = 7
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 train_loader = DataLoader(
@@ -62,7 +64,7 @@ class PNAEPCSAFT(torch.nn.Module):
 
         conv = PNAConv(
             in_channels=9,
-            out_channels=8 * 9,
+            out_channels=hidden_dim,
             aggregators=aggregators,
             scalers=scalers,
             deg=deg,
@@ -73,12 +75,12 @@ class PNAEPCSAFT(torch.nn.Module):
             divide_input=False,
         )
         self.convs.append(conv)
-        self.batch_norms.append(BatchNorm(8 * 9))
+        self.batch_norms.append(BatchNorm(hidden_dim))
 
-        for _ in range(3):
+        for _ in range(propagation_depth-1):
             conv = PNAConv(
-                in_channels=8 * 9,
-                out_channels=8 * 9,
+                in_channels=hidden_dim,
+                out_channels=hidden_dim,
                 aggregators=aggregators,
                 scalers=scalers,
                 deg=deg,
@@ -89,36 +91,36 @@ class PNAEPCSAFT(torch.nn.Module):
                 divide_input=False,
             )
             self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(8 * 9))
+            self.batch_norms.append(BatchNorm(hidden_dim))
 
         self.mlp1 = Sequential(
-            Linear(8 * 9, 50),
-            BatchNorm1d(50),
+            Linear(hidden_dim, hidden_dim // 2),
+            BatchNorm1d(hidden_dim // 2),
             ReLU(),
-            Linear(50, 25),
-            BatchNorm1d(25),
+            Linear(hidden_dim // 2, hidden_dim // 4),
+            BatchNorm1d(hidden_dim // 4),
             ReLU(),
-            Linear(25, 3),
+            Linear(hidden_dim // 4, 3),
             Tanh(),
         )
         self.mlp2 = Sequential(
-            Linear(8 * 9, 50),
-            BatchNorm1d(50),
+            Linear(hidden_dim, hidden_dim // 2),
+            BatchNorm1d(hidden_dim // 2),
             ReLU(),
-            Linear(50, 25),
-            BatchNorm1d(25),
+            Linear(hidden_dim // 2, hidden_dim // 4),
+            BatchNorm1d(hidden_dim // 4),
             ReLU(),
-            Linear(25, 7),
+            Linear(hidden_dim // 4, 7),
             ReLU(),
         )
         self.mlp3 = Sequential(
-            Linear(8 * 9, 50),
-            BatchNorm1d(50),
+            Linear(hidden_dim, hidden_dim // 2),
+            BatchNorm1d(hidden_dim // 2),
             ReLU(),
-            Linear(50, 25),
-            BatchNorm1d(25),
+            Linear(hidden_dim // 2, hidden_dim // 4),
+            BatchNorm1d(hidden_dim // 4),
             ReLU(),
-            Linear(25, 7),
+            Linear(hidden_dim // 4, 7),
             ReLU(),
         )
 
@@ -153,7 +155,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 #    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.00001
 # )
 
-scheduler = CyclicLR(optimizer, 0.001, 1.0, 500, cycle_momentum=False)
+scheduler = CyclicLR(optimizer, 0.00001, 0.5, 500, cycle_momentum=False)
 
 if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
