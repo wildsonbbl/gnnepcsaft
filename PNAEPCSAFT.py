@@ -30,9 +30,9 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 batch_size = 2**7
-lr = 1e-5
+lr = 1e-3
 patience = 500
-hidden_dim = 200
+hidden_dim = 80
 propagation_depth = 7
 warmup = 700
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -129,17 +129,18 @@ class PNAEPCSAFT(torch.nn.Module):
         self,
         data: Data,
     ):
-        x, edge_index, edge_attr, batch = (
+        x, edge_index, edge_attr, batch, TK = (
             data.x.to(torch.float),
             data.edge_index,
             data.edge_attr.to(torch.float),
             data.batch,
+            data.y.view(-1,7)[:,2],
         )
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
 
-        x = global_add_pool(x, batch)
+        x = global_add_pool(x, batch) * TK[..., None]
         kij = self.mlp1(x).unsqueeze(1).expand(-1, 2, -1)
         c1 = self.mlp2(x).unsqueeze(1)
         c2 = self.mlp3(x).unsqueeze(1)
@@ -153,7 +154,7 @@ model = PNAEPCSAFT().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 scheduler = ReduceLROnPlateau(
-    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.00001,
+    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.000001,
     verbose=True
 )
 
@@ -208,15 +209,15 @@ def train(epoch, path):
         step += 1
         total_loss += loss.item() * data.num_graphs
         optimizer.step()
-        errp = (((pred / y) * 100.0 - 100.0).abs() >  50).sum().item()
+        errp = (((pred / y) * 100.0 - 100.0).abs() >  50).sum().item() / data.num_graphs
         wandb.log(
             {
                 "Loss_train": loss.item(),
                 "nan_number": pred.isnan().sum().item(),
-                "pred/target_fraction": errp,
+                "pred_target": errp,
             }
         )
-        if step <= warmup:
+        if step <= warmup and epoch == 1:
             scheduler_warmup.step()
         else:
             scheduler.step(loss)
