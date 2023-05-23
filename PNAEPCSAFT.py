@@ -208,7 +208,7 @@ def train(epoch, path):
         step += 1
         total_loss += loss.item() * data.num_graphs
         optimizer.step()
-        errp = (pred / y).nanmean().item() * 100.0
+        errp = (((pred / y) * 100.0 - 100.0).abs() >  50).sum().item()
         wandb.log(
             {
                 "Loss_train": loss.item(),
@@ -216,7 +216,10 @@ def train(epoch, path):
                 "pred/target_fraction": errp,
             }
         )
-        scheduler.step(loss)
+        if step <= warmup:
+            scheduler_warmup.step()
+        else:
+            scheduler.step(loss)
     loss_train = total_loss / len(train_loader.dataset)
     loss_val = loss_train  # test(val_loader)
     wandb.log({"Loss_val": loss_val, "Loss_train_ep": loss_train})
