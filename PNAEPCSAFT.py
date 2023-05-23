@@ -6,7 +6,7 @@ from torch.nn import Linear, ModuleList, ReLU, Sequential, Tanh, BatchNorm1d
 
 from torchmetrics import MeanSquaredLogError
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CyclicLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CyclicLR, LinearLR
 
 from graphdataset import ThermoMLDataset
 
@@ -30,17 +30,18 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 batch_size = 2**7
-lr = 100
+lr = 1e-5
 patience = 500
 hidden_dim = 200
 propagation_depth = 7
+warmup = 700
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, drop_last=True
 )
 val_loader = DataLoader(
-    val_dataset, batch_size=batch_size, shuffle=True, drop_last=True
+    val_dataset, batch_size=batch_size, shuffle=False, drop_last=True
 )
 
 # Compute the maximum in-degree in the training data.
@@ -152,10 +153,13 @@ model = PNAEPCSAFT().to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 scheduler = ReduceLROnPlateau(
-    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.00001
+    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.00001,
+    verbose=True
 )
 
-# scheduler = CyclicLR(optimizer, 0.00001, 0.5, 500, cycle_momentum=False)
+scheduler_warmup = LinearLR(optimizer, 1/4,1, warmup)
+
+# scheduler = CyclicLR(optimizer, 0.00001, 0.001, patience, cycle_momentum=False)
 
 if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
@@ -178,7 +182,10 @@ run = wandb.init(
         "LR_patience": patience,
         "checkpoint_save": "1 epoch",
         "Loss_function": "MSLE",
-        "scheduler_step": 500,
+        "scheduler_step": 1,
+        "hidden_dim": hidden_dim,
+        "propagation_depth": propagation_depth,
+        "lr_warmup": warmup,
     },
 )
 
