@@ -55,7 +55,7 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [1, 1, 10, 0, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0,0,0],
+            [1, 1, 10, 1e-3, 1, 1e-3, 1, 1, 1, 10, 1e-3, 1, 1e-3, 1, 0,0,0],
             dtype=torch.float,
             device=device,
         )
@@ -179,7 +179,7 @@ def train(epoch, path):
         optimizer.zero_grad()
         para = model(data)
         pred = pcsaft_layer(para, state)
-        loss = lossfn(pred, y)
+        loss = lossfn(pred[~pred.isnan()], y[~pred.isnan()])
         loss.backward()
         step += 1
         total_loss += loss.item() * data.num_graphs
