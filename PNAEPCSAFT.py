@@ -128,7 +128,7 @@ class PNAEPCSAFT(torch.nn.Module):
 
 model = PNAEPCSAFT().to(device)
 # model = compile(model)
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr, amsgrad=True)
 
 scheduler = ReduceLROnPlateau(
     optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.000001,
