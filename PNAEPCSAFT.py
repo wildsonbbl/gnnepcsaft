@@ -179,9 +179,7 @@ def train(epoch, path):
         optimizer.zero_grad()
         para = model(data)
         pred = pcsaft_layer(para, state)
-        loss = lossfn(pred[~pred.isnan()], y[~pred.isnan()])
-        if loss.isnan():
-            continue
+        loss = lossfn(pred, y)
         loss.backward()
         step += 1
         total_loss += loss.item() * data.num_graphs
