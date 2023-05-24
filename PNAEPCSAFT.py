@@ -31,7 +31,7 @@ val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 batch_size = 2**7
 lr = 1e-3
-patience = 500
+patience = 1300
 hidden_dim = 80
 propagation_depth = 7
 warmup = 700
@@ -55,7 +55,7 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [[[1, 1, 100, 0, 0, 0, 0]]],
+            [[[1, 1, 10, 0, 0, 0, 0]]],
             dtype=torch.float,
             device=device,
         )
