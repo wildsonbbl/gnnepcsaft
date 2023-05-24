@@ -55,7 +55,7 @@ class PNAEPCSAFT(torch.nn.Module):
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.unitscale = torch.tensor(
-            [[[1, 1, 10, 0, 0, 0, 0]]],
+            [1, 1, 10, 0, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0,0,0],
             dtype=torch.float,
             device=device,
         )
@@ -94,34 +94,14 @@ class PNAEPCSAFT(torch.nn.Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(hidden_dim))
 
-        self.mlp1 = Sequential(
+        self.mlp = Sequential(
             Linear(hidden_dim, hidden_dim // 2),
             BatchNorm1d(hidden_dim // 2),
             ReLU(),
             Linear(hidden_dim // 2, hidden_dim // 4),
             BatchNorm1d(hidden_dim // 4),
             ReLU(),
-            Linear(hidden_dim // 4, 3),
-            Tanh(),
-        )
-        self.mlp2 = Sequential(
-            Linear(hidden_dim, hidden_dim // 2),
-            BatchNorm1d(hidden_dim // 2),
-            ReLU(),
-            Linear(hidden_dim // 2, hidden_dim // 4),
-            BatchNorm1d(hidden_dim // 4),
-            ReLU(),
-            Linear(hidden_dim // 4, 7),
-            ReLU(),
-        )
-        self.mlp3 = Sequential(
-            Linear(hidden_dim, hidden_dim // 2),
-            BatchNorm1d(hidden_dim // 2),
-            ReLU(),
-            Linear(hidden_dim // 2, hidden_dim // 4),
-            BatchNorm1d(hidden_dim // 4),
-            ReLU(),
-            Linear(hidden_dim // 4, 7),
+            Linear(hidden_dim // 4, 17),
             ReLU(),
         )
 
@@ -140,12 +120,9 @@ class PNAEPCSAFT(torch.nn.Module):
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
 
-        x = global_add_pool(x, batch) * TK[..., None]
-        kij = self.mlp1(x).unsqueeze(1).expand(-1, 2, -1)
-        c1 = self.mlp2(x).unsqueeze(1)
-        c2 = self.mlp3(x).unsqueeze(1)
-        x = torch.concat((c1, c2), 1) + self.unitscale
-        x = torch.concat((x, kij), -1)
+        x = global_add_pool(x, batch)
+        x = self.mlp(x) + self.unitscale
+        x[:,-3:] = F.tanh(x[:,-3:])
         return x
 
 

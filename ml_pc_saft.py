@@ -17,6 +17,9 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     phase = state[4]
     fntype = state[5]
 
+    kij = parameters[-3:]
+    parameters = parameters[:-3].reshape(2, 7)
+
     m = parameters[:, 0][..., jnp.newaxis]
     s = parameters[:, 1][..., jnp.newaxis]
     e = parameters[:, 2][..., jnp.newaxis]
@@ -27,9 +30,9 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     z = jnp.zeros_like(m)
     dielc = jnp.zeros_like(m)
 
-    k_ij = jnp.asarray([[0.0, parameters[0, 7]], [parameters[1, 7], 0.0]])
-    l_ij = jnp.asarray([[0.0, parameters[0, 8]], [parameters[1, 8], 0.0]])
-    khb_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
+    k_ij = jnp.asarray([[0.0, kij[0]], [kij[0], 0.0]])
+    l_ij = jnp.asarray([[0.0, kij[1]], [kij[1], 0.0]])
+    khb_ij = jnp.asarray([[0.0, kij[2]], [kij[2], 0.0]])
 
     result = jax.lax.cond(
         fntype == 1,
@@ -179,7 +182,7 @@ class PCSAFT_layer(torch.autograd.Function):
     def backward(ctx, dg1: torch.Tensor):
         grad_result = grad_pcsaft_layer(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = tdlpack.from_dlpack(grad_result) * dg1[..., None, None]
+        grad_result = tdlpack.from_dlpack(grad_result) * dg1[..., None]
         grad_result = grad_result.nan_to_num(0.0, 0.0, 0.0)
         return grad_result, None
 
@@ -191,6 +194,9 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     phase = state[4]
     fntype = state[5]
 
+    kij = parameters[-3:]
+    parameters = parameters[:-3].reshape(2, 7)
+
     m = parameters[:, 0][..., jnp.newaxis]
     s = parameters[:, 1][..., jnp.newaxis]
     e = parameters[:, 2][..., jnp.newaxis]
@@ -201,9 +207,9 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     z = jnp.zeros_like(m)
     dielc = jnp.zeros_like(m)
 
-    k_ij = jnp.asarray([[0.0, parameters[0, 7]], [parameters[1, 7], 0.0]])
-    l_ij = jnp.asarray([[0.0, parameters[0, 8]], [parameters[1, 8], 0.0]])
-    khb_ij = jnp.asarray([[0.0, parameters[0, 9]], [parameters[1, 9], 0.0]])
+    k_ij = jnp.asarray([[0.0, kij[0]], [kij[0], 0.0]])
+    l_ij = jnp.asarray([[0.0, kij[1]], [kij[1], 0.0]])
+    khb_ij = jnp.asarray([[0.0, kij[2]], [kij[2], 0.0]])
 
     result = epcsaft.pcsaft_VP(
         x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
@@ -231,5 +237,5 @@ class PCSAFT_layer_test(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dg1):
-        grad_result = dg1[..., None, None]
+        grad_result = dg1[..., None]
         return grad_result, None
