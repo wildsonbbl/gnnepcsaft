@@ -30,8 +30,8 @@ path = osp.join("data", "thermoml", "val")
 val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
 batch_size = 2**7
-lr = 1e-3
-patience = 3000
+lr = 1e-4
+patience = 3700
 hidden_dim = 80
 propagation_depth = 7
 warmup = 700
@@ -128,14 +128,14 @@ class PNAEPCSAFT(torch.nn.Module):
 
 model = PNAEPCSAFT().to(device)
 # model = compile(model)
-optimizer = torch.optim.AdamW(model.parameters(), lr=lr, amsgrad=True)
+optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-2, nesterov=True)
 
 scheduler = ReduceLROnPlateau(
-    optimizer, mode="min", factor=0.1, patience=patience, min_lr=0.000001,
+    optimizer, mode="min", factor=0.1, patience=patience, min_lr=1e-8,
     verbose=True
 )
 
-scheduler_warmup = LinearLR(optimizer, 1/4,1, warmup)
+scheduler_warmup = LinearLR(optimizer, 1/10,1, warmup)
 
 # scheduler = CyclicLR(optimizer, 0.00001, 0.001, patience, cycle_momentum=False)
 
@@ -143,7 +143,7 @@ if osp.exists("training/last_checkpoint.pth"):
     PATH = "training/last_checkpoint.pth"
     checkpoint = torch.load(PATH)
     model.load_state_dict(checkpoint["model_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    #optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
 
 pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
@@ -192,10 +192,8 @@ def train(epoch, path):
                 "pred_target": errp,
             }
         )
-        if step <= warmup and epoch == 1:
-            scheduler_warmup.step()
-        else:
-            scheduler.step(loss)
+        scheduler_warmup.step()
+        scheduler.step(loss)
     loss_train = total_loss / len(train_loader.dataset)
     loss_val = loss_train  # test(val_loader)
     wandb.log({"Loss_val": loss_val, "Loss_train_ep": loss_train})

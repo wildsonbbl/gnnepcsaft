@@ -183,7 +183,7 @@ class PCSAFT_layer(torch.autograd.Function):
         grad_result = grad_pcsaft_layer(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
         grad_result = tdlpack.from_dlpack(grad_result) * dg1[..., None]
-        grad_result = grad_result.nan_to_num(-1e-7, -1e-7, -1e-7)
+        grad_result = grad_result.nan_to_num(0, 0, 0)
         return grad_result, None
 
 
