@@ -118,23 +118,6 @@ def get_predicted_para(
     para = pred_graphs.globals
     return para
 
-
-def get_valid_mask(labels: jnp.ndarray, graphs: jraph.GraphsTuple) -> jnp.ndarray:
-    """Gets the binary mask indicating only valid labels and graphs."""
-    # We have to ignore all NaN values - which indicate labels for which
-    # the current graphs have no label.
-    labels_mask = ~jnp.isnan(labels)
-
-    # Since we have extra 'dummy' graphs in our batch due to padding, we want
-    # to mask out any loss associated with the dummy graphs.
-    # Since we padded with `pad_with_graphs` we can recover the mask by using
-    # get_graph_padding_mask.
-    graph_mask = jraph.get_graph_padding_mask(graphs)
-
-    # Combine the mask over labels with the mask over graphs.
-    return labels_mask & graph_mask[:, None]
-
-
 @jax.jit
 def train_step(
     state: train_state.TrainState,
@@ -148,20 +131,19 @@ def train_step(
         curr_state = state.replace(params=params)
 
         # Extract system state and experimental properties.
-        sysstate = graphs.globals
+        sysstate = graphs.globals[:-1].reshape(-1,6)
         actual_prop = y
 
         # Replace the global feature for graph classification.
         graphs = replace_globals(graphs)
 
         # Compute predicted properties and resulting loss.
-        pcsaft_params = get_predicted_para(curr_state, graphs, rngs)
+        pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
         pred_prop = ml_pc_saft.batch_pcsaft_layer(pcsaft_params, sysstate)
-        mask = get_valid_mask(actual_prop, graphs) & pred_prop > 0
         loss = optax.log_cosh(pred_prop, actual_prop)
-        mean_loss = jnp.sum(jnp.where(mask, loss, 0)) / jnp.sum(mask)
+        mean_loss = jnp.nanmean(loss)
 
-        return mean_loss, (loss, pred_prop, actual_prop, mask)
+        return mean_loss, (loss, pred_prop, actual_prop)
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (_, (loss, pred_prop, actual_prop, mask)), grads = grad_fn(state.params, graphs)
@@ -196,12 +178,9 @@ def evaluate_step(
     parameters = get_predicted_para(state, graphs, rngs=None)
     pred_prop = ml_pc_saft.batch_pcsaft_layer(parameters, sysstate)
 
-    # Get the mask for valid labels and graphs.
-    mask = get_valid_mask(actual_prop, graphs) & pred_prop > 0
-
     # Compute the various metrics.
     loss = optax.log_cosh(pred_prop, actual_prop)
-    loss = jnp.where(mask, loss, 0)
+    loss = jnp.nanmean(loss)
     errp = (((pred_prop / actual_prop) * 100.0 - 100.0).abs() > 50).sum().item()
     nan_number = pred_prop.isnan().sum().item()
 
