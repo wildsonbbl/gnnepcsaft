@@ -34,7 +34,6 @@ import jraph
 import ml_collections
 import numpy as np
 import optax
-from tqdm import tqdm
 
 import models
 
@@ -143,13 +142,13 @@ def train_step(
         loss = optax.log_cosh(pred_prop, actual_prop)
         mean_loss = jnp.nanmean(loss)
 
-        return mean_loss, (loss, pred_prop, actual_prop)
+        return mean_loss, pred_prop
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (_, (loss, pred_prop, actual_prop, mask)), grads = grad_fn(state.params, graphs)
+    (loss, pred_prop), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
-    errp = (((pred_prop / actual_prop) * 100.0 - 100.0).abs() > 50).sum().item()
-    nan_number = pred_prop.isnan().sum().item()
+    errp = jnp.nanmean((pred_prop / y) * 100.0)
+    nan_number = jnp.sum(jnp.isnan(pred_prop))
 
     metrics_update = TrainMetrics.single_from_model_output(
         loss=loss,
@@ -169,20 +168,20 @@ def evaluate_step(
 
     # The target properties our model has to predict.
     actual_prop = y
-    sysstate = graphs.globals
+    sysstate = graphs.globals[:-1].reshape(-1,6)
 
     # Replace the global feature for graph classification.
     graphs = replace_globals(graphs)
 
     # Get predicted properties.
-    parameters = get_predicted_para(state, graphs, rngs=None)
+    parameters = get_predicted_para(state, graphs, rngs=None)[:-1,:]
     pred_prop = ml_pc_saft.batch_pcsaft_layer(parameters, sysstate)
 
     # Compute the various metrics.
     loss = optax.log_cosh(pred_prop, actual_prop)
     loss = jnp.nanmean(loss)
-    errp = (((pred_prop / actual_prop) * 100.0 - 100.0).abs() > 50).sum().item()
-    nan_number = pred_prop.isnan().sum().item()
+    errp = jnp.nanmean((pred_prop / actual_prop) * 100.0)
+    nan_number = jnp.sum(jnp.isnan(pred_prop))
 
     return EvalMetrics.single_from_model_output(
         loss=loss,
@@ -302,17 +301,13 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
-    for step in tqdm(
-        range(initial_step, config.num_train_steps + 1),
-        desc="step",
-        total=config.num_train_steps + 1 - initial_step,
-    ):
+    for step in range(initial_step, config.num_train_steps + 1):
         # Split PRNG key, to ensure different 'randomness' for every step.
         rng, dropout_rng = jax.random.split(rng)
 
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train", step_num=step):
-            graphs, y = jax.tree_util.tree_map(np.asarray, batchedjax(next(train_loader)))
+            graphs, y = batchedjax(next(train_loader))
             state, metrics_update = train_step(
                 state, graphs, y, rngs={"dropout": dropout_rng}
             )
