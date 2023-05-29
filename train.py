@@ -280,9 +280,11 @@ def train_and_evaluate(
     train_loader = DataLoader(
         train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
     )
+    train_loader = iter(train_loader)
     val_loader = DataLoader(
         val_dataset, batch_size=config.batch_size, shuffle=False, drop_last=True
     )
+    val_loader = iter(val_loader)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
