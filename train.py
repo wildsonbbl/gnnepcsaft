@@ -140,7 +140,7 @@ def train_step(
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
         pcsaft_params = jnp.asarray(
             [[1, 1, 10, 0, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0,0,0]]
-            ) + pcsaft_params
+            ) + nn.relu(pcsaft_params)
         pred_prop = ml_pc_saft.batch_pcsaft_layer(pcsaft_params, sysstate)
         loss = optax.log_cosh(pred_prop, actual_prop)
         mean_loss = jnp.nanmean(loss)
@@ -180,7 +180,7 @@ def evaluate_step(
     parameters = get_predicted_para(state, graphs, rngs=None)[:-1,:]
     parameters = jnp.asarray(
             [[1, 1, 10, 0, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0,0,0]]
-            ) + parameters
+            ) + nn.relu(parameters)
     pred_prop = ml_pc_saft.batch_pcsaft_layer(parameters, sysstate)
 
     # Compute the various metrics.
