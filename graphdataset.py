@@ -1,4 +1,4 @@
-from torch_geometric.data import Data
+from torch_geometric.data import Data, Dataset
 import torch
 from torch_geometric.data import InMemoryDataset
 import polars as pl
@@ -127,3 +127,32 @@ class ThermoMLDataset(InMemoryDataset):
         torch.save(self.collate(datalist), self.processed_paths[0])
         datalist= []
         print('Done!')
+
+class ThermoMLjax(Dataset):
+    def __init__(self, dataset):
+      """ Initializes the data reader by loading in data. """
+      self.dataset = dataset
+    
+    def __len__(self):
+      return len(self.dataset)
+
+    def __getitem__(self, idx):
+      sample = self.dataset[idx]
+      
+      data = Data(node_attr = sample.x,
+                  num_nodes = sample.num_nodes,
+                  n_node = sample.num_nodes,
+                  edges = sample.edge_attr,
+                  n_edge = sample.num_edges,
+                  senders = sample.edge_index[0],
+                  receivers = sample.edge_index[1],
+                  y = sample.y[-1],
+                  globals=sample.y[:-1]
+                  )
+      return data
+
+    def len(self):
+      return self.__len__(self)
+    
+    def get(self, idx):
+      return self.__getitem__(self, idx)
