@@ -47,6 +47,24 @@ class MLP(nn.Module):
       x = nn.Dropout(
           rate=self.dropout_rate, deterministic=self.deterministic)(x)
     return x
+  
+
+class Decoder(nn.Module):
+  """A decoder for graph globals."""
+
+  feature_size: int
+  activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+
+  @nn.compact
+  def __call__(self, inputs):
+    x = inputs
+    
+    x = nn.Dense(features=self.feature_size)(x)
+    x = self.activation(x) + jnp.asarray(
+            [[1, 1, 10, 0, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0,0,0]]
+            )
+      
+    return x
 
 
 class GraphNet(nn.Module):
@@ -112,7 +130,7 @@ class GraphNet(nn.Module):
     # Since our graph-level predictions will be at globals, we will
     # decode to get the required output logits.
     decoder = jraph.GraphMapFeatures(
-        embed_global_fn=nn.Dense(self.output_globals_size))
+        embed_global_fn= Decoder(self.output_globals_size))
     processed_graphs = decoder(processed_graphs)
 
     return processed_graphs
@@ -183,7 +201,7 @@ class GraphConvNet(nn.Module):
 
     # Now, we decode this to get the required output logits.
     decoder = jraph.GraphMapFeatures(
-        embed_global_fn=nn.Dense(self.output_globals_size))
+        embed_global_fn=Decoder(self.output_globals_size))
     processed_graphs = decoder(processed_graphs)
 
     return processed_graphs

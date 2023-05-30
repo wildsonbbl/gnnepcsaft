@@ -133,14 +133,11 @@ def train_step(
         sysstate = graphs.globals[:-1].reshape(-1,6)
         actual_prop = y
 
-        # Replace the global feature for graph classification.
+        # Replace the global feature for graph prediction.
         graphs = replace_globals(graphs)
 
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
-        pcsaft_params = jnp.asarray(
-            [[1, 1, 10, 0, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0,0,0]]
-            ) + nn.relu(pcsaft_params)
         pred_prop = ml_pc_saft.batch_pcsaft_layer(pcsaft_params, sysstate)
         loss = optax.log_cosh(pred_prop, actual_prop)
         mean_loss = jnp.nanmean(loss)
@@ -173,14 +170,11 @@ def evaluate_step(
     actual_prop = y
     sysstate = graphs.globals[:-1].reshape(-1,6)
 
-    # Replace the global feature for graph classification.
+    # Replace the global feature for graph prediction.
     graphs = replace_globals(graphs)
 
     # Get predicted properties.
     parameters = get_predicted_para(state, graphs, rngs=None)[:-1,:]
-    parameters = jnp.asarray(
-            [[1, 1, 10, 0, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0,0,0]]
-            ) + nn.relu(parameters)
     pred_prop = ml_pc_saft.batch_pcsaft_layer(parameters, sysstate)
 
     # Compute the various metrics.
@@ -314,6 +308,8 @@ def train_and_evaluate(
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train", step_num=step):
             graphs, y = batchedjax(next(train_loader))
+            graphs = jax.device_put(graphs, jax.devices()[0])
+            y = jax.device_put(y, jax.devices()[0])
             state, metrics_update = train_step(
                 state, graphs, y, rngs={"dropout": dropout_rng}
             )
