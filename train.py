@@ -298,7 +298,7 @@ def train_and_evaluate(
     logging.info("Initializing network.")
     rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
-    init_graphs = batchedjax(next(train_loader))
+    init_graphs = batchedjax(next(iter(train_loader)))
     init_graphs = replace_globals(init_graphs)
     init_net = create_model(config, deterministic=True)
     params = jax.jit(init_net.init)(init_rng, init_graphs)
