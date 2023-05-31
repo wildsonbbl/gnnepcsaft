@@ -40,7 +40,7 @@ import models
 import ml_pc_saft
 
 from torch_geometric.loader import DataLoader
-from graphdataset import ThermoMLDataset, ThermoMLjax
+from graphdataset import ThermoMLDataset, ThermoMLjax, ParametersDataset
 from jraphdataloading import get_batched_padded_graph_tuples as batchedjax
 
 import wandb
@@ -121,17 +121,16 @@ def get_predicted_para(
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
-    y: np.ndarray,
     rngs: Dict[str, jnp.ndarray],
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
-    def loss_fn(params, graphs):
+    def loss_fn(params, graphs: jraph.GraphsTuple):
         curr_state = state.replace(params=params)
 
         # Extract system state and experimental properties.
-        sysstate = graphs.globals[:-1].reshape(-1,6)
-        actual_prop = y
+        sysstate = graphs.globals[:-1].reshape(-1,7)
+        actual_prop = sysstate[:,-1]
 
         # Replace the global feature for graph prediction.
         graphs = replace_globals(graphs)
@@ -157,6 +156,39 @@ def train_step(
     )
     return state, metrics_update
 
+@jax.jit
+def pre_train_step(
+    state: train_state.TrainState,
+    graphs: jraph.GraphsTuple,
+    rngs: Dict[str, jnp.ndarray],
+) -> Tuple[train_state.TrainState, metrics.Collection]:
+    """Performs one update step over the current batch of graphs."""
+
+    def loss_fn(params, graphs: jraph.GraphsTuple):
+        curr_state = state.replace(params=params)
+
+        # Extract fitted pcsaft parameters.
+        actual_para = graphs.globals[:-1].reshape(-1,17)
+        
+        # Replace the global feature for graph prediction.
+        graphs = replace_globals(graphs)
+
+        # Compute predicted properties and resulting loss.
+        pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
+        loss = optax.log_cosh(pcsaft_params, actual_para)
+        mean_loss = jnp.nanmean(loss)
+
+        return mean_loss
+
+    grad_fn = jax.value_and_grad(loss_fn)
+    loss, grads = grad_fn(state.params, graphs)
+    state = state.apply_gradients(grads=grads)
+
+    metrics_update = TrainMetrics.single_from_model_output(
+        loss=loss
+    )
+    return state, metrics_update
+
 
 @jax.jit
 def evaluate_step(
@@ -167,8 +199,8 @@ def evaluate_step(
     """Computes metrics over a set of graphs."""
 
     # The target properties our model has to predict.
-    actual_prop = y
-    sysstate = graphs.globals[:-1].reshape(-1,6)
+    sysstate = graphs.globals[:-1].reshape(-1,7)
+    actual_prop = sysstate[:,-1]
 
     # Replace the global feature for graph prediction.
     graphs = replace_globals(graphs)
@@ -247,14 +279,18 @@ def train_and_evaluate(
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
 
-    path = osp.join("data", "thermoml", "train")
-    train_dataset = ThermoMLDataset(path, Notebook=True, subset="train")
-    train_dataset = ThermoMLjax(train_dataset)
+    if config.pre_train:
+        path = osp.join('data','parameters')
+        train_dataset = ParametersDataset(path)
+        val_dataset = train_dataset
+    else:
+        path = osp.join("data", "thermoml", "train")
+        train_dataset = ThermoMLDataset(path, Notebook=True, subset="train")
+        path = osp.join("data", "thermoml", "val")
+        val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
-    path = osp.join("data", "thermoml", "val")
-    val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
+    train_dataset = ThermoMLjax(train_dataset) 
     val_dataset = ThermoMLjax(val_dataset)
-
     train_loader = DataLoader(
         train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
     )
@@ -307,11 +343,16 @@ def train_and_evaluate(
 
         # Perform one step of training.
         with jax.profiler.StepTraceAnnotation("train", step_num=step):
-            graphs, y = batchedjax(next(train_loader))
+            graphs = batchedjax(next(train_loader))
             graphs = jax.device_put(graphs, jax.devices()[0])
-            y = jax.device_put(y, jax.devices()[0])
-            state, metrics_update = train_step(
-                state, graphs, y, rngs={"dropout": dropout_rng}
+
+            if config.pre_train:
+                state, metrics_update = pre_train_step(
+                    state, graphs, rngs={"dropout": dropout_rng}
+                    )
+            else:
+                state, metrics_update = train_step(
+                state, graphs, rngs={"dropout": dropout_rng}
             )
 
             # Update metrics.

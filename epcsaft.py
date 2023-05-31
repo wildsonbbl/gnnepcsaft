@@ -299,12 +299,12 @@ def pcsaft_ares(
     A3 = -4 / 3.0 * np.pi**2 * den**2 * A3
 
     ares_polar = A2 / (1.0 - A3 / A2)
-    aresnan = ares_polar * 0
+    
 
     ares_polar = jax.lax.cond(
-        np.any(aresnan != 0),
-        lambda ares_polar: np.zeros_like(ares_polar),
+        np.any(jax.lax.is_finite(ares_polar)),
         lambda ares_polar: ares_polar,
+        lambda ares_polar: np.zeros_like(ares_polar),
         ares_polar,
     )
 
@@ -335,6 +335,13 @@ def pcsaft_ares(
     )
 
     ares_assoc = np.sum(x * (np.log(XA) - XA / 2.0 + 1 / 2.0))
+
+    ares_assoc = jax.lax.cond(
+        np.any(jax.lax.is_finite(ares_assoc)),
+        lambda ares_assoc: ares_assoc,
+        lambda ares_assoc: np.zeros_like(ares_assoc),
+        ares_assoc,
+    )
 
     # Ion term ---------------------------------------------------------------
 
@@ -695,6 +702,7 @@ def den_errSQ(
 
 dden_errSQ_dnu = jax.jit(jax.jacfwd(den_errSQ))
 
+#from jaxopt import Bisection
 
 @jax.jit
 def pcsaft_den(
@@ -797,7 +805,10 @@ def pcsaft_den(
             dielc,
         )
 
-        gradf = dden_errSQ_dnu(
+        gradf = jax.lax.cond(
+            f < 1.0e-5,
+            lambda nu: np.inf,
+            lambda nu: dden_errSQ_dnu(
             nu,
             x,
             m,
@@ -814,14 +825,31 @@ def pcsaft_den(
             dip_num,
             z,
             dielc,
+        ), nu
         )
+
         tmp = nu - f / gradf
-        nu = jax.lax.cond(np.any(tmp > 0), lambda nu: tmp, lambda nu: nu, nu)
+        nu = jax.lax.cond(np.any(tmp > 0 & jax.lax.is_finite(tmp)), lambda nu: tmp, lambda nu: nu, nu)
 
         return nu
 
-    nu = jax.lax.fori_loop(0, 40, updater, nu)
-
+    nu = jax.lax.fori_loop(0, 20, updater, nu)
+    #bisec = Bisection(den_err,a,b,75,check_bracket=False,jit=True)
+    #nu = bisec.run(None, x,
+    #        m,
+    #        s,
+    #        e,
+    #        t,
+    #        p,
+    #        k_ij,
+    #        l_ij,
+    #        khb_ij,
+    #        e_assoc,
+    #        vol_a,
+    #        dipm,
+    #        dip_num,
+    #        z,
+    #        dielc).params
     rho = density_from_nu(nu, t, x, m, s, e)
 
     return rho
@@ -856,9 +884,7 @@ vden = jax.jit(
 def bainterval_den(
     x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
 ):
-    n = np.arange(0.1, 0.7405, 0.1, dtype=np.float64)
-    nu = n * 10 ** np.arange(-12.0, 1.0)[..., np.newaxis]
-    nu = nu.flatten()[..., np.newaxis]
+    nu = np.arange(1e-10, 0.7405, 0.0001, dtype=np.float64)[..., np.newaxis]
 
     err = vden(
         nu,
@@ -879,11 +905,11 @@ def bainterval_den(
         dielc,
     )
 
-    nul = np.zeros((91, 2))
+    nul = np.zeros_like(nu).repeat(2,1)
 
     nul = jax.lax.fori_loop(
         0,
-        90,
+        nul.shape[0]-1,
         lambda i, nul: jax.lax.cond(
             err[i + 1, 0] * err[i, 0] < 0,
             lambda i, nul: nul.at[(i, i + 1), 0]
@@ -898,11 +924,11 @@ def bainterval_den(
     )
 
     nul = jax.lax.sort(nul, 0)
-    nul = nul[-1::-1]
+    nul =  np.flip(nul,0)
 
     roots = nul[:, 1].sum()
 
-    nnu = (nul[:, 0] != 0).sum()
+    nnu = np.argmin(nul,0)[0]
 
     b, a = jax.lax.cond(
         roots == 1,
@@ -910,7 +936,7 @@ def bainterval_den(
         lambda nul: jax.lax.cond(
             phase == 1,
             lambda nul: [nul[0, 0], nul[1, 0]],
-            lambda nul: [nul[nnu - 2, 0], nul[nnu - 1, 0]],
+            lambda nul: [nul[nnu - 1, 0], nul[nnu, 0]],
             nul,
         ),
         nul,

@@ -54,6 +54,5 @@ def get_batched_padded_graph_tuples(batch) -> jraph.GraphsTuple:
         globals=np.array(batch.globals),
     )
 
-    labels = np.array(batch.y)
     graphs = pad_graph_to_nearest_power_of_two(graphs)  # padd the whole batch once
-    return graphs, labels
+    return graphs

@@ -17,7 +17,7 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     phase = state[4]
     fntype = state[5]
 
-    kij = jnp.tanh(parameters[-3:])
+    kij = parameters[-3:]
     parameters = parameters[:-3].reshape(2, 7)
 
     m = parameters[:, 0][..., jnp.newaxis]
@@ -194,7 +194,7 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
     phase = state[4]
     fntype = state[5]
 
-    kij = jnp.tanh(parameters[-3:])
+    kij = parameters[-3:]
     parameters = parameters[:-3].reshape(2, 7)
 
     m = parameters[:, 0][..., jnp.newaxis]

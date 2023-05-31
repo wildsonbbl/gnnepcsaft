@@ -29,6 +29,7 @@ def get_config():
   config.learning_rate = 1e-3
 
   # Training hyperparameters.
+  config.pre_train = True
   config.batch_size = 256
   config.num_train_steps = 100_000
   config.log_every_steps = 100
