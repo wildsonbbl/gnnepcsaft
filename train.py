@@ -185,7 +185,9 @@ def pre_train_step(
     state = state.apply_gradients(grads=grads)
 
     metrics_update = TrainMetrics.single_from_model_output(
-        loss=loss
+        loss=loss,
+        errp=0,
+        nan_number=0,
     )
     return state, metrics_update
 
@@ -194,7 +196,6 @@ def pre_train_step(
 def evaluate_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
-    y: jnp.ndarray,
 ) -> metrics.Collection:
     """Computes metrics over a set of graphs."""
 
@@ -224,29 +225,22 @@ def evaluate_step(
 
 def evaluate_model(
     state: train_state.TrainState,
-    dataloaders: Dict[str, DataLoader],
-    splits: Iterable[str],
-) -> Dict[str, metrics.Collection]:
+    dataloader: DataLoader,
+) ->  metrics.Collection:
     """Evaluates the model on metrics over the specified splits."""
 
-    # Loop over each split independently.
-    eval_metrics = {}
-    for split in splits:
-        split_metrics = None
+    # Loop over graphs.
+    for graphs in dataloader:
+        graphs = batchedjax(graphs)
+        split_metrics_update = evaluate_step(state, graphs)
 
-        # Loop over graphs.
-        for graphs in dataloaders[split]:
-            graphs, y = batchedjax(graphs)
-            split_metrics_update = evaluate_step(state, graphs, y)
+        # Update metrics.
+        if split_metrics is None:
+            split_metrics = split_metrics_update
+        else:
+            split_metrics = split_metrics.merge(split_metrics_update)
 
-            # Update metrics.
-            if split_metrics is None:
-                split_metrics = split_metrics_update
-            else:
-                split_metrics = split_metrics.merge(split_metrics_update)
-        eval_metrics[split] = split_metrics
-
-    return eval_metrics  # pytype: disable=bad-return-type
+    return split_metrics  # pytype: disable=bad-return-type
 
 
 def train_and_evaluate(
@@ -294,17 +288,17 @@ def train_and_evaluate(
     train_loader = DataLoader(
         train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
     )
-    train_loader = iter(train_loader)
+    
     val_loader = DataLoader(
         val_dataset, batch_size=config.batch_size, shuffle=False, drop_last=True
     )
-    val_loader = iter(val_loader)
+    
 
     # Create and initialize the network.
     logging.info("Initializing network.")
     rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
-    init_graphs, _ = batchedjax(next(train_loader))
+    init_graphs = batchedjax(next(train_loader))
     init_graphs = replace_globals(init_graphs)
     init_net = create_model(config, deterministic=True)
     params = jax.jit(init_net.init)(init_rng, init_graphs)
@@ -337,57 +331,58 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     train_metrics = None
-    for step in range(initial_step, config.num_train_steps + 1):
-        # Split PRNG key, to ensure different 'randomness' for every step.
-        rng, dropout_rng = jax.random.split(rng)
+    step = initial_step
+    while step < config.num_train_steps + 1:
+        for graphs in train_loader:
+                
+            # Split PRNG key, to ensure different 'randomness' for every step.
+            rng, dropout_rng = jax.random.split(rng)
 
-        # Perform one step of training.
-        with jax.profiler.StepTraceAnnotation("train", step_num=step):
-            graphs = batchedjax(next(train_loader))
-            graphs = jax.device_put(graphs, jax.devices()[0])
+            # Perform one step of training.
+            with jax.profiler.StepTraceAnnotation("train", step_num=step):
+                graphs = batchedjax(graphs)
+                graphs = jax.device_put(graphs, jax.devices()[0])
 
-            if config.pre_train:
-                state, metrics_update = pre_train_step(
+                if config.pre_train:
+                    state, metrics_update = pre_train_step(
+                        state, graphs, rngs={"dropout": dropout_rng}
+                        )
+                else:
+                    state, metrics_update = train_step(
                     state, graphs, rngs={"dropout": dropout_rng}
-                    )
-            else:
-                state, metrics_update = train_step(
-                state, graphs, rngs={"dropout": dropout_rng}
-            )
-
-            # Update metrics.
-            if train_metrics is None:
-                train_metrics = metrics_update
-            else:
-                train_metrics = train_metrics.merge(metrics_update)
-
-        # Quick indication that training is happening.
-        logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
-        for hook in hooks:
-            hook(step)
-
-        # Log, if required.
-        is_last_step = step == config.num_train_steps - 1
-        if step % config.log_every_steps == 0 or is_last_step:
-            wandb.log(add_prefix_to_keys(train_metrics.compute(), "train"), step=step)
-            train_metrics = None
-
-        # Evaluate on validation and test splits, if required.
-        if step % config.eval_every_steps == 0 or is_last_step:
-            eval_state = eval_state.replace(params=state.params)
-
-            splits = ["validation"]
-            dataloaders = {"validation": val_loader}
-            with report_progress.timed("eval"):
-                eval_metrics = evaluate_model(eval_state, dataloaders, splits=splits)
-            for split in splits:
-                wandb.log(
-                    add_prefix_to_keys(eval_metrics[split].compute(), split), step=step
                 )
 
-        # Checkpoint model, if required.
-        if step % config.checkpoint_every_steps == 0 or is_last_step:
-            with report_progress.timed("checkpoint"):
-                ckpt.save(state)
+                # Update metrics.
+                if train_metrics is None:
+                    train_metrics = metrics_update
+                else:
+                    train_metrics = train_metrics.merge(metrics_update)
+
+            # Quick indication that training is happening.
+            logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
+            for hook in hooks:
+                hook(step)
+
+            # Log, if required.
+            is_last_step = step == config.num_train_steps - 1
+            if step % config.log_every_steps == 0 or is_last_step:
+                wandb.log(add_prefix_to_keys(train_metrics.compute(), "train"), step=step)
+                train_metrics = None
+
+            # Evaluate on validation and test splits, if required.
+            if step % config.eval_every_steps == 0 or is_last_step:
+                eval_state = eval_state.replace(params=state.params)
+
+                with report_progress.timed("eval"):
+                    eval_metrics = evaluate_model(eval_state, val_loader)
+                    wandb.log(
+                        add_prefix_to_keys(eval_metrics.compute(), 'val'), step=step
+                    )
+
+            # Checkpoint model, if required.
+            if step % config.checkpoint_every_steps == 0 or is_last_step:
+                with report_progress.timed("checkpoint"):
+                    ckpt.save(state)
+            step += 1
     wandb.finish()
     return state
