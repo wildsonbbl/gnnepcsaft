@@ -144,10 +144,10 @@ def train_step(
         loss = jnp.square(jnp.log(jnp.abs(actual_prop) + 1 ) - jnp.log(jnp.abs(pred_prop)+1))
         mean_loss = jnp.nanmean(loss)
 
-        return mean_loss, pred_prop, actual_prop
+        return mean_loss, (pred_prop, actual_prop)
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, pred_prop, y), grads = grad_fn(state.params, graphs)
+    (loss, (pred_prop, y)), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
     errp = jnp.nanmean((pred_prop / y) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
