@@ -386,7 +386,7 @@ def train_and_evaluate(
                 train_metrics = None
 
             # Evaluate on validation and test splits, if required.
-            if step % config.eval_every_steps == 0 or is_last_step:
+            if step % config.eval_every_steps == 0 or (is_last_step & (not config.pre_train)):
                 eval_state = eval_state.replace(params=state.params)
 
                 with report_progress.timed("eval"):
