@@ -1,19 +1,3 @@
-# Copyright 2023 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Library file for executing training and evaluation on ogbg-molpcba."""
-
 import os
 import os.path as osp
 from typing import Any, Dict, Iterable, Tuple, Optional
@@ -138,13 +122,13 @@ def train_step(
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
         pred_prop = ml_pc_saft.batch_pcsaft_layer(pcsaft_params, sysstate)
-        loss = optax.log_cosh(pred_prop, actual_prop)
+        loss = jnp.square(jnp.log(actual_prop + 1 ) - jnp.log(1 + pred_prop))
         mean_loss = jnp.nanmean(loss)
 
-        return mean_loss, pred_prop
+        return mean_loss, pred_prop, actual_prop
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, pred_prop), grads = grad_fn(state.params, graphs)
+    (loss, pred_prop, y), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
     errp = jnp.nanmean((pred_prop / y) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
@@ -175,7 +159,7 @@ def pre_train_step(
 
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
-        loss = optax.log_cosh(pcsaft_params, actual_para)
+        loss = jnp.square(jnp.log(actual_para + 1 ) - jnp.log(1 + pcsaft_params))
         mean_loss = jnp.nanmean(loss)
 
         return mean_loss
