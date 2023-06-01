@@ -122,7 +122,7 @@ def train_step(
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
         pred_prop = ml_pc_saft.batch_pcsaft_layer(pcsaft_params, sysstate)
-        loss = jnp.square(jnp.log(actual_prop + 1 ) - jnp.log(1 + pred_prop))
+        loss = jnp.square(jnp.log(jnp.abs(actual_prop) + 1 ) - jnp.log(jnp.abs(pred_prop)+1))
         mean_loss = jnp.nanmean(loss)
 
         return mean_loss, pred_prop, actual_prop
@@ -159,7 +159,7 @@ def pre_train_step(
 
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
-        loss = jnp.square(jnp.log(actual_para + 1 ) - jnp.log(1 + pcsaft_params))
+        loss = jnp.square(jnp.log(jnp.abs(actual_para) + 1 ) - jnp.log(jnp.abs(pcsaft_params)+1))
         mean_loss = jnp.nanmean(loss)
 
         return mean_loss
@@ -195,7 +195,7 @@ def evaluate_step(
     pred_prop = ml_pc_saft.batch_pcsaft_layer(parameters, sysstate)
 
     # Compute the various metrics.
-    loss = optax.log_cosh(pred_prop, actual_prop)
+    loss = jnp.square(jnp.log(jnp.abs(actual_prop) + 1 ) - jnp.log(jnp.abs(pred_prop)+1))
     loss = jnp.nanmean(loss)
     errp = jnp.nanmean((pred_prop / actual_prop) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
