@@ -153,7 +153,7 @@ def train_step(
 
     grad_fn = jax.jit(jax.value_and_grad(loss_fn, has_aux=True))
     (loss, (pred_prop, y)), grads = grad_fn(state.params, graphs)
-    grads = jax.tree_util.tree_map(lambda x: jnp.nan_to_num(x))
+    grads = jax.tree_util.tree_map(lambda x: jnp.nan_to_num(x), grads)
     state = state.apply_gradients(grads=grads)
     errp = jnp.nanmean((pred_prop / y) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
