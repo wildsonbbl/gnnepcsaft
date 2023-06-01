@@ -14,6 +14,7 @@ def get_config():
   config.pre_train = True
   config.batch_size = 256
   config.num_train_steps = 100_000
+  config.warmup_steps = 10_000
   config.log_every_steps = 100
   config.eval_every_steps = 1_000
   config.checkpoint_every_steps = 10_000

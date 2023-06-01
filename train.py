@@ -29,6 +29,8 @@ from jraphdataloading import get_batched_padded_graph_tuples as batchedjax
 
 import wandb
 
+import functools
+
 
 def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.Module:
     """Creates a Flax model, as specified by the config."""
@@ -58,7 +60,7 @@ def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.M
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
-def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransformation:
+def create_optimizer(config: ml_collections.ConfigDict, lr_scheduler: optax.Schedule) -> optax.GradientTransformation:
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
         return optax.adamw(learning_rate=config.learning_rate)
@@ -66,6 +68,20 @@ def create_optimizer(config: ml_collections.ConfigDict) -> optax.GradientTransfo
         return optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum)
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
+
+def create_learning_rate_fn(config: ml_collections.ConfigDict):
+  """Creates learning rate schedule."""
+  warmup_fn = optax.linear_schedule(
+      init_value=0., end_value=config.learning_rate,
+      transition_steps=config.warmup_steps)
+  cosine_steps = max(config.num_train_steps - config.warmup_steps, 1)
+  cosine_fn = optax.cosine_decay_schedule(
+      init_value=config.learning_rate,
+      decay_steps=cosine_steps)
+  schedule_fn = optax.join_schedules(
+      schedules=[warmup_fn, cosine_fn],
+      boundaries=[config.warmup_steps])
+  return schedule_fn
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     """Adds a prefix to the keys of a dict, returning a new dict."""
@@ -82,8 +98,10 @@ class EvalMetrics(metrics.Collection):
 @flax.struct.dataclass
 class TrainMetrics(metrics.Collection):
     loss: metrics.Average.from_output("loss")
+    msle: metrics.Average.from_output("msle")
     nan_number: metrics.Average.from_output("nan_number")
     errp: metrics.Average.from_output("errp")
+    lr: metrics.Average.from_output('lr')
 
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
@@ -101,11 +119,12 @@ def get_predicted_para(
     para = pred_graphs.globals
     return para
 
-@jax.jit
+@functools.partial(jax.jit, static_argnums=3)
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rngs: Dict[str, jnp.ndarray],
+    learning_rate_fn: optax.Schedule,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
@@ -133,18 +152,23 @@ def train_step(
     errp = jnp.nanmean((pred_prop / y) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
 
+    lr = learning_rate_fn(state.step)
+
     metrics_update = TrainMetrics.single_from_model_output(
-        loss=loss,
+        loss = loss,
+        msle = loss,
         errp=errp,
         nan_number=nan_number,
+        lr = lr,
     )
     return state, metrics_update
 
-@jax.jit
+@functools.partial(jax.jit, static_argnums=3)
 def pre_train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
     rngs: Dict[str, jnp.ndarray],
+    learning_rate_fn: optax.Schedule,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
@@ -159,19 +183,24 @@ def pre_train_step(
 
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
-        loss = jnp.square(jnp.log(jnp.abs(actual_para) + 1 ) - jnp.log(jnp.abs(pcsaft_params)+1))
+        msle = jnp.square(jnp.log(jnp.abs(actual_para) + 1 ) - jnp.log(jnp.abs(pcsaft_params)+1))
+        loss = optax.cosine_similarity(pcsaft_params, actual_para)
         mean_loss = jnp.nanmean(loss)
 
-        return mean_loss
+        return mean_loss, msle
 
-    grad_fn = jax.value_and_grad(loss_fn)
-    loss, grads = grad_fn(state.params, graphs)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    (loss, msle), grads = grad_fn(state.params, graphs)
     state = state.apply_gradients(grads=grads)
+
+    lr = learning_rate_fn(state.step)
 
     metrics_update = TrainMetrics.single_from_model_output(
         loss=loss,
+        msle = msle,
         errp=0,
         nan_number=0,
+        lr = lr,
     )
     return state, metrics_update
 
@@ -288,8 +317,11 @@ def train_and_evaluate(
     params = jax.jit(init_net.init)(init_rng, init_graphs)
     parameter_overview.log_parameter_overview(params)
 
+    # Create scheduler.
+    sch = create_learning_rate_fn(config)
+
     # Create the optimizer.
-    tx = create_optimizer(config)
+    tx = create_optimizer(config, sch)
 
     # Create the training state.
     net = create_model(config, deterministic=False)
@@ -329,11 +361,11 @@ def train_and_evaluate(
 
                 if config.pre_train:
                     state, metrics_update = pre_train_step(
-                        state, graphs, rngs={"dropout": dropout_rng}
+                        state, graphs, {"dropout": dropout_rng}, sch,
                         )
                 else:
                     state, metrics_update = train_step(
-                    state, graphs, rngs={"dropout": dropout_rng}
+                    state, graphs, {"dropout": dropout_rng}, sch,
                 )
 
                 # Update metrics.
