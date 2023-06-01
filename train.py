@@ -124,7 +124,7 @@ def get_predicted_para(
     para = pred_graphs.globals
     return para
 
-
+@functools.partial(jax.jit, static_argnums=3)
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
@@ -151,7 +151,7 @@ def train_step(
 
         return mean_loss, (pred_prop, actual_prop)
 
-    grad_fn = jax.jit(jax.value_and_grad(loss_fn, has_aux=True))
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (loss, (pred_prop, y)), grads = grad_fn(state.params, graphs)
     grads = jax.tree_util.tree_map(lambda x: jnp.nan_to_num(x), grads)
     state = state.apply_gradients(grads=grads)
