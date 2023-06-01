@@ -97,10 +97,15 @@ class EvalMetrics(metrics.Collection):
 
 @flax.struct.dataclass
 class TrainMetrics(metrics.Collection):
-    loss: metrics.Average.from_output("loss")
     msle: metrics.Average.from_output("msle")
     nan_number: metrics.Average.from_output("nan_number")
     errp: metrics.Average.from_output("errp")
+    lr: metrics.Average.from_output('lr')
+
+@flax.struct.dataclass
+class PreTrainMetrics(metrics.Collection):
+    cosdist: metrics.Average.from_output("cosdist")
+    msle: metrics.Average.from_output("msle")
     lr: metrics.Average.from_output('lr')
 
 
@@ -155,7 +160,6 @@ def train_step(
     lr = learning_rate_fn(state.step)
 
     metrics_update = TrainMetrics.single_from_model_output(
-        loss = loss,
         msle = loss,
         errp=errp,
         nan_number=nan_number,
@@ -195,11 +199,9 @@ def pre_train_step(
 
     lr = learning_rate_fn(state.step)
 
-    metrics_update = TrainMetrics.single_from_model_output(
-        loss=loss,
+    metrics_update = PreTrainMetrics.single_from_model_output(
+        cosdist=loss,
         msle = msle,
-        errp=0,
-        nan_number=0,
         lr = lr,
     )
     return state, metrics_update
@@ -357,7 +359,8 @@ def train_and_evaluate(
             # Perform one step of training.
             with jax.profiler.StepTraceAnnotation("train", step_num=step):
                 graphs = batchedjax(graphs)
-                graphs = jax.device_put(graphs, jax.devices()[0])
+                graphs = jax.tree_util.tree_map(np.asarray, graphs)
+                
 
                 if config.pre_train:
                     state, metrics_update = pre_train_step(
