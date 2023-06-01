@@ -184,7 +184,7 @@ def pre_train_step(
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
         msle = jnp.square(jnp.log(jnp.abs(actual_para) + 1 ) - jnp.log(jnp.abs(pcsaft_params)+1))
-        loss = optax.cosine_similarity(pcsaft_params, actual_para)
+        loss = optax.cosine_distance(pcsaft_params, actual_para)
         mean_loss = jnp.nanmean(loss)
 
         return mean_loss, msle
