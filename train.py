@@ -224,7 +224,7 @@ def evaluate_step(
 
     # Get predicted properties.
     parameters = get_predicted_para(state, graphs, rngs=None)[:-1,:]
-    pred_prop = ml_pc_saft.batch_pcsaft_layer(parameters, sysstate)
+    pred_prop = ml_pc_saft.batch_epcsaft_layer_test(parameters, sysstate)
 
     # Compute the various metrics.
     loss = jnp.square(jnp.log(jnp.abs(actual_prop) + 1 ) - jnp.log(jnp.abs(pred_prop)+1))
@@ -244,19 +244,20 @@ def evaluate_model(
     dataloader: DataLoader,
 ) ->  metrics.Collection:
     """Evaluates the model on metrics over the specified splits."""
-
+    eval_metric = None
     # Loop over graphs.
     for graphs in dataloader:
         graphs = batchedjax(graphs)
-        split_metrics_update = evaluate_step(state, graphs)
+        graphs = jax.tree_util.tree_map(np.asarray, graphs)
+        eval_metric_update = evaluate_step(state, graphs)
 
         # Update metrics.
-        if split_metrics is None:
-            split_metrics = split_metrics_update
+        if eval_metric is None:
+            eval_metric = eval_metric_update
         else:
-            split_metrics = split_metrics.merge(split_metrics_update)
+            eval_metric = eval_metric.merge(eval_metric_update)
 
-    return split_metrics  # pytype: disable=bad-return-type
+    return eval_metric  
 
 
 def train_and_evaluate(
