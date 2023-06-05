@@ -415,7 +415,7 @@ from ml_pc_saft import epcsaft_pure
 
 def train():
     para_dict = {}
-    data = pureTMLDataset("./data/thermoml") 
+    data = pureTMLDataset("./data/thermoml/raw/pure.parquet") 
 
     maxnpoints = 0
     for datapoints in data:
@@ -425,7 +425,7 @@ def train():
         
         ls = jnp.zeros(maxnpoints) 
         i = 0
-        for (ids, state, y) in datapoints:
+        for (state, y) in datapoints:
             state = jnp.asarray(state)
             y = jnp.asarray(y)
             pred_y = epcsaft_pure(parameters, state)
@@ -436,9 +436,10 @@ def train():
     solver = LevenbergMarquardt(loss, jit = True)
 
     for datapoints in data:
-        (ids, _, _) = datapoints
+        (ids, _, _) = datapoints[0]
+        statey = [(state, y) for _, state, y in datapoints]
         parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
-        (params, state) = solver.run(parameters, datapoints)
+        (params, state) = solver.run(parameters, statey)
         print(params, state)
         para_dict[ids[1]] = params
     return para_dict
