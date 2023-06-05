@@ -283,7 +283,7 @@ class pureTMLDataset(ds):
             if tp == 1:
                 mol_weight = mw(inchi)
                 if mol_weight == 0:
-                    print(f'error: {ids[0]} with mw = 0')
+                    #print(f'error: {ids[0]} with mw = 0')
                     continue
                 y = y * 1000.0 / mol_weight
 

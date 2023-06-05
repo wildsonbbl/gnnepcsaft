@@ -438,7 +438,7 @@ def train():
     for datapoints in data:
         (ids, _, _) = datapoints[0]
         statey = [(state, y) for _, state, y in datapoints]
-        parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
+        parameters = jnp.asarray([[1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0]])
         (params, state) = solver.run(parameters, statey)
         print(params, state)
         para_dict[ids[1]] = params

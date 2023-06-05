@@ -242,19 +242,19 @@ class PCSAFT_layer_test(torch.autograd.Function):
 
 
 def epcsaft_pure(parameters: jax.Array, state: jax.Array) -> jax.Array:
-    x = 1.0
+    x = jnp.asarray([[1.0]])
     t = state[0]
     p = state[1]
     phase = state[2]
     fntype = state[3]
 
-    m = parameters[0][..., jnp.newaxis]
-    s = parameters[1][..., jnp.newaxis]
-    e = parameters[2][..., jnp.newaxis]
-    vol_a = parameters[3][..., jnp.newaxis]
-    e_assoc = parameters[4][..., jnp.newaxis]
-    dipm = parameters[5][..., jnp.newaxis]
-    dip_num = parameters[6][..., jnp.newaxis]
+    m = parameters[:, 0][..., jnp.newaxis]
+    s = parameters[:, 1][..., jnp.newaxis]
+    e = parameters[:, 2][..., jnp.newaxis]
+    vol_a = parameters[:, 3][..., jnp.newaxis]
+    e_assoc = parameters[:, 4][..., jnp.newaxis]
+    dipm = parameters[:, 5][..., jnp.newaxis]
+    dip_num = parameters[:, 6][..., jnp.newaxis]
     z = jnp.zeros_like(m)
     dielc = jnp.zeros_like(m)
 
