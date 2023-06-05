@@ -407,3 +407,38 @@ def train_and_evaluate(
             step += 1
     wandb.finish()
     return state
+
+from graphdataset import pureTMLDataset
+from jaxopt import GaussNewton, LevenbergMarquardt
+from ml_pc_saft import epcsaft_pure
+
+
+def train():
+    para_dict = {}
+    data = pureTMLDataset("./data/thermoml") 
+
+    maxnpoints = 0
+    for datapoints in data:
+        maxnpoints = max(maxnpoints, len(datapoints))
+    
+    def loss(parameters: jnp.ndarray, datapoints: list[tuple]) -> jnp.ndarray:
+        
+        ls = jnp.zeros(maxnpoints) 
+        i = 0
+        for (ids, state, y) in datapoints:
+            state = jnp.asarray(state)
+            y = jnp.asarray(y)
+            pred_y = epcsaft_pure(parameters, state)
+            ls.at[i].set(jnp.log(jnp.abs(y) + 1 ) - jnp.log(jnp.abs(pred_y)+1))
+            i +=1
+        return ls
+
+    solver = LevenbergMarquardt(loss, jit = True)
+
+    for datapoints in data:
+        (ids, _, _) = datapoints
+        parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
+        (params, state) = solver.run(parameters, datapoints)
+        print(params, state)
+        para_dict[ids[1]] = params
+    return para_dict

@@ -1,10 +1,16 @@
 from torch_geometric.data import Data, Dataset
-import torch
+from torch.utils.data import Dataset as ds
 from torch_geometric.data import InMemoryDataset
+import torch
 import polars as pl
-from tqdm.notebook import tqdm as ntqdm
 from tqdm import tqdm
 from graph import from_InChI
+import jax.numpy as jnp
+
+from rdkit import Chem, RDLogger
+from rdkit.Chem.rdMolDescriptors import CalcExactMolWt
+
+RDLogger.DisableLog('rdApp.*')
 
 
 def BinaryGraph(InChI1: str, InChI2: str) -> Data:
@@ -38,6 +44,16 @@ def BinaryGraph(InChI1: str, InChI2: str) -> Data:
 
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
+def mw(inchi: str) -> float:
+    
+    try:
+        mol = Chem.MolFromInchi(inchi, removeHs=False)
+        mol = Chem.AddHs(mol)
+        mol_weight = CalcExactMolWt(mol)
+    except:
+        mol_weight = 0
+
+    return mol_weight
 
 class ThermoMLDataset(InMemoryDataset):
 
@@ -46,7 +62,7 @@ class ThermoMLDataset(InMemoryDataset):
 
     PARAMETERS
     ----------
-    root (str, optional) – Root directory where the dataset should be saved. (optional: None).
+    root (str, optional) – Root directory where the dataset should be saved. .
 
     transform (callable, optional) – A function/transform that takes in an Data object and 
     returns a transformed version. The data object will be transformed
@@ -63,7 +79,7 @@ class ThermoMLDataset(InMemoryDataset):
     log (bool, optional) – Whether to print any console output while downloading 
     and processing the dataset. (default: True).
 
-    Notebook (bool, optional) - Whether to use tqdm.notebook progress bar while processing data.
+    
 
     """
 
@@ -94,7 +110,7 @@ class ThermoMLDataset(InMemoryDataset):
         cols = ['mlc1', 'mlc2', 'TK', 'PPa',
                 'phase', 'type', 'm']
 
-        progressbar = [ntqdm if self.Notebook else tqdm][0]
+        progressbar = tqdm
         datalist = []
         for raw_path in self.raw_paths:
             # Read data from `raw_path`.
@@ -163,7 +179,7 @@ class ParametersDataset(InMemoryDataset):
 
     PARAMETERS
     ----------
-    root (str, optional) – Root directory where the dataset should be saved. (optional: None).
+    root (str, optional) – Root directory where the dataset should be saved. .
 
     transform (callable, optional) – A function/transform that takes in an Data object and 
     returns a transformed version. The data object will be transformed
@@ -180,7 +196,7 @@ class ParametersDataset(InMemoryDataset):
     log (bool, optional) – Whether to print any console output while downloading 
     and processing the dataset. (default: True).
 
-    Notebook (bool, optional) - Whether to use tqdm.notebook progress bar while processing data.
+    
 
     """
 
@@ -204,7 +220,7 @@ class ParametersDataset(InMemoryDataset):
     def process(self):
         
 
-        progressbar = [ntqdm if self.Notebook else tqdm][0]
+        progressbar = tqdm
         datalist = []
         kij = pl.read_parquet(self.raw_paths[0])
         pure = pl.read_parquet(self.raw_paths[1])
@@ -242,3 +258,93 @@ class ParametersDataset(InMemoryDataset):
         
         torch.save(self.collate(datalist), self.processed_paths[0])
         print('Done!')
+
+class pureTMLDataset(ds):
+
+    """
+    Dataset creator/manipulator.
+
+    PARAMETERS
+    ----------
+    root (str) – Root path where the dataset is.
+    """
+
+    def __init__(self, root):
+        progressbar = tqdm
+        pure = pl.read_parquet(root)
+
+        puredatadict = {}
+        for row in progressbar(pure.iter_rows(), desc='datapoint', total=pure.shape[0]):
+            inchi = row[1]
+            tp = row[-2]
+            ids = row[:2]
+            state = row[2:-1]
+            y = row[-1]
+            if tp == 1:
+                mol_weight = mw(inchi)
+                if mol_weight == 0:
+                    print(f'error: {ids[0]} with mw = 0')
+                    continue
+                y = y * 1000.0 / mol_weight
+
+        
+            if inchi in puredatadict:
+                puredatadict[inchi].append((ids, state, y))
+            else:
+                puredatadict[inchi]=[(ids, state, y)]
+        self.data = puredatadict
+    def __len__(self):
+        return len(self.data.keys())
+    def __getitem__(self, index) -> list:
+        datapoints = list(self.data.values())[index]
+        return datapoints
+    
+class binaryTMLDataset(ds):
+
+    """
+    Dataset creator/manipulator.
+
+    PARAMETERS
+    ----------
+    root (str) – Root path where the dataset is.
+    """
+
+    def __init__(self, root: str):
+        
+        progressbar = tqdm
+        
+        binary = pl.read_parquet(root)
+    
+        binarydatadict = {}
+        for row in progressbar(binary.iter_rows(), desc='datapoint', total=binary.shape[0]):
+            inchi1 = row[2]
+            inchi2 = row[3]
+            tp = row[-2]
+            ids = row[:4]
+            state = row[4:-1]
+            y = row[-1]
+
+            if tp == 1:
+                mw1 = mw(inchi1)
+                mw2 = mw(inchi2)
+                if mw1 == 0 or mw2 == 0:
+                    continue
+                x1 = row[4]
+                x2 = row[5]
+                y = y * 1000.0 / (mw1 * x1 + mw2 * x2)
+            key = inchi1 + "_" + inchi2
+            if key in binarydatadict:
+                binarydatadict[key].append((ids, state, y))
+            else:
+                binarydatadict[key] = [(ids, state, y)]
+
+        self.data = binarydatadict
+    
+    
+    def __len__(self):
+        return len(self.data.keys())
+    def __getitem__(self, index) -> list:
+        datapoints = list(self.data.values())[index]
+        return datapoints
+
+
