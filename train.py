@@ -456,7 +456,7 @@ def train():
     for datapoints in data:
         (ids, _, _) = datapoints[0]
         statey = [
-            jnp.concatenate([jnp.asarray(state), jnp.asarray(y)])[None, ...]
+            jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
             for _, state, y in datapoints
         ]
         dp = jnp.concatenate(statey, 0)
