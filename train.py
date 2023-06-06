@@ -451,15 +451,24 @@ def train():
         return loss
 
     jitloss = jax.jit(loss)
-    solver = LevenbergMarquardt(jitloss, jit=True)
+    grad = jax.jit(jax.jacfwd(loss,0))
+    solver = LevenbergMarquardt(jitloss, jit=True, jac_fun=grad)
+    key = jax.random.PRNGKey(0)
 
     for datapoints in data:
+        key, subkey = jax.random.split(key)
+    
         (ids, _, _) = datapoints[0]
         statey = [
             jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
             for _, state, y in datapoints
         ]
         dp = jnp.concatenate(statey, 0)
+        dp = jax.random.permutation(subkey, dp, 0, True)
+        if dp.shape[0] <= 100:
+            dp = dp.repeat((100,dp.shape[1]))
+        else:
+            dp = dp[:100]
         parameters = jnp.asarray([[1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0]])
         (params, state) = solver.run(parameters, dp)
         print(params, state)
