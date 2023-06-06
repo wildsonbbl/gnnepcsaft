@@ -60,7 +60,9 @@ def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.M
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
-def create_optimizer(config: ml_collections.ConfigDict, lr_scheduler: optax.Schedule) -> optax.GradientTransformation:
+def create_optimizer(
+    config: ml_collections.ConfigDict, lr_scheduler: optax.Schedule
+) -> optax.GradientTransformation:
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
         return optax.adamw(learning_rate=config.learning_rate)
@@ -70,18 +72,21 @@ def create_optimizer(config: ml_collections.ConfigDict, lr_scheduler: optax.Sche
 
 
 def create_learning_rate_fn(config: ml_collections.ConfigDict):
-  """Creates learning rate schedule."""
-  warmup_fn = optax.linear_schedule(
-      init_value=0., end_value=config.learning_rate,
-      transition_steps=config.warmup_steps)
-  cosine_steps = max(config.num_train_steps - config.warmup_steps, 1)
-  cosine_fn = optax.cosine_decay_schedule(
-      init_value=config.learning_rate,
-      decay_steps=cosine_steps)
-  schedule_fn = optax.join_schedules(
-      schedules=[warmup_fn, cosine_fn],
-      boundaries=[config.warmup_steps])
-  return schedule_fn
+    """Creates learning rate schedule."""
+    warmup_fn = optax.linear_schedule(
+        init_value=0.0,
+        end_value=config.learning_rate,
+        transition_steps=config.warmup_steps,
+    )
+    cosine_steps = max(config.num_train_steps - config.warmup_steps, 1)
+    cosine_fn = optax.cosine_decay_schedule(
+        init_value=config.learning_rate, decay_steps=cosine_steps
+    )
+    schedule_fn = optax.join_schedules(
+        schedules=[warmup_fn, cosine_fn], boundaries=[config.warmup_steps]
+    )
+    return schedule_fn
+
 
 def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
     """Adds a prefix to the keys of a dict, returning a new dict."""
@@ -100,13 +105,14 @@ class TrainMetrics(metrics.Collection):
     msle: metrics.Average.from_output("msle")
     nan_number: metrics.Average.from_output("nan_number")
     errp: metrics.Average.from_output("errp")
-    lr: metrics.Average.from_output('lr')
+    lr: metrics.Average.from_output("lr")
+
 
 @flax.struct.dataclass
 class PreTrainMetrics(metrics.Collection):
     cosdist: metrics.Average.from_output("cosdist")
     msle: metrics.Average.from_output("msle")
-    lr: metrics.Average.from_output('lr')
+    lr: metrics.Average.from_output("lr")
 
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
@@ -124,6 +130,7 @@ def get_predicted_para(
     para = pred_graphs.globals
     return para
 
+
 @functools.partial(jax.jit, static_argnums=3)
 def train_step(
     state: train_state.TrainState,
@@ -137,16 +144,18 @@ def train_step(
         curr_state = state.replace(params=params)
 
         # Extract system state and experimental properties.
-        sysstate = graphs.globals[:-1].reshape(-1,7)
-        actual_prop = sysstate[:,-1]
+        sysstate = graphs.globals[:-1].reshape(-1, 7)
+        actual_prop = sysstate[:, -1]
 
         # Replace the global feature for graph prediction.
         graphs = replace_globals(graphs)
 
         # Compute predicted properties and resulting loss.
-        pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
+        pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1, :]
         pred_prop = ml_pc_saft.batch_pcsaft_layer(pcsaft_params, sysstate)
-        loss = jnp.square(jnp.log(jnp.abs(actual_prop) + 1 ) - jnp.log(jnp.abs(pred_prop)+1))
+        loss = jnp.square(
+            jnp.log(jnp.abs(actual_prop) + 1) - jnp.log(jnp.abs(pred_prop) + 1)
+        )
         mean_loss = jnp.nanmean(loss)
 
         return mean_loss, (pred_prop, actual_prop)
@@ -161,12 +170,13 @@ def train_step(
     lr = learning_rate_fn(state.step)
 
     metrics_update = TrainMetrics.single_from_model_output(
-        msle = loss,
+        msle=loss,
         errp=errp,
         nan_number=nan_number,
-        lr = lr,
+        lr=lr,
     )
     return state, metrics_update
+
 
 @functools.partial(jax.jit, static_argnums=3)
 def pre_train_step(
@@ -181,14 +191,16 @@ def pre_train_step(
         curr_state = state.replace(params=params)
 
         # Extract fitted pcsaft parameters.
-        actual_para = graphs.globals[:-1].reshape(-1,17)
-        
+        actual_para = graphs.globals[:-1].reshape(-1, 17)
+
         # Replace the global feature for graph prediction.
         graphs = replace_globals(graphs)
 
         # Compute predicted properties and resulting loss.
-        pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1,:]
-        msle = jnp.square(jnp.log(jnp.abs(actual_para) + 1 ) - jnp.log(jnp.abs(pcsaft_params)+1))
+        pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1, :]
+        msle = jnp.square(
+            jnp.log(jnp.abs(actual_para) + 1) - jnp.log(jnp.abs(pcsaft_params) + 1)
+        )
         loss = optax.cosine_distance(pcsaft_params, actual_para)
         mean_loss = jnp.nanmean(loss)
 
@@ -202,8 +214,8 @@ def pre_train_step(
 
     metrics_update = PreTrainMetrics.single_from_model_output(
         cosdist=loss,
-        msle = msle,
-        lr = lr,
+        msle=msle,
+        lr=lr,
     )
     return state, metrics_update
 
@@ -216,18 +228,20 @@ def evaluate_step(
     """Computes metrics over a set of graphs."""
 
     # The target properties our model has to predict.
-    sysstate = graphs.globals[:-1].reshape(-1,7)
-    actual_prop = sysstate[:,-1]
+    sysstate = graphs.globals[:-1].reshape(-1, 7)
+    actual_prop = sysstate[:, -1]
 
     # Replace the global feature for graph prediction.
     graphs = replace_globals(graphs)
 
     # Get predicted properties.
-    parameters = get_predicted_para(state, graphs, rngs=None)[:-1,:]
+    parameters = get_predicted_para(state, graphs, rngs=None)[:-1, :]
     pred_prop = ml_pc_saft.batch_epcsaft_layer_test(parameters, sysstate)
 
     # Compute the various metrics.
-    loss = jnp.square(jnp.log(jnp.abs(actual_prop) + 1 ) - jnp.log(jnp.abs(pred_prop)+1))
+    loss = jnp.square(
+        jnp.log(jnp.abs(actual_prop) + 1) - jnp.log(jnp.abs(pred_prop) + 1)
+    )
     loss = jnp.nanmean(loss)
     errp = jnp.nanmean((pred_prop / actual_prop) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
@@ -242,7 +256,7 @@ def evaluate_step(
 def evaluate_model(
     state: train_state.TrainState,
     dataloader: DataLoader,
-) ->  metrics.Collection:
+) -> metrics.Collection:
     """Evaluates the model on metrics over the specified splits."""
     eval_metric = None
     # Loop over graphs.
@@ -257,7 +271,7 @@ def evaluate_model(
         else:
             eval_metric = eval_metric.merge(eval_metric_update)
 
-    return eval_metric  
+    return eval_metric
 
 
 def train_and_evaluate(
@@ -291,7 +305,7 @@ def train_and_evaluate(
     logging.info("Obtaining datasets.")
 
     if config.pre_train:
-        path = osp.join('data','parameters')
+        path = osp.join("data", "parameters")
         train_dataset = ParametersDataset(path)
         val_dataset = train_dataset
     else:
@@ -300,16 +314,15 @@ def train_and_evaluate(
         path = osp.join("data", "thermoml", "val")
         val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
 
-    train_dataset = ThermoMLjax(train_dataset) 
+    train_dataset = ThermoMLjax(train_dataset)
     val_dataset = ThermoMLjax(val_dataset)
     train_loader = DataLoader(
         train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
     )
-    
+
     val_loader = DataLoader(
         val_dataset, batch_size=config.batch_size, shuffle=False, drop_last=True
     )
-    
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -354,7 +367,6 @@ def train_and_evaluate(
     step = initial_step
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-                
             # Split PRNG key, to ensure different 'randomness' for every step.
             rng, dropout_rng = jax.random.split(rng)
 
@@ -362,16 +374,21 @@ def train_and_evaluate(
             with jax.profiler.StepTraceAnnotation("train", step_num=step):
                 graphs = batchedjax(graphs)
                 graphs = jax.tree_util.tree_map(np.asarray, graphs)
-                
 
                 if config.pre_train:
                     state, metrics_update = pre_train_step(
-                        state, graphs, {"dropout": dropout_rng}, sch,
-                        )
+                        state,
+                        graphs,
+                        {"dropout": dropout_rng},
+                        sch,
+                    )
                 else:
                     state, metrics_update = train_step(
-                    state, graphs, {"dropout": dropout_rng}, sch,
-                )
+                        state,
+                        graphs,
+                        {"dropout": dropout_rng},
+                        sch,
+                    )
 
                 # Update metrics.
                 if train_metrics is None:
@@ -387,17 +404,21 @@ def train_and_evaluate(
             # Log, if required.
             is_last_step = step == config.num_train_steps - 1
             if step % config.log_every_steps == 0 or is_last_step:
-                wandb.log(add_prefix_to_keys(train_metrics.compute(), "train"), step=step)
+                wandb.log(
+                    add_prefix_to_keys(train_metrics.compute(), "train"), step=step
+                )
                 train_metrics = None
 
             # Evaluate on validation and test splits, if required.
-            if step % config.eval_every_steps == 0 or (is_last_step & (not config.pre_train)):
+            if step % config.eval_every_steps == 0 or (
+                is_last_step & (not config.pre_train)
+            ):
                 eval_state = eval_state.replace(params=state.params)
 
                 with report_progress.timed("eval"):
                     eval_metrics = evaluate_model(eval_state, val_loader)
                     wandb.log(
-                        add_prefix_to_keys(eval_metrics.compute(), 'val'), step=step
+                        add_prefix_to_keys(eval_metrics.compute(), "val"), step=step
                     )
 
             # Checkpoint model, if required.
@@ -408,38 +429,39 @@ def train_and_evaluate(
     wandb.finish()
     return state
 
+
 from graphdataset import pureTMLDataset
 from jaxopt import GaussNewton, LevenbergMarquardt
-from ml_pc_saft import epcsaft_pure
+from ml_pc_saft import batch_epcsaft_pure
 
 
 def train():
     para_dict = {}
-    data = pureTMLDataset("./data/thermoml/raw/pure.parquet") 
+    data = pureTMLDataset("./data/thermoml/raw/pure.parquet")
 
     maxnpoints = 0
     for datapoints in data:
         maxnpoints = max(maxnpoints, len(datapoints))
-    
-    def loss(parameters: jnp.ndarray, datapoints: list[tuple]) -> jnp.ndarray:
-        
-        ls = jnp.zeros(maxnpoints) 
-        i = 0
-        for (state, y) in datapoints:
-            state = jnp.asarray(state)
-            y = jnp.asarray(y)
-            pred_y = epcsaft_pure(parameters, state)
-            ls.at[i].set(jnp.log(jnp.abs(y) + 1 ) - jnp.log(jnp.abs(pred_y)+1))
-            i +=1
-        return ls
 
-    solver = LevenbergMarquardt(loss, jit = True)
+    def loss(parameters: jnp.ndarray, datapoints: jnp.ndarray) -> jnp.ndarray:
+        
+        pred_y = batch_epcsaft_pure(parameters, datapoints)
+        y = datapoints[:,-1]
+        loss = jnp.log(jnp.abs(y) + 1) - jnp.log(jnp.abs(pred_y) + 1)        
+        return loss
+
+    jitloss = jax.jit(loss)
+    solver = LevenbergMarquardt(jitloss, jit=True)
 
     for datapoints in data:
         (ids, _, _) = datapoints[0]
-        statey = [(state, y) for _, state, y in datapoints]
+        statey = [
+            jnp.concatenate([jnp.asarray(state), jnp.asarray(y)])[None, ...]
+            for _, state, y in datapoints
+        ]
+        dp = jnp.concatenate(statey, 0)
         parameters = jnp.asarray([[1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0]])
-        (params, state) = solver.run(parameters, statey)
+        (params, state) = solver.run(parameters, dp)
         print(params, state)
         para_dict[ids[1]] = params
     return para_dict

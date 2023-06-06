@@ -285,3 +285,5 @@ def epcsaft_pure(parameters: jax.Array, state: jax.Array) -> jax.Array:
     )
 
     return result.squeeze()
+
+batch_epcsaft_pure = jax.jit(jax.vmap(epcsaft_pure,(None, 0)))
