@@ -451,8 +451,8 @@ def train():
         return loss
 
     jitloss = jax.jit(loss)
-    grad = jax.jit(jax.jacfwd(loss,0))
-    solver = LevenbergMarquardt(jitloss, jit=True, jac_fun=grad)
+    
+    solver = LevenbergMarquardt(jitloss, jit=True, materialize_jac=True)
     key = jax.random.PRNGKey(0)
 
     for datapoints in data:
