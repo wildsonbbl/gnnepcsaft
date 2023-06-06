@@ -450,9 +450,19 @@ def train():
         res = jnp.nanmean(res)
         return res
     
-    grad_fn = jax.value_and_grad(res_fn)
+    grad_res = jax.jacfwd(res_fn)
 
-    solver = BFGS(res_fn, jit=True)
+    def value_grad_fn(parameters: jnp.ndarray, datapoints: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+
+        res = res_fn(parameters, datapoints)
+        grads = grad_res(parameters, datapoints)
+
+        return res, grads
+        
+    
+    jit_grad_fn = jax.jit(value_grad_fn)
+
+    solver = BFGS(jit_grad_fn, True, jit=True)
     key = jax.random.PRNGKey(0)
 
     for datapoints in data:
