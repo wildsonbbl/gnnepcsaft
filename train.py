@@ -431,7 +431,7 @@ def train_and_evaluate(
 
 
 from graphdataset import pureTMLDataset
-from jaxopt import GaussNewton, LevenbergMarquardt
+from jaxopt import GaussNewton, LevenbergMarquardt, BFGS, LBFGS
 from ml_pc_saft import batch_epcsaft_pure
 
 
@@ -443,21 +443,21 @@ def train():
     for datapoints in data:
         maxnpoints = max(maxnpoints, len(datapoints))
 
-    def loss(parameters: jnp.ndarray, datapoints: jnp.ndarray) -> jnp.ndarray:
-        
+    def res_fn(parameters: jnp.ndarray, datapoints: jnp.ndarray) -> jnp.ndarray:
         pred_y = batch_epcsaft_pure(parameters, datapoints)
-        y = datapoints[:,-1]
-        loss = jnp.log(jnp.abs(y) + 1) - jnp.log(jnp.abs(pred_y) + 1)        
-        return loss
-
-    jitloss = jax.jit(loss)
+        y = datapoints[:, -1]
+        res = jnp.square(jnp.log(jnp.abs(y) + 1) - jnp.log(jnp.abs(pred_y) + 1))
+        res = jnp.nanmean(res)
+        return res
     
-    solver = LevenbergMarquardt(jitloss, jit=True, materialize_jac=True)
+    grad_fn = jax.value_and_grad(res_fn)
+
+    solver = BFGS(res_fn, jit=True)
     key = jax.random.PRNGKey(0)
 
     for datapoints in data:
         key, subkey = jax.random.split(key)
-    
+
         (ids, _, _) = datapoints[0]
         statey = [
             jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
@@ -465,11 +465,12 @@ def train():
         ]
         dp = jnp.concatenate(statey, 0)
         dp = jax.random.permutation(subkey, dp, 0, True)
-        if dp.shape[0] <= 100:
-            dp = dp.repeat((100,dp.shape[1]))
+        if dp.shape[0] < 100:
+            dp = dp.repeat((100, dp.shape[1]))
         else:
-            dp = dp[:100]
-        parameters = jnp.asarray([[1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0]])
+            dp = dp[:100,:]
+        parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
+        print('\n###### starting solver ######\n')
         (params, state) = solver.run(parameters, dp)
         print(params, state)
         para_dict[ids[1]] = params

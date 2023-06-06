@@ -248,13 +248,13 @@ def epcsaft_pure(parameters: jax.Array, state: jax.Array) -> jax.Array:
     phase = state[2]
     fntype = state[3]
 
-    m = parameters[:, 0][..., jnp.newaxis]
-    s = parameters[:, 1][..., jnp.newaxis]
-    e = parameters[:, 2][..., jnp.newaxis]
-    vol_a = parameters[:, 3][..., jnp.newaxis]
-    e_assoc = parameters[:, 4][..., jnp.newaxis]
-    dipm = parameters[:, 5][..., jnp.newaxis]
-    dip_num = parameters[:, 6][..., jnp.newaxis]
+    m = parameters[0].reshape(1, 1)
+    s = parameters[1].reshape(1, 1)
+    e = parameters[2].reshape(1, 1)
+    vol_a = parameters[3].reshape(1, 1)
+    e_assoc = parameters[4].reshape(1, 1)
+    dipm = parameters[5].reshape(1, 1)
+    dip_num = parameters[6].reshape(1, 1)
     z = jnp.zeros_like(m)
     dielc = jnp.zeros_like(m)
 
@@ -286,4 +286,5 @@ def epcsaft_pure(parameters: jax.Array, state: jax.Array) -> jax.Array:
 
     return result.squeeze()
 
-batch_epcsaft_pure = jax.jit(jax.vmap(epcsaft_pure,(None, 0)))
+
+batch_epcsaft_pure = jax.jit(jax.vmap(epcsaft_pure, (None, 0)))
