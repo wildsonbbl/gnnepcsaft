@@ -783,11 +783,34 @@ def pcsaft_den(
         phase,
     )
 
-    nu = (b + a) / 2
+    nu = np.asarray([(b + a) / 2.0, 0.0])
 
-    def updater(i, nu):
+    def cond_fun(nu):
         f = den_errSQ(
-            nu,
+            nu[0],
+            x,
+            m,
+            s,
+            e,
+            t,
+            p,
+            k_ij,
+            l_ij,
+            khb_ij,
+            e_assoc,
+            vol_a,
+            dipm,
+            dip_num,
+            z,
+            dielc,
+        )
+        test1 = f > 1.0e-5
+        test2 = nu[1] < 10
+        return (test1) & (test2)
+
+    def updater(nu):
+        f = den_errSQ(
+            nu[0],
             x,
             m,
             s,
@@ -805,11 +828,8 @@ def pcsaft_den(
             dielc,
         )
 
-        gradf = jax.lax.cond(
-            f < 1.0e-5,
-            lambda nu: np.inf,
-            lambda nu: dden_errSQ_dnu(
-            nu,
+        gradf = dden_errSQ_dnu(
+            nu[0],
             x,
             m,
             s,
@@ -825,15 +845,17 @@ def pcsaft_den(
             dip_num,
             z,
             dielc,
-        ), nu
         )
 
-        tmp = nu - f / gradf
-        nu = jax.lax.cond(np.any(tmp > 0 & jax.lax.is_finite(tmp)), lambda nu: tmp, lambda nu: nu, nu)
-
+        nu = nu.at[0].set(nu[0] - f / gradf)
+        nu = nu.at[1].set(nu[1]+1)
         return nu
 
-    nu = jax.lax.fori_loop(0, 20, updater, nu)
+    nu = jax.lax.while_loop(
+        cond_fun,
+        updater,
+        nu
+    )
     #bisec = Bisection(den_err,a,b,75,check_bracket=False,jit=True)
     #nu = bisec.run(None, x,
     #        m,
@@ -850,7 +872,7 @@ def pcsaft_den(
     #        dip_num,
     #        z,
     #        dielc).params
-    rho = density_from_nu(nu, t, x, m, s, e)
+    rho = density_from_nu(nu[0], t, x, m, s, e)
 
     return rho
 
@@ -1255,11 +1277,7 @@ def VP_err(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    err = (fugcoef_l[0, 0] - fugcoef_v[0, 0]) ** 2
-
-    err = jax.lax.cond(
-        err > 1.0e-7, lambda err: err, lambda err: np.float64("inf"), err
-    )
+    err = fugcoef_l[0, 0] - fugcoef_v[0, 0]
     return err
 
 
@@ -1316,22 +1334,27 @@ def pcsaft_VP(
         Vapor Pressure (Pa)
     """
 
-    p = (10 ** np.arange(-5.0, 7)[..., np.newaxis] * np.arange(1, 10, 0.1)).flatten()
+    p = (np.arange(10e3, 1.0e7, 2.0e5)).flatten()
 
     err = vperr(
         p, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    a = p[err.argmin()]
-    b = p[err.argmin() + 2]
-    n = np.arange(0, 1, 1 / 1080)
+    i = jax.lax.while_loop(
+        lambda i: (err[i] * err[i+1] >= 0) & (i < 49) ,
+        lambda i: i+1,
+        0
+    )
+    a = p[i]
+    b = p[i+1]
+    n = np.arange(0, 1, 1 / 50)
     newp = b * n + a * (1 - n)
 
     newerr = vperr(
         newp, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    return newp[newerr.argmin()]
+    return newp[(newerr**2).argmin()]
 
 
 vperr = jax.jit(
