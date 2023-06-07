@@ -476,11 +476,11 @@ def train():
         dp = jnp.concatenate(statey, 0)
         dp = jax.random.permutation(subkey, dp, 0, True)
         if dp.shape[0] < 100:
-            dp = dp.repeat((100, dp.shape[1]))
+            dp = dp.repeat(100, 0)
         else:
             dp = dp[:100,:]
         parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
-        print('\n###### starting solver ######\n')
+        print(f'\n###### starting solver for {ids[0]} ######\n')
         (params, state) = solver.run(parameters, dp)
         print(params, state)
         para_dict[ids[1]] = params
