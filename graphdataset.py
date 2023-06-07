@@ -259,7 +259,7 @@ class ParametersDataset(InMemoryDataset):
         torch.save(self.collate(datalist), self.processed_paths[0])
         print('Done!')
 
-class pureTMLDataset(ds):
+def pureTMLDataset(root: str):
 
     """
     Dataset creator/manipulator.
@@ -269,35 +269,32 @@ class pureTMLDataset(ds):
     root (str) – Root path where the dataset is.
     """
 
-    def __init__(self, root):
-        progressbar = tqdm
-        pure = pl.read_parquet(root)
+    progressbar = tqdm
+    pure = pl.read_parquet(root)
 
-        puredatadict = {}
-        for row in progressbar(pure.iter_rows(), desc='datapoint', total=pure.shape[0]):
-            inchi = row[1]
-            tp = row[-2]
-            ids = row[:2]
-            state = row[2:-1]
-            y = row[-1]
-            if tp == 1:
-                mol_weight = mw(inchi)
-                if mol_weight == 0:
-                    #print(f'error: {ids[0]} with mw = 0')
-                    continue
-                y = y * 1000.0 / mol_weight
+    puredatadict = {}
+    for row in progressbar(pure.iter_rows(), desc='datapoint', total=pure.shape[0]):
+        inchi = row[1]
+        tp = row[-2]
+        ids = row[:2]
+        state = row[2:-1]
+        y = row[-1]
+        if tp == 1:
+            mol_weight = mw(inchi)
+            if mol_weight == 0:
+                #print(f'error: {ids[0]} with mw = 0')
+                continue
+            y = y * 1000.0 / mol_weight
 
-        
-            if inchi in puredatadict:
-                puredatadict[inchi].append((ids, state, y))
+    
+        if inchi in puredatadict:
+            if tp in puredatadict[inchi]:
+                puredatadict[inchi][tp].append((ids, state, y))
             else:
-                puredatadict[inchi]=[(ids, state, y)]
-        self.data = puredatadict
-    def __len__(self):
-        return len(self.data.keys())
-    def __getitem__(self, index) -> list:
-        datapoints = list(self.data.values())[index]
-        return datapoints
+                puredatadict[inchi]={tp:[(ids, state, y)]}
+        else:
+            puredatadict[inchi]={tp:[(ids, state, y)]}
+    return puredatadict
     
 class binaryTMLDataset(ds):
 
