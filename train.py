@@ -1,6 +1,6 @@
 import os
 import os.path as osp
-from typing import Any, Dict, Iterable, Tuple, Optional
+from typing import Any, Dict, Tuple, Optional
 
 from absl import logging
 from clu import checkpoint
@@ -431,7 +431,7 @@ def train_and_evaluate(
 
 
 from graphdataset import pureTMLDataset
-from jaxopt import GaussNewton, LevenbergMarquardt, BFGS, LBFGS
+from jaxopt import BFGS
 from ml_pc_saft import batch_epcsaft_pure
 
 

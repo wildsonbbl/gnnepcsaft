@@ -1,9 +1,7 @@
 import jax.numpy as jnp
 import jax
-from jax import dlpack as jdlpack
-from torch.utils import dlpack as tdlpack
 import epcsaft
-import torch
+
 
 from jax.config import config
 
@@ -158,33 +156,8 @@ def VP(
     x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
 ):
     return epcsaft.pcsaft_VP(
-        x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
+        x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     ).squeeze()
-
-
-class PCSAFT_layer(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        parameters = tdlpack.to_dlpack(input)
-        parameters = jdlpack.from_dlpack(parameters)
-
-        state = tdlpack.to_dlpack(state)
-        state = jdlpack.from_dlpack(state)
-
-        ctx.parameters = parameters
-        ctx.state = state
-        result = batch_pcsaft_layer(parameters, state)
-        result = jdlpack.to_dlpack(result)
-        result = tdlpack.from_dlpack(result)
-        return result
-
-    @staticmethod
-    def backward(ctx, dg1: torch.Tensor):
-        grad_result = grad_pcsaft_layer(ctx.parameters, ctx.state)
-        grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = tdlpack.from_dlpack(grad_result) * dg1[..., None]
-        grad_result = grad_result.nan_to_num(0, 0, 0)
-        return grad_result, None
 
 
 def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
@@ -219,26 +192,6 @@ def epcsaft_layer_test(parameters: jax.Array, state: jax.Array) -> jax.Array:
 
 
 batch_epcsaft_layer_test = jax.jit(jax.vmap(epcsaft_layer_test, (0, 0)))
-
-
-class PCSAFT_layer_test(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        parameters = tdlpack.to_dlpack(input)
-        parameters = jdlpack.from_dlpack(parameters)
-
-        state = tdlpack.to_dlpack(state)
-        state = jdlpack.from_dlpack(state)
-
-        result = batch_epcsaft_layer_test(parameters, state)
-        result = jdlpack.to_dlpack(result)
-        result = tdlpack.from_dlpack(result)
-        return result
-
-    @staticmethod
-    def backward(ctx, dg1):
-        grad_result = dg1[..., None]
-        return grad_result, None
 
 
 def epcsaft_pure(parameters: jax.Array, state: jax.Array) -> jax.Array:

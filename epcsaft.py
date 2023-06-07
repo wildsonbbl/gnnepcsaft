@@ -299,7 +299,6 @@ def pcsaft_ares(
     A3 = -4 / 3.0 * np.pi**2 * den**2 * A3
 
     ares_polar = A2 / (1.0 - A3 / A2)
-    
 
     ares_polar = jax.lax.cond(
         np.any(jax.lax.is_finite(ares_polar)),
@@ -329,7 +328,6 @@ def pcsaft_ares(
         / (4 * den * delta_ij_diag)
     )
 
-
     XA = jax.lax.fori_loop(
         0, 50, lambda i, XA: (XA + XA_find(XA, delta_ij, den, x)) / 2.0, XA
     )
@@ -345,24 +343,24 @@ def pcsaft_ares(
 
     # Ion term ---------------------------------------------------------------
 
-    #E_CHRG = 1.6021766208  # elementary charge, units of coulomb / 1e-19
-    #perm_vac = 8.854187817  # permittivity in vacuum, C V^-1 Angstrom^-1 / 1e-22
-#
-    #E_CHRG_P10 = 1e-19
-    #perm_vac_P10 = 1e-22
-    #kb_P10 = 1e-23
-    #kb = kb / kb_P10
-#
-    #P10 = E_CHRG_P10**2 / kb_P10 / perm_vac_P10
-#
-    #q = z * E_CHRG
-    #dielc = x.T @ dielc
+    # E_CHRG = 1.6021766208  # elementary charge, units of coulomb / 1e-19
+    # perm_vac = 8.854187817  # permittivity in vacuum, C V^-1 Angstrom^-1 / 1e-22
+    #
+    # E_CHRG_P10 = 1e-19
+    # perm_vac_P10 = 1e-22
+    # kb_P10 = 1e-23
+    # kb = kb / kb_P10
+    #
+    # P10 = E_CHRG_P10**2 / kb_P10 / perm_vac_P10
+    #
+    # q = z * E_CHRG
+    # dielc = x.T @ dielc
     ## the inverse Debye screening length. Equation 4 in Held et al. 2008.
-    #kappa = np.sqrt(
+    # kappa = np.sqrt(
     #    den * E_CHRG**2 / kb / t / (dielc * perm_vac) * (x.T @ z**2) * P10
-    #)
-#
-    #chi = (
+    # )
+    #
+    # chi = (
     #    3.0
     #    / (kappa * s) ** 3
     #    * (
@@ -371,9 +369,9 @@ def pcsaft_ares(
     #        - 2.0 * (1.0 + kappa * s)
     #        + 0.5 * (1.0 + kappa * s) ** 2
     #    )
-    #)
-#
-    #ares_ion = (
+    # )
+    #
+    # ares_ion = (
     #    -1
     #    / 12.0
     #    / np.pi
@@ -383,16 +381,16 @@ def pcsaft_ares(
     #    * np.sum(x * q**2 * chi)
     #    * kappa
     #    * P10
-    #)
-#
-    #aresnan = ares_ion * 0
-#
-    #ares_ion = jax.lax.cond(
+    # )
+    #
+    # aresnan = ares_ion * 0
+    #
+    # ares_ion = jax.lax.cond(
     #    np.any(aresnan != 0),
     #    lambda ares_ion: np.zeros_like(ares_ion),
     #    lambda ares_ion: ares_ion,
     #    ares_ion,
-    #)
+    # )
 
     ares = ares_hc + ares_disp + ares_polar + ares_assoc
 
@@ -702,7 +700,8 @@ def den_errSQ(
 
 dden_errSQ_dnu = jax.jit(jax.jacfwd(den_errSQ))
 
-#from jaxopt import Bisection
+from jaxopt import Bisection, BFGS
+
 
 @jax.jit
 def pcsaft_den(
@@ -764,7 +763,10 @@ def pcsaft_den(
         Molar density (mol / m^3)
     """
 
-    b, a = bainterval_den(
+    nu = np.arange(1e-10, 0.7405, 0.0001, dtype=np.float64)[..., np.newaxis]
+
+    err = vden_err(
+        nu,
         x,
         m,
         s,
@@ -780,7 +782,34 @@ def pcsaft_den(
         dip_num,
         z,
         dielc,
-        phase,
+    )
+
+    nul = np.zeros_like(nu).repeat(3, 1)
+
+    nul = jax.lax.fori_loop(
+        0,
+        nul.shape[0] - 1,
+        lambda i, nul: jax.lax.cond(
+            err[i + 1, 0] * err[i, 0] < 0,
+            lambda i, nul: nul.at[i, :].set((nu[i, 0], nu[i + 1, 0], 1)),
+            lambda i, nul: nul,
+            i,
+            nul,
+        ),
+        nul,
+    )
+
+    nul = np.sort(nul, 0)
+
+    roots = np.sum(nul[:, 2]).astype(np.int_)
+
+    nu_max = np.argmax(nul, 0)[0]
+
+    a, b = jax.lax.cond(
+        phase == 1,
+        lambda nul: nul[nu_max, 0:2],
+        lambda nul: nul[nu_max - roots + 1, 0:2],
+        nul,
     )
 
     nu = np.asarray([(b + a) / 2.0, 0.0])
@@ -848,36 +877,17 @@ def pcsaft_den(
         )
 
         nu = nu.at[0].set(nu[0] - f / gradf)
-        nu = nu.at[1].set(nu[1]+1)
+        nu = nu.at[1].set(nu[1] + 1)
         return nu
 
-    nu = jax.lax.while_loop(
-        cond_fun,
-        updater,
-        nu
-    )
-    #bisec = Bisection(den_err,a,b,75,check_bracket=False,jit=True)
-    #nu = bisec.run(None, x,
-    #        m,
-    #        s,
-    #        e,
-    #        t,
-    #        p,
-    #        k_ij,
-    #        l_ij,
-    #        khb_ij,
-    #        e_assoc,
-    #        vol_a,
-    #        dipm,
-    #        dip_num,
-    #        z,
-    #        dielc).params
+    nu = jax.lax.while_loop(cond_fun, updater, nu)
+
     rho = density_from_nu(nu[0], t, x, m, s, e)
 
     return rho
 
 
-vden = jax.jit(
+vden_err = jax.jit(
     jax.vmap(
         den_err,
         in_axes=(
@@ -900,71 +910,6 @@ vden = jax.jit(
         ),
     )
 )
-
-
-@jax.jit
-def bainterval_den(
-    x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
-):
-    nu = np.arange(1e-10, 0.7405, 0.0001, dtype=np.float64)[..., np.newaxis]
-
-    err = vden(
-        nu,
-        x,
-        m,
-        s,
-        e,
-        t,
-        p,
-        k_ij,
-        l_ij,
-        khb_ij,
-        e_assoc,
-        vol_a,
-        dipm,
-        dip_num,
-        z,
-        dielc,
-    )
-
-    nul = np.zeros_like(nu).repeat(2,1)
-
-    nul = jax.lax.fori_loop(
-        0,
-        nul.shape[0]-1,
-        lambda i, nul: jax.lax.cond(
-            err[i + 1, 0] * err[i, 0] < 0,
-            lambda i, nul: nul.at[(i, i + 1), 0]
-            .set((nu[i, 0], nu[i + 1, 0]))
-            .at[i, 1]
-            .set(1.0),
-            lambda i, nul: nul,
-            i,
-            nul,
-        ),
-        nul,
-    )
-
-    nul = jax.lax.sort(nul, 0)
-    nul =  np.flip(nul,0)
-
-    roots = nul[:, 1].sum()
-
-    nnu = np.argmin(nul,0)[0]
-
-    b, a = jax.lax.cond(
-        roots == 1,
-        lambda nul: [nul[0, 0], nul[1, 0]],
-        lambda nul: jax.lax.cond(
-            phase == 1,
-            lambda nul: [nul[0, 0], nul[1, 0]],
-            lambda nul: [nul[nnu - 1, 0], nul[nnu, 0]],
-            nul,
-        ),
-        nul,
-    )
-
-    return b, a
 
 
 def dielc_water(t):
@@ -1248,7 +1193,7 @@ fungcoef_phase = jax.jit(
 
 
 @jax.jit
-def VP_err(
+def k_i(
     p_guess, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
 ):
     """Minimize this function to calculate the vapor pressure."""
@@ -1276,14 +1221,11 @@ def VP_err(
     fugcoef_l, fugcoef_v = fungcoef_phase(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
-
-    err = fugcoef_l[0, 0] - fugcoef_v[0, 0]
-    return err
-
+    return fugcoef_l / fugcoef_v
 
 @jax.jit
 def pcsaft_VP(
-    x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
+    x, m, s, e, t, p_guess, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
 ):
     """
     Vapor pressure calculation
@@ -1334,166 +1276,22 @@ def pcsaft_VP(
         Vapor Pressure (Pa)
     """
 
-    p = (np.arange(10e3, 1.0e7, 2.0e5)).flatten()
+    pref = p_guess - 0.01 * p_guess
 
-    err = vperr(
-        p, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
+    pprime = jax.lax.cond(
+        p_guess > 1.0e6,
+        lambda p_guess: p_guess - 0.005 * p_guess,
+        lambda p_guess: p_guess + 0.01 * p_guess,
+        p_guess,
     )
 
-    i = jax.lax.while_loop(
-        lambda i: (err[i] * err[i+1] >= 0) & (i < 49) ,
-        lambda i: i+1,
-        0
-    )
-    a = p[i]
-    b = p[i+1]
-    n = np.arange(0, 1, 1 / 50)
-    newp = b * n + a * (1 - n)
-
-    newerr = vperr(
-        newp, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-    )
-
-    return newp[(newerr**2).argmin()]
-
-
-vperr = jax.jit(
-    jax.vmap(
-        VP_err,
-        in_axes=(
-            0,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-    )
-)
-
-
-den_phase2 = jax.jit(
-    jax.vmap(
-        pcsaft_den,
-        in_axes=(
-            0,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            0,
-        ),
-    )
-)
-
-
-fungcoef_phase2 = jax.jit(
-    jax.vmap(
-        pcsaft_fugcoef,
-        (
-            0,
-            None,
-            None,
-            None,
-            None,
-            0,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-    )
-)
-
-
-@jax.jit
-def BP_err(
-    p, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-):
-    """Minimize this function to calculate the Bubble pressure."""
-
-    phases = np.asarray([1.0, 0.0])
-    y = x
-
-    def update(i, y):
-        xyguess = np.concatenate([x[np.newaxis, ...], y[np.newaxis, ...]], 0)
-
-        rho = den_phase2(
-            xyguess,
-            m,
-            s,
-            e,
-            t,
-            p,
-            k_ij,
-            l_ij,
-            khb_ij,
-            e_assoc,
-            vol_a,
-            dipm,
-            dip_num,
-            z,
-            dielc,
-            phases,
-        )
-
-        fugcoef_l, fugcoef_v = fungcoef_phase2(
-            xyguess,
-            m,
-            s,
-            e,
-            t,
-            rho,
-            k_ij,
-            l_ij,
-            khb_ij,
-            e_assoc,
-            vol_a,
-            dipm,
-            dip_num,
-            z,
-            dielc,
-        )
-
-        y = x * fugcoef_l / fugcoef_v
-
-        return y / y.sum()
-
-    y = jax.lax.fori_loop(0, 2, update, y)
-
-    xyguess = np.concatenate([x[np.newaxis, ...], y[np.newaxis, ...]], 0)
-
-    rho = den_phase2(
-        xyguess,
+    k = k_i(
+        p_guess,
+        x,
         m,
         s,
         e,
         t,
-        p,
         k_ij,
         l_ij,
         khb_ij,
@@ -1503,16 +1301,14 @@ def BP_err(
         dip_num,
         z,
         dielc,
-        phases,
     )
-
-    fugcoef_l, fugcoef_v = fungcoef_phase2(
-        xyguess,
+    kprime = k_i(
+        pprime,
+        x,
         m,
         s,
         e,
         t,
-        rho,
         k_ij,
         l_ij,
         khb_ij,
@@ -1524,105 +1320,20 @@ def BP_err(
         dielc,
     )
 
-    err = np.sum((x * fugcoef_l - y * fugcoef_v) ** 2)
+    dlnk_dt = (kprime - k) / (pprime - p_guess)
+    t_weight = x * dlnk_dt
+    t_sum = np.sum(t_weight)
+    wi = t_weight / t_sum
 
-    err = jax.lax.cond(
-        err > 1.0e-7, lambda err: err, lambda err: np.float64("inf"), err
-    )
+    kb = np.sum(wi * np.log(k))
+    kb = np.exp(kb)
 
-    return err, y
+    kbprime = np.sum(wi * np.log(kprime))
+    kbprime = np.exp(kbprime)
 
+    B = np.log(kbprime / kb) / (1 / pprime - 1 / p_guess)
+    A = np.log(kb) - B * (1 / p_guess - 1 / pref)
 
-vbperr = jax.jit(
-    jax.vmap(
-        BP_err,
-        in_axes=(
-            0,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ),
-    )
-)
-
-
-@jax.jit
-def pcsaft_BP(
-    x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-):
-    """
-    Bubble pressure calculation
-
-    x : ndarray, shape (n,1)
-        Mole fractions of each component. It has a length of n, where n is
-        the number of components in the system.
-    m : ndarray, shape (n,1)
-        Segment number for each component.
-    s : ndarray, shape (n,1)
-        Segment diameter for each component. For ions this is the diameter of
-        the hydrated ion. Units of Angstrom.
-    e : ndarray, shape (n,1)
-        Dispersion energy of each component. For ions this is the dispersion
-        energy of the hydrated ion. Units of K.
-    t : float
-        Temperature (K)
-    k_ij : ndarray, shape (n,n)
-        Binary interaction parameters between components in the mixture for dispersion energy.
-        (dimensions: ncomp x ncomp)
-    l_ij : ndarray, shape (n,n)
-        Binary interaction parameters between components in the mixture for segment diameter.
-        (dimensions: ncomp x ncomp)
-    khb_ij : ndarray, shape (n,n)
-        Binary interaction parameters between components in the mixture for association energy.
-        (dimensions: ncomp x ncomp)
-    e_assoc : ndarray, shape (n,1)
-        Association energy of the associating components. For non associating
-        compounds this is set to 0. Units of K.
-    vol_a : ndarray, shape (n,1)
-        Effective association volume of the associating components. For non
-        associating compounds this is set to 0.
-    dipm : ndarray, shape (n,1)
-        Dipole moment of the polar components. For components where the dipole
-        term is not used this is set to 0. Units of Debye.
-    dip_num : ndarray, shape (n,1)
-        The effective number of dipole functional groups on each component
-        molecule.
-    z : ndarray, shape (n,1)
-        Charge number of the ions
-    dielc : ndarray, shape (n,1)
-        permittivity of each component of the medium to be used for electrolyte
-        calculations.
-
-    Returns
-    -------
-    BP : float
-        Bubble Pressure (Pa)
-    """
-
-    p = (10 ** np.arange(-5.0, 7)[..., np.newaxis] * np.arange(1, 10, 0.1)).flatten()
-
-    err, _ = vbperr(
-        p, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-    )
-
-    a = p[err.argmin()]
-    b = p[err.argmin() + 2]
-    n = np.arange(0, 1, 1 / 1080)
-    newp = b * n + a * (1 - n)
-
-    newerr, y = vbperr(
-        newp, x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-    )
-
-    return newp[newerr.argmin()], y[newerr.argmin()]
+    p = 1.0 / (1.0 / pref + (np.log(1.0) - A) / B)
+    
+    return p.squeeze()
