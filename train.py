@@ -475,10 +475,7 @@ def train():
             jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
             for _, state, y in data_dict[inchi][1]
         ]
-        state_vp = [
-            jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
-            for _, state, y in data_dict[inchi][3]
-        ]
+        
         den_p = jnp.concatenate(state_den, 0)
         den_p = jax.random.permutation(subkey, den_p, 0, True)
 
@@ -486,13 +483,7 @@ def train():
             den_p = den_p.repeat(50, 0)
         else:
             den_p = den_p[:50,:]
-        vp_p = jnp.concatenate(state_vp, 0)
-        vp_p = jax.random.permutation(subkey, vp_p, 0, True)
-
-        if vp_p.shape[0] < 50:
-            vp_p = vp_p.repeat(50, 0)
-        else:
-            vp_p = vp_p[:50,:]
+        
         parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
         print(f'\n###### starting solver for {ids[0]} ######\n')
         (params, state) = solver.run(parameters, den_p, None)
