@@ -471,7 +471,7 @@ def train():
             continue
         key, subkey = jax.random.split(key)
 
-        den_p, name = get_padded_array(data_dict[inchi][1], subkey)
+        den_p, name = get_padded_array(data_dict[inchi][1], subkey, 50)
         
         parameters = jnp.asarray([1.52, 3.23, 188.9, 0.0351, 2899.5, 1.0, 1.0])
         print(f'\n###### starting solver for {name} ######\n')
