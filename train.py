@@ -434,13 +434,15 @@ from graphdataset import pureTMLDataset
 from jaxopt import LBFGS
 from ml_pc_saft import batch_den, batch_VP
 from jraphdataloading import get_padded_array
+import pickle
 
 
 def train():
     
-    data_dict = pureTMLDataset("./data/thermoml/raw/pure.parquet")
+    data_dict = pureTMLDataset("./data/thermoml")
 
     def res_fn(parameters: jnp.ndarray, den_points: jnp.ndarray, vp_points: jnp.ndarray) -> jnp.ndarray:
+        parameters = jnp.abs(parameters)
         pred_y_den = batch_den(parameters, den_points)
         y_den = den_points[:, -1]
         #pred_y_vp = batch_VP(parameters, vp_points)
@@ -476,6 +478,13 @@ def train():
         parameters = jnp.asarray([1.52, 3.23, 188.9, 0.0351, 2899.5, 1.0, 1.0])
         print(f'\n###### starting solver for {name} ######\n')
         (params, state) = solver.run(parameters, den_p, None)
-        print(params, state.value, state.error)
+        print(f'parameters: {params.squeeze().tolist()}',
+              f'msle: {state.value}',
+              f'grad error: {state.error}',
+              sep = '\n')
+        
+
         data_dict[inchi]['params'] = params.squeeze().tolist()
+    with open('./data/thermoml/processed/pure.pkl', 'wb') as f:
+        pickle.dump(data_dict, f)
     return data_dict
