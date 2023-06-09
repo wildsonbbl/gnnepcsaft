@@ -291,12 +291,12 @@ def pureTMLDataset(root: str):
             if tp in puredatadict[inchi]:
                 puredatadict[inchi][tp].append((ids, state, y))
             else:
-                puredatadict[inchi]={tp:[(ids, state, y)]}
+                puredatadict[inchi][tp]=[(ids, state, y)]
         else:
             puredatadict[inchi]={tp:[(ids, state, y)]}
     return puredatadict
     
-class binaryTMLDataset(ds):
+def binaryTMLDataset(root: str):
 
     """
     Dataset creator/manipulator.
@@ -305,43 +305,37 @@ class binaryTMLDataset(ds):
     ----------
     root (str) – Root path where the dataset is.
     """
-
-    def __init__(self, root: str):
         
-        progressbar = tqdm
-        
-        binary = pl.read_parquet(root)
+    progressbar = tqdm
     
-        binarydatadict = {}
-        for row in progressbar(binary.iter_rows(), desc='datapoint', total=binary.shape[0]):
-            inchi1 = row[2]
-            inchi2 = row[3]
-            tp = row[-2]
-            ids = row[:4]
-            state = row[4:-1]
-            y = row[-1]
+    binary = pl.read_parquet(root)
 
-            if tp == 1:
-                mw1 = mw(inchi1)
-                mw2 = mw(inchi2)
-                if mw1 == 0 or mw2 == 0:
-                    continue
-                x1 = row[4]
-                x2 = row[5]
-                y = y * 1000.0 / (mw1 * x1 + mw2 * x2)
-            key = inchi1 + "_" + inchi2
-            if key in binarydatadict:
-                binarydatadict[key].append((ids, state, y))
+    binarydatadict = {}
+    for row in progressbar(binary.iter_rows(), desc='datapoint', total=binary.shape[0]):
+        inchi1 = row[2]
+        inchi2 = row[3]
+        tp = row[-2]
+        ids = row[:4]
+        state = row[4:-1]
+        y = row[-1]
+
+        if tp == 1:
+            mw1 = mw(inchi1)
+            mw2 = mw(inchi2)
+            if mw1 == 0 or mw2 == 0:
+                continue
+            x1 = row[4]
+            x2 = row[5]
+            y = y * 1000.0 / (mw1 * x1 + mw2 * x2)
+        key = inchi1 + "_" + inchi2
+        if key in binarydatadict:
+            if tp in binarydatadict[key]:
+                binarydatadict[key][tp].append((ids, state, y))
             else:
-                binarydatadict[key] = [(ids, state, y)]
+                binarydatadict[key][tp] = [(ids, state, y)]
+        else:
+            binarydatadict[key][tp] = [(ids, state, y)]
 
-        self.data = binarydatadict
-    
-    
-    def __len__(self):
-        return len(self.data.keys())
-    def __getitem__(self, index) -> list:
-        datapoints = list(self.data.values())[index]
-        return datapoints
+    return binarydatadict
 
 

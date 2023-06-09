@@ -432,30 +432,30 @@ def train_and_evaluate(
 
 from graphdataset import pureTMLDataset
 from jaxopt import BFGS
-from ml_pc_saft import batch_epcsaft_pure
+from ml_pc_saft import batch_den, batch_VP
 
 
 def train():
-    para_dict = {}
-    data = pureTMLDataset("./data/thermoml/raw/pure.parquet")
+    
+    data_dict = pureTMLDataset("./data/thermoml/raw/pure.parquet")
 
-    maxnpoints = 0
-    for datapoints in data:
-        maxnpoints = max(maxnpoints, len(datapoints))
-
-    def res_fn(parameters: jnp.ndarray, datapoints: jnp.ndarray) -> jnp.ndarray:
-        pred_y = batch_epcsaft_pure(parameters, datapoints)
-        y = datapoints[:, -1]
-        res = jnp.square(jnp.log(jnp.abs(y) + 1) - jnp.log(jnp.abs(pred_y) + 1))
-        res = jnp.nanmean(res)
+    def res_fn(parameters: jnp.ndarray, den_points: jnp.ndarray, vp_points: jnp.ndarray) -> jnp.ndarray:
+        pred_y_den = batch_den(parameters, den_points)
+        y_den = den_points[:, -1]
+        #pred_y_vp = batch_VP(parameters, vp_points)
+        #y_vp = vp_points[:, -1]
+        res_den = jnp.square(jnp.log(jnp.abs(y_den) + 1) - jnp.log(jnp.abs(pred_y_den) + 1))
+        #res_vp = jnp.square(jnp.log(jnp.abs(y_vp) + 1) - jnp.log(jnp.abs(pred_y_vp) + 1))
+        #res = jnp.concatenate([res_den, res_vp])
+        res = jnp.nanmean(res_den)
         return res
     
     grad_res = jax.jacfwd(res_fn)
 
-    def value_grad_fn(parameters: jnp.ndarray, datapoints: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def value_grad_fn(parameters: jnp.ndarray, den_points: jnp.ndarray, vp_points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
 
-        res = res_fn(parameters, datapoints)
-        grads = grad_res(parameters, datapoints)
+        res =  res_fn(parameters, den_points, vp_points)
+        grads = grad_res(parameters, den_points, vp_points)
 
         return res, grads
         
@@ -465,23 +465,35 @@ def train():
     solver = BFGS(jit_grad_fn, True, jit=True)
     key = jax.random.PRNGKey(0)
 
-    for datapoints in data:
+    for inchi in data_dict:
         key, subkey = jax.random.split(key)
 
-        (ids, _, _) = datapoints[0]
-        statey = [
+        (ids, _, _) = data_dict[inchi][1][0]
+        state_den = [
             jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
-            for _, state, y in datapoints
+            for _, state, y in data_dict[inchi][1]
         ]
-        dp = jnp.concatenate(statey, 0)
-        dp = jax.random.permutation(subkey, dp, 0, True)
-        if dp.shape[0] < 100:
-            dp = dp.repeat(100, 0)
+        state_vp = [
+            jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
+            for _, state, y in data_dict[inchi][3]
+        ]
+        den_p = jnp.concatenate(state_den, 0)
+        den_p = jax.random.permutation(subkey, den_p, 0, True)
+
+        if den_p.shape[0] < 50:
+            den_p = den_p.repeat(50, 0)
         else:
-            dp = dp[:100,:]
+            den_p = den_p[:50,:]
+        vp_p = jnp.concatenate(state_vp, 0)
+        vp_p = jax.random.permutation(subkey, vp_p, 0, True)
+
+        if vp_p.shape[0] < 50:
+            vp_p = vp_p.repeat(50, 0)
+        else:
+            vp_p = vp_p[:50,:]
         parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
         print(f'\n###### starting solver for {ids[0]} ######\n')
-        (params, state) = solver.run(parameters, dp)
+        (params, state) = solver.run(parameters, den_p, None)
         print(params, state)
-        para_dict[ids[1]] = params
-    return para_dict
+        data_dict[inchi]['params'] = params
+    return data_dict
