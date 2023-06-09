@@ -466,6 +466,8 @@ def train():
     key = jax.random.PRNGKey(0)
 
     for inchi in data_dict:
+        if 1 not in data_dict[inchi]:
+            continue
         key, subkey = jax.random.split(key)
 
         (ids, _, _) = data_dict[inchi][1][0]
