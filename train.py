@@ -465,7 +465,7 @@ def train():
     
     jit_grad_fn = jax.jit(value_grad_fn)
 
-    solver = LBFGS(jit_grad_fn, True, jit=True)
+    solver = LBFGS(jit_grad_fn, True, jit = False)
     key = jax.random.PRNGKey(0)
 
     for inchi in data_dict:
