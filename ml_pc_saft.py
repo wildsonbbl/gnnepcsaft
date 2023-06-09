@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import jax
-import epcsaft
+import epcsaft_complete
 
 
 from jax.config import config
@@ -34,7 +34,7 @@ def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
 
     result = jax.lax.cond(
         fntype == 1,
-        epcsaft.pcsaft_den,
+        epcsaft_complete.pcsaft_den,
         gamma,
         x,
         m,
@@ -67,7 +67,7 @@ def gamma(
 ):
     x1 = (x < 0.5) * 1.0
 
-    rho = epcsaft.pcsaft_den(
+    rho = epcsaft_complete.pcsaft_den(
         x,
         m,
         s,
@@ -87,7 +87,7 @@ def gamma(
     )
 
     fungcoef = (
-        epcsaft.pcsaft_fugcoef(
+        epcsaft_complete.pcsaft_fugcoef(
             x,
             m,
             s,
@@ -107,7 +107,7 @@ def gamma(
         @ x1
     )
 
-    rho = epcsaft.pcsaft_den(
+    rho = epcsaft_complete.pcsaft_den(
         x1,
         m,
         s,
@@ -127,7 +127,7 @@ def gamma(
     )
 
     fungcoefpure = (
-        epcsaft.pcsaft_fugcoef(
+        epcsaft_complete.pcsaft_fugcoef(
             x1,
             m,
             s,
@@ -172,7 +172,7 @@ def epcsaft_pure_den(parameters: jax.Array, state: jax.Array) -> jax.Array:
     l_ij = jnp.zeros_like(m)
     khb_ij = jnp.zeros_like(m)
 
-    result = epcsaft.pcsaft_den(
+    result = epcsaft_complete.pcsaft_den(
         x,
         m,
         s,
@@ -218,7 +218,7 @@ def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
     l_ij = jnp.zeros_like(m)
     khb_ij = jnp.zeros_like(m)
 
-    result = epcsaft.pcsaft_VP(
+    result = epcsaft_complete.pcsaft_VP(
         x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     ).squeeze()
 

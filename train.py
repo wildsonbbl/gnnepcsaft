@@ -431,8 +431,9 @@ def train_and_evaluate(
 
 
 from graphdataset import pureTMLDataset
-from jaxopt import BFGS
+from jaxopt import LBFGS
 from ml_pc_saft import batch_den, batch_VP
+from jraphdataloading import get_padded_array
 
 
 def train():
@@ -462,7 +463,7 @@ def train():
     
     jit_grad_fn = jax.jit(value_grad_fn)
 
-    solver = BFGS(jit_grad_fn, True, jit=True)
+    solver = LBFGS(jit_grad_fn, True, jit=True)
     key = jax.random.PRNGKey(0)
 
     for inchi in data_dict:
@@ -470,23 +471,11 @@ def train():
             continue
         key, subkey = jax.random.split(key)
 
-        (ids, _, _) = data_dict[inchi][1][0]
-        state_den = [
-            jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
-            for _, state, y in data_dict[inchi][1]
-        ]
+        den_p, name = get_padded_array(data_dict[inchi][1], subkey)
         
-        den_p = jnp.concatenate(state_den, 0)
-        den_p = jax.random.permutation(subkey, den_p, 0, True)
-
-        if den_p.shape[0] < 50:
-            den_p = den_p.repeat(50, 0)
-        else:
-            den_p = den_p[:50,:]
-        
-        parameters = jnp.asarray([1.0, 1.0, 10.0, 0.1, 10.0, 1.0, 1.0])
-        print(f'\n###### starting solver for {ids[0]} ######\n')
+        parameters = jnp.asarray([1.52, 3.23, 188.9, 0.0351, 2899.5, 1.0, 1.0])
+        print(f'\n###### starting solver for {name} ######\n')
         (params, state) = solver.run(parameters, den_p, None)
-        print(params, state)
-        data_dict[inchi]['params'] = params
+        print(params, state.value, state.error)
+        data_dict[inchi]['params'] = params.squeeze().tolist()
     return data_dict

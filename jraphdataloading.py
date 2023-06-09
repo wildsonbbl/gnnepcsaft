@@ -1,6 +1,7 @@
 import numpy as np
 import jraph
 import jax.numpy as jnp
+import jax
 
 
 def _nearest_bigger_power_of_two(x: int) -> int:
@@ -56,3 +57,16 @@ def get_batched_padded_graph_tuples(batch) -> jraph.GraphsTuple:
 
     graphs = pad_graph_to_nearest_power_of_two(graphs)  # padd the whole batch once
     return graphs
+
+def get_padded_array(arrays: list, subkey: jax.random.KeyArray) -> tuple[jnp.ndarray, str]:
+    (ids, _, _) = arrays[0]
+    states = [
+        jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
+        for _, state, y in arrays
+    ]
+    
+    states = jnp.concatenate(states, 0)
+    states = jax.random.permutation(subkey, states, 0, True)
+
+    pad = _nearest_bigger_power_of_two(states.shape[0])
+    return states.repeat(pad,0), ids[0]
