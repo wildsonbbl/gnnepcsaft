@@ -58,17 +58,22 @@ def get_batched_padded_graph_tuples(batch) -> jraph.GraphsTuple:
     graphs = pad_graph_to_nearest_power_of_two(graphs)  # padd the whole batch once
     return graphs
 
-def get_padded_array(arrays: list, subkey: jax.random.KeyArray, max_pad: int) -> tuple[jnp.ndarray, str]:
+
+def get_padded_array(
+    arrays: list, subkey: jax.random.KeyArray, max_pad: int
+) -> tuple[jnp.ndarray, str]:
     (ids, _, _) = arrays[0]
     states = [
-        jnp.concatenate([jnp.asarray(state), jnp.asarray([y])])[None, ...]
+        jnp.concatenate(
+            [jnp.asarray(state, dtype=jnp.float_), jnp.asarray([y], dtype=jnp.float_)]
+        )[None, ...]
         for _, state, y in arrays
     ]
-    
+
     states = jnp.concatenate(states, 0)
     states = jax.random.permutation(subkey, states, 0, True)
 
-    if states.shape[0] > max_pad:
-        return states[:max_pad,:], ids[0]
-    else:
-        return states.repeat(max_pad,0), ids[0]
+    pad_size = _nearest_bigger_power_of_two(states.shape[0])
+
+    states = states.repeat(pad_size // states.shape[0] + 1, 0)
+    return states[:pad_size,:]

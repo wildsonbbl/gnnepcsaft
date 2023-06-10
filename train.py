@@ -465,7 +465,7 @@ def train():
     
     jit_grad_fn = jax.jit(value_grad_fn)
 
-    solver = LBFGS(jit_grad_fn, True, jit = False)
+    solver = LBFGS(jit_grad_fn, True, jit = True)
     key = jax.random.PRNGKey(0)
 
     for inchi in data_dict:
@@ -478,10 +478,13 @@ def train():
         parameters = jnp.asarray([1.52, 3.23, 188.9, 0.0351, 2899.5, 1.0, 1.0])
         print(f'\n###### starting solver for {name} ######\n')
         (params, state) = solver.run(parameters, den_p, None)
-        print(f'parameters: {params.squeeze().tolist()}',
+        print(
+            f'parameters: {params.squeeze().tolist()}',
               f'msle: {state.value}',
               f'grad error: {state.error}',
-              sep = '\n')
+              f'data shape: {den_p.shape}',
+              sep = '\n'
+              )
         
 
         data_dict[inchi]['params'] = params.squeeze().tolist()
