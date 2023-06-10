@@ -13,11 +13,11 @@ def get_config():
   # Training hyperparameters.
   config.pre_train = True
   config.batch_size = 256
-  config.num_train_steps = 100_000
-  config.warmup_steps = 10_000
-  config.log_every_steps = 100
-  config.eval_every_steps = 1_000
-  config.checkpoint_every_steps = 10_000
+  config.num_train_steps = 6_000
+  config.warmup_steps = 1_000
+  config.log_every_steps = 10
+  config.eval_every_steps = 2_000
+  config.checkpoint_every_steps = 3_000
   config.add_virtual_node = False
   config.add_undirected_edges = True
   config.add_self_loops = True

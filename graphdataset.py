@@ -3,7 +3,7 @@ from torch.utils.data import Dataset as ds
 from torch_geometric.data import InMemoryDataset
 import torch
 import polars as pl
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from graph import from_InChI
 import jax.numpy as jnp
 import pickle
