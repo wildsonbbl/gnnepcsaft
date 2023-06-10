@@ -278,7 +278,6 @@ def pureTMLDataset(root: str) ->dict:
     root (str) – Directory path where the pure.parquet file is.
     """
 
-    progressbar = tqdm
     path = osp.join(root, "raw", "pure.parquet")
     save_path = osp.join(root, "processed", "pure.pkl")
     if osp.exists(save_path):
@@ -288,7 +287,7 @@ def pureTMLDataset(root: str) ->dict:
         pure = pl.read_parquet(path)
 
         puredatadict = {}
-        for row in progressbar(pure.iter_rows(), desc="datapoint", total=pure.shape[0]):
+        for row in pure.iter_rows():
             inchi = row[1]
             tp = row[-2]
             ids = row[:2]
@@ -310,6 +309,7 @@ def pureTMLDataset(root: str) ->dict:
                 puredatadict[inchi] = {tp: [(ids, state, y)]}
         with open(save_path, "wb") as f:
             pickle.dump(puredatadict, f)
+    print(f'Done!\nDataset size = {len(puredatadict)}')
     return puredatadict
 
 
