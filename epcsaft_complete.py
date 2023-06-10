@@ -805,34 +805,11 @@ def pcsaft_den(
         nul,
     )
 
-    nu = np.asarray([(b + a) / 2.0, 0.0])
+    nu = (b + a) / 2.0
 
-    def cond_fun(nu):
+    def updater(i, nu):
         f = den_errSQ(
-            nu[0],
-            x,
-            m,
-            s,
-            e,
-            t,
-            p,
-            k_ij,
-            l_ij,
-            khb_ij,
-            e_assoc,
-            vol_a,
-            dipm,
-            dip_num,
-            z,
-            dielc,
-        )
-        test1 = f > 1.0e-5
-        test2 = nu[1] < 10
-        return (test1) & (test2)
-
-    def updater(nu):
-        f = den_errSQ(
-            nu[0],
+            nu,
             x,
             m,
             s,
@@ -850,8 +827,11 @@ def pcsaft_den(
             dielc,
         )
 
-        gradf = dden_errSQ_dnu(
-            nu[0],
+        gradf = jax.lax.cond(
+            f < 1.0e-5,
+            lambda nu: np.inf,
+            lambda nu: dden_errSQ_dnu(
+            nu,
             x,
             m,
             s,
@@ -867,15 +847,28 @@ def pcsaft_den(
             dip_num,
             z,
             dielc,
+        ), 
+            nu
         )
 
-        nu = nu.at[0].set(nu[0] - f / gradf)
-        nu = nu.at[1].set(nu[1] + 1)
+        tmp = nu - f / gradf
+        nu = jax.lax.cond(
+            np.any((tmp > 0) & (jax.lax.is_finite(tmp))),
+            lambda nu: tmp,
+            lambda nu: nu,
+            nu
+            )
+
         return nu
 
-    nu = jax.lax.while_loop(cond_fun, updater, nu)
+    nu = jax.lax.fori_loop(
+        0,20,
+        updater,
+        nu
+    )
+    
 
-    rho = density_from_nu(nu[0], t, x, m, s, e)
+    rho = density_from_nu(nu, t, x, m, s, e)
 
     return rho
 

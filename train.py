@@ -163,14 +163,8 @@ def train_step(
         mean_loss = jnp.nanmean(loss)
 
         return mean_loss, (pred_prop, actual_prop)
-    
-    def value_and_grad(params, graphs: jraph.GraphsTuple, datapoints: jnp.ndarray):
 
-        loss, (pred_prop, actual_prop) = loss_fn(params, graphs, datapoints)
-        grads = jax.jacfwd(loss_fn, 0, True)(params, graphs, datapoints)
-        return (loss, (pred_prop, actual_prop)), grads
-
-    grad_fn = value_and_grad
+    grad_fn = jax.value_and_grad(loss_fn, 0, True)
     (loss, (pred_prop, y)), grads = grad_fn(state.params, graphs, datapoints)
     grads = jax.tree_util.tree_map(lambda x: jnp.nan_to_num(x), grads)
     state = state.apply_gradients(grads=grads)
@@ -323,7 +317,7 @@ def train_and_evaluate(
     rng, init_rng = jax.random.split(rng)
     inchis = list(train_dict.keys())
     graph = from_InChI(inchis[0])
-    init_graphs = get_padded_graph(jraph.batch([graph]))
+    init_graphs = get_padded_graph(graph)
     init_graphs = replace_globals(init_graphs)
     init_net = create_model(config, deterministic=True)
     params = jax.jit(init_net.init)(init_rng, init_graphs)
@@ -373,7 +367,7 @@ def train_and_evaluate(
 
             # Perform one step of training.
             with jax.profiler.StepTraceAnnotation("train", step_num=step):
-                graphs = get_padded_graph(jraph.batch([from_InChI(inchis[idx])]))
+                graphs = get_padded_graph(from_InChI(inchis[idx]))
                 datapoints, _ = get_padded_array(train_dict[inchis[idx]][1], subkey, 2**14)
                 
                 state, metrics_update = train_step(
