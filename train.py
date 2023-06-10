@@ -186,7 +186,7 @@ def train_step(
         aux, grads = grad_fn(state.params, graphs, datapoints)
     
     (loss, (pred_prop, y)) = aux
-    newstate = state.apply_gradients(grads=grads)
+    new_state = state.apply_gradients(grads=grads)
     errp = jnp.nanmean((pred_prop / y) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
 
@@ -212,7 +212,7 @@ def train_step(
         nan_number=nan_number,
         lr=lr,
     )
-    return newstate, metrics_update
+    return new_state, metrics_update
 
 
 @functools.partial(jax.jit, static_argnums=3)
