@@ -145,7 +145,7 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
         edges=edge_attr,
         receivers=edge_index[1],
         senders=edge_index[0],
-        globals=jnp.ones(1.0),
-        n_node=x.shape[0],
-        n_edge=edge_attr.shape[0]
+        globals=jnp.ones((1,)),
+        n_node=jnp.array(x.shape[0]),
+        n_edge=jnp.array(edge_attr.shape[0])
         )
