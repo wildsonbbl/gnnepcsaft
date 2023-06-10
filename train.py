@@ -349,12 +349,9 @@ def train_and_evaluate(
     train_dict = pureTMLDataset(path)
 
     if config.half_precision:
-        if platform == 'tpu':
-            input_dtype = jnp.bfloat16
-        else:
-            input_dtype = jnp.float16
+        input_dtype = jnp.int16
     else:
-        input_dtype = jnp.float32
+        input_dtype = jnp.int32
 
     # Create and initialize the network.
     logging.info("Initializing network.")
