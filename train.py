@@ -314,7 +314,7 @@ def train_and_evaluate(
     logging.info("Obtaining datasets.")
 
     
-    path = './data/thermoml/raw'
+    path = './data/thermoml'
     train_dict = pureTMLDataset(path)
 
     # Create and initialize the network.
