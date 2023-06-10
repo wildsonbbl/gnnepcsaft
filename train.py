@@ -145,7 +145,6 @@ def get_predicted_para(
     para = pred_graphs.globals
     return para
 
-@functools.partial(jax.jit, static_argnames=['learning_rate_fn'])
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
