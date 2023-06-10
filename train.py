@@ -12,6 +12,7 @@ import flax
 import flax.core
 import flax.linen as nn
 from flax.training import train_state
+from flax.training import dynamic_scale as dynamic_scale_lib
 import jax
 import jax.numpy as jnp
 import jraph
@@ -37,6 +38,14 @@ import pickle
 
 def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.Module:
     """Creates a Flax model, as specified by the config."""
+    platform = jax.local_devices()[0].platform
+    if config.half_precision:
+        if platform == 'tpu':
+            model_dtype = jnp.bfloat16
+        else:
+            model_dtype = jnp.float16
+    else:
+        model_dtype = jnp.float32
     if config.model == "GraphNet":
         return models.GraphNet(
             latent_size=config.latent_size,
@@ -48,6 +57,7 @@ def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.M
             layer_norm=config.layer_norm,
             use_edge_model=config.use_edge_model,
             deterministic=deterministic,
+            dtype=model_dtype
         )
     if config.model == "GraphConvNet":
         return models.GraphConvNet(
@@ -59,12 +69,14 @@ def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.M
             skip_connections=config.skip_connections,
             layer_norm=config.layer_norm,
             deterministic=deterministic,
+            dtype=model_dtype
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
 def create_optimizer(
-    config: ml_collections.ConfigDict, lr_scheduler: optax.Schedule
+    config: ml_collections.ConfigDict, 
+    lr_scheduler: optax.Schedule
 ) -> optax.GradientTransformation:
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
@@ -134,7 +146,6 @@ def get_predicted_para(
     return para
 
 
-@functools.partial(jax.jit, static_argnums=4)
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
@@ -146,16 +157,17 @@ def train_step(
 
     def loss_fn(params, graphs: jraph.GraphsTuple, datapoints: jnp.ndarray):
         curr_state = state.replace(params=params)
+        datapoints = datapoints.astype(jnp.float64)
 
         # Extract system state and experimental properties.
-        actual_prop = datapoints[:, -1]
+        actual_prop = datapoints[:, -1].astype(jnp.float32)
 
         # Replace the global feature for graph prediction.
         graphs = replace_globals(graphs)
 
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1, :]
-        pcsaft_params = pcsaft_params.squeeze()
+        pcsaft_params = pcsaft_params.squeeze().astype(jnp.float64)
         pred_prop = batch_den(pcsaft_params, datapoints)
         loss = jnp.square(
             jnp.log(jnp.abs(actual_prop) + 1) - jnp.log(jnp.abs(pred_prop) + 1)
@@ -164,14 +176,35 @@ def train_step(
 
         return mean_loss, (pred_prop, actual_prop)
 
-    grad_fn = jax.value_and_grad(loss_fn, 0, True)
-    (loss, (pred_prop, y)), grads = grad_fn(state.params, graphs, datapoints)
-    grads = jax.tree_util.tree_map(lambda x: jnp.nan_to_num(x), grads)
-    state = state.apply_gradients(grads=grads)
+    dynamic_scale = state.dynamic_scale
+    if dynamic_scale:
+        grad_fn = dynamic_scale.value_and_grad(loss_fn, has_aux=True)
+        dynamic_scale, is_fin, aux, grads = grad_fn(state.params, graphs, datapoints)
+        # dynamic loss takes care of averaging gradients across replicas
+    else:
+        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+        aux, grads = grad_fn(state.params, graphs, datapoints)
+    
+    (loss, (pred_prop, y)) = aux
+    newstate = state.apply_gradients(grads=grads)
     errp = jnp.nanmean((pred_prop / y) * 100.0)
     nan_number = jnp.sum(jnp.isnan(pred_prop))
 
     lr = learning_rate_fn(state.step)
+
+    if dynamic_scale:
+    # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
+    # params should be restored (= skip this step).
+        new_state = new_state.replace(
+            opt_state=jax.tree_util.tree_map(
+                functools.partial(jnp.where, is_fin),
+                new_state.opt_state,
+                state.opt_state),
+            params=jax.tree_util.tree_map(
+                functools.partial(jnp.where, is_fin),
+                new_state.params,
+                state.params),
+            dynamic_scale=dynamic_scale)
 
     metrics_update = TrainMetrics.single_from_model_output(
         msle=loss,
@@ -179,7 +212,7 @@ def train_step(
         nan_number=nan_number,
         lr=lr,
     )
-    return state, metrics_update
+    return newstate, metrics_update
 
 
 @functools.partial(jax.jit, static_argnums=3)
@@ -276,6 +309,8 @@ def evaluate_model(
 
     return eval_metric
 
+class TrainState(train_state.TrainState):
+  dynamic_scale: dynamic_scale_lib.DynamicScale
 
 def train_and_evaluate(
     config: ml_collections.ConfigDict, workdir: str
@@ -311,12 +346,20 @@ def train_and_evaluate(
     path = './data/thermoml'
     train_dict = pureTMLDataset(path)
 
+    if config.half_precision:
+        if platform == 'tpu':
+            input_dtype = jnp.bfloat16
+        else:
+            input_dtype = jnp.float16
+    else:
+        input_dtype = jnp.float32
+
     # Create and initialize the network.
     logging.info("Initializing network.")
     rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
     inchis = list(train_dict.keys())
-    graph = from_InChI(inchis[0])
+    graph = from_InChI(inchis[0], dtype=input_dtype)
     init_graphs = get_padded_graph(graph)
     init_graphs = replace_globals(init_graphs)
     init_net = create_model(config, deterministic=True)
@@ -331,7 +374,13 @@ def train_and_evaluate(
 
     # Create the training state.
     net = create_model(config, deterministic=False)
-    state = train_state.TrainState.create(apply_fn=net.apply, params=params, tx=tx)
+    dynamic_scale = None
+    platform = jax.local_devices()[0].platform
+    if config.half_precision and platform == 'gpu':
+        dynamic_scale = dynamic_scale_lib.DynamicScale()
+    else:
+        dynamic_scale = None
+    state = TrainState.create(apply_fn=net.apply, params=params, tx=tx, dynamic_scale=dynamic_scale)
 
     # Set up checkpointing of the model.
     checkpoint_dir = os.path.join(workdir, "checkpoints")
@@ -352,6 +401,7 @@ def train_and_evaluate(
 
     # Begin training loop.
     logging.info("Starting training.")
+    max_pad = config.max_pad
     train_metrics = None
     step = initial_step
     idxs = jnp.arange(len(train_dict))
@@ -367,8 +417,8 @@ def train_and_evaluate(
 
             # Perform one step of training.
             with jax.profiler.StepTraceAnnotation("train", step_num=step):
-                graphs = get_padded_graph(from_InChI(inchis[idx]))
-                datapoints, _ = get_padded_array(train_dict[inchis[idx]][1], subkey, 2**14)
+                graphs = get_padded_graph(from_InChI(inchis[idx], dtype = input_dtype))
+                datapoints, _ = get_padded_array(train_dict[inchis[idx]][1], subkey, max_pad)
                 
                 state, metrics_update = train_step(
                     state,

@@ -1,4 +1,4 @@
-from typing import Callable, Sequence
+from typing import Callable, Sequence, Any
 
 from flax import linen as nn
 import jax.numpy as jnp
@@ -21,12 +21,13 @@ class MLP(nn.Module):
   dropout_rate: float = 0
   deterministic: bool = True
   activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+  dtype: Any = jnp.float32
 
   @nn.compact
   def __call__(self, inputs):
     x = inputs
     for size in self.feature_sizes:
-      x = nn.Dense(features=size)(x)
+      x = nn.Dense(features=size, dtype = self.dtype)(x)
       x = self.activation(x)
       x = nn.Dropout(
           rate=self.dropout_rate, deterministic=self.deterministic)(x)
@@ -38,12 +39,13 @@ class Decoder(nn.Module):
 
   feature_size: int
   activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
+  dtype: Any = jnp.float32
 
   @nn.compact
   def __call__(self, inputs):
     x = inputs
     
-    x = nn.Dense(features=self.feature_size)(x)
+    x = nn.Dense(features=self.feature_size, dtype = self.dtype)(x)
     x = self.activation(x)
     x = x + jnp.array([1.0, 1.0, 10.0,0.00001,100.0,0.00001,1.0])
       
@@ -62,14 +64,15 @@ class GraphNet(nn.Module):
   use_edge_model: bool = True
   layer_norm: bool = True
   deterministic: bool = True
+  dtype: Any = jnp.float32
 
   @nn.compact
   def __call__(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     # We will first linearly project the original features as 'embeddings'.
     embedder = jraph.GraphMapFeatures(
-        embed_node_fn=nn.Dense(self.latent_size),
-        embed_edge_fn=nn.Dense(self.latent_size),
-        embed_global_fn=nn.Dense(self.latent_size))
+        embed_node_fn=nn.Dense(self.latent_size, dtype = self.dtype),
+        embed_edge_fn=nn.Dense(self.latent_size, dtype = self.dtype),
+        embed_global_fn=nn.Dense(self.latent_size, dtype = self.dtype))
     processed_graphs = embedder(graphs)
 
     # Now, we will apply a Graph Network once for each message-passing round.
@@ -79,18 +82,21 @@ class GraphNet(nn.Module):
         update_edge_fn = jraph.concatenated_args(
             MLP(mlp_feature_sizes,
                 dropout_rate=self.dropout_rate,
-                deterministic=self.deterministic))
+                deterministic=self.deterministic,
+                dtype = self.dtype))
       else:
         update_edge_fn = None
 
       update_node_fn = jraph.concatenated_args(
           MLP(mlp_feature_sizes,
               dropout_rate=self.dropout_rate,
-              deterministic=self.deterministic))
+              deterministic=self.deterministic,
+              dtype = self.dtype))
       update_global_fn = jraph.concatenated_args(
           MLP(mlp_feature_sizes,
               dropout_rate=self.dropout_rate,
-              deterministic=self.deterministic))
+              deterministic=self.deterministic,
+              dtype = self.dtype))
 
       graph_net = jraph.GraphNetwork(
           update_node_fn=update_node_fn,
@@ -105,15 +111,15 @@ class GraphNet(nn.Module):
 
       if self.layer_norm:
         processed_graphs = processed_graphs._replace(
-            nodes=nn.LayerNorm()(processed_graphs.nodes),
-            edges=nn.LayerNorm()(processed_graphs.edges),
-            globals=nn.LayerNorm()(processed_graphs.globals),
+            nodes=nn.LayerNorm(dtype = self.dtype)(processed_graphs.nodes),
+            edges=nn.LayerNorm(dtype = self.dtype)(processed_graphs.edges),
+            globals=nn.LayerNorm(dtype = self.dtype)(processed_graphs.globals),
         )
 
     # Since our graph-level predictions will be at globals, we will
     # decode to get the required output logits.
     decoder = jraph.GraphMapFeatures(
-        embed_global_fn= Decoder(self.output_globals_size))
+        embed_global_fn= Decoder(self.output_globals_size, dtype = self.dtype))
     processed_graphs = decoder(processed_graphs)
 
     return processed_graphs
@@ -132,6 +138,7 @@ class GraphConvNet(nn.Module):
   deterministic: bool = True
   pooling_fn: Callable[[jnp.ndarray, jnp.ndarray, jnp.ndarray],  # pytype: disable=annotation-type-mismatch  # jax-ndarray
                        jnp.ndarray] = jraph.segment_mean
+  dtype: Any = jnp.float32
 
   def pool(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     """Pooling operation, taken from Jraph."""
@@ -155,7 +162,7 @@ class GraphConvNet(nn.Module):
   def __call__(self, graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
     # We will first linearly project the original node features as 'embeddings'.
     embedder = jraph.GraphMapFeatures(
-        embed_node_fn=nn.Dense(self.latent_size))
+        embed_node_fn=nn.Dense(self.latent_size, dtype = self.dtype))
     processed_graphs = embedder(graphs)
 
     # Now, we will apply the GCN once for each message-passing round.
@@ -164,7 +171,8 @@ class GraphConvNet(nn.Module):
       update_node_fn = jraph.concatenated_args(
           MLP(mlp_feature_sizes,
               dropout_rate=self.dropout_rate,
-              deterministic=self.deterministic))
+              deterministic=self.deterministic,
+              dtype = self.dtype))
       graph_conv = jraph.GraphConvolution(
           update_node_fn=update_node_fn, add_self_edges=True)
 
@@ -176,7 +184,7 @@ class GraphConvNet(nn.Module):
 
       if self.layer_norm:
         processed_graphs = processed_graphs._replace(
-            nodes=nn.LayerNorm()(processed_graphs.nodes),
+            nodes=nn.LayerNorm(dtype = self.dtype)(processed_graphs.nodes),
         )
 
     # We apply the pooling operation to get a 'global' embedding.
@@ -184,7 +192,7 @@ class GraphConvNet(nn.Module):
 
     # Now, we decode this to get the required output logits.
     decoder = jraph.GraphMapFeatures(
-        embed_global_fn=Decoder(self.output_globals_size))
+        embed_global_fn=Decoder(self.output_globals_size, dtype = self.dtype))
     processed_graphs = decoder(processed_graphs)
 
     return processed_graphs

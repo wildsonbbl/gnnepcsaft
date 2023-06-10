@@ -13,6 +13,7 @@ def get_config():
   # Training hyperparameters.
   config.pre_train = True
   config.batch_size = 256
+  config.max_pad = 2**10
   config.num_train_steps = 6_000
   config.warmup_steps = 1_000
   config.log_every_steps = 10
@@ -21,6 +22,7 @@ def get_config():
   config.add_virtual_node = False
   config.add_undirected_edges = True
   config.add_self_loops = True
+  config.half_precision = True
 
   # GNN hyperparameters.
   config.model = 'GraphConvNet'

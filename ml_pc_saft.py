@@ -3,11 +3,6 @@ import jax
 import epcsaft_complete
 
 
-from jax.config import config
-
-config.update("jax_enable_x64", True)
-
-
 def epcsaft_layer(parameters: jax.Array, state: jax.Array) -> jax.Array:
     x = jnp.asarray([[state[0]], [state[1]]])
     t = state[2]

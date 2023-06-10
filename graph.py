@@ -76,7 +76,7 @@ e_map = {
 
 
 def from_InChI(InChI: str, with_hydrogen: bool = False,
-                kekulize: bool = False) -> jraph.GraphsTuple:
+                kekulize: bool = False, dtype = jnp.int32) -> jraph.GraphsTuple:
     r"""Converts a InChI string to a :class:`jraph.GraphsTuple`
     instance.
 
@@ -117,7 +117,7 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
         x.append(x_map['is_in_ring'].index(atom.IsInRing()))
         xs.append(x)
 
-    x = jnp.asarray(xs, dtype=jnp.int_).reshape(-1, 9)
+    x = jnp.asarray(xs, dtype=dtype).reshape(-1, 9)
 
     edge_indices, edge_attrs = [], []
     for bond in mol.GetBonds():
@@ -132,9 +132,9 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
         edge_indices += [[i, j], [j, i]]
         edge_attrs += [e, e]
 
-    edge_index = jnp.asarray(edge_indices, dtype=jnp.int_)
+    edge_index = jnp.asarray(edge_indices, dtype=dtype)
     edge_index = edge_index.transpose().reshape(2, -1)
-    edge_attr = jnp.asarray(edge_attrs, dtype=jnp.int_).reshape(-1, 3)
+    edge_attr = jnp.asarray(edge_attrs, dtype=dtype).reshape(-1, 3)
 
     if edge_index.size > 0:  # Sort indices.
         perm = (edge_index[0] * x.shape[0] + edge_index[1]).argsort()
@@ -146,6 +146,6 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
         receivers=edge_index[1],
         senders=edge_index[0],
         globals=jnp.ones((1,)),
-        n_node=jnp.array([x.shape[0]]),
-        n_edge=jnp.array([edge_attr.shape[0]])
+        n_node=jnp.array([x.shape[0]], dtype),
+        n_edge=jnp.array([edge_attr.shape[0]], dtype)
         )
