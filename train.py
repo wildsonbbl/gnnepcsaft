@@ -326,6 +326,8 @@ def train_and_evaluate(
     """
     # We only support single-host training.
     assert jax.process_count() == 1
+    
+    platform = jax.local_devices()[0].platform
 
     # Create writer for logs.
     writer = metric_writers.create_default_writer(workdir)
@@ -375,7 +377,7 @@ def train_and_evaluate(
     # Create the training state.
     net = create_model(config, deterministic=False)
     dynamic_scale = None
-    platform = jax.local_devices()[0].platform
+    
     if config.half_precision and platform == 'gpu':
         dynamic_scale = dynamic_scale_lib.DynamicScale()
     else:
