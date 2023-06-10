@@ -387,7 +387,7 @@ def pcsaft_ares(
 
     ares = ares_hc + ares_disp + ares_polar + ares_assoc + ares_ion
 
-    return ares.astype(np.float32).squeeze()
+    return ares.squeeze()
 
 
 @jax.jit
@@ -461,7 +461,7 @@ def pcsaft_Z(
 
     return (1 + rho * dares_drho(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-    )).astype(np.float32).squeeze()
+    )).squeeze()
 
 
 dares_dx = jax.jit(jax.jacfwd(pcsaft_ares, 0))
@@ -536,7 +536,7 @@ def pcsaft_fugcoef(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    return np.exp(ares + (Z - 1) + grad - (x.T @ grad) - lnZ).astype(np.float32).squeeze()
+    return np.exp(ares + (Z - 1) + grad - (x.T @ grad) - lnZ).squeeze()
 
 
 @jax.jit
@@ -604,7 +604,7 @@ def pcsaft_p(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
     P = Z * kb * t * den  # Pa
-    return P.astype(np.float32).squeeze()
+    return P.squeeze()
 
 
 @jax.jit
@@ -829,7 +829,7 @@ def pcsaft_den(
 
         gradf = jax.lax.cond(
             f < 1.0e-5,
-            lambda nu: np.float32(np.inf),
+            lambda nu: np.inf,
             lambda nu: dden_errSQ_dnu(
             nu,
             x,
@@ -870,7 +870,7 @@ def pcsaft_den(
 
     rho = density_from_nu(nu, t, x, m, s, e)
 
-    return rho.astype(np.float32).squeeze()
+    return rho.squeeze()
 
 
 vden_err = jax.jit(
@@ -988,7 +988,7 @@ def pcsaft_hres(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    return ((-t * grad + (Z - 1)) * kb * N_AV * t).astype(np.float32).squeeze()
+    return ((-t * grad + (Z - 1)) * kb * N_AV * t).squeeze()
 
 
 @jax.jit
@@ -1059,7 +1059,7 @@ def pcsaft_gres(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    return ((ares + (Z - 1) - np.log(Z)) * kb * N_AV * t).astype(np.float32).squeeze()
+    return ((ares + (Z - 1) - np.log(Z)) * kb * N_AV * t).squeeze()
 
 
 @jax.jit
@@ -1127,7 +1127,7 @@ def pcsaft_sres(
         x, m, s, e, t, rho, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
     )
 
-    return ((hres - gres) / t).astype(np.float32).squeeze()
+    return ((hres - gres) / t).squeeze()
 
 
 den_phase = jax.jit(
@@ -1323,4 +1323,4 @@ def pcsaft_VP(
 
     p = 1.0 / (1.0 / pref + (np.log(1.0) - A) / B)
 
-    return p.astype(np.float32).squeeze()
+    return p.squeeze()

@@ -168,7 +168,7 @@ def train_step(
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1, :]
         pcsaft_params = pcsaft_params.squeeze().astype(jnp.float64)
-        pred_prop = batch_den(pcsaft_params, datapoints)
+        pred_prop = batch_den(pcsaft_params, datapoints).astype(jnp.float32)
         loss = jnp.square(
             jnp.log(jnp.abs(actual_prop) + 1) - jnp.log(jnp.abs(pred_prop) + 1)
         )
