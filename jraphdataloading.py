@@ -73,9 +73,7 @@ def get_padded_array(
     states = jnp.concatenate(states, 0)
     states = jax.random.permutation(subkey, states, 0, True)
 
-    pad_size = _nearest_bigger_power_of_two(states.shape[0])
-    if pad_size > max_pad:
-        pad_size = max_pad
+    pad_size = max_pad
 
     states = states.repeat(pad_size // states.shape[0] + 1, 0)
     return states[:pad_size,:], ids[0]
