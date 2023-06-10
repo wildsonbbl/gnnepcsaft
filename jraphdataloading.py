@@ -60,7 +60,7 @@ def get_batched_padded_graph_tuples(batch) -> jraph.GraphsTuple:
 
 
 def get_padded_array(
-    arrays: list, subkey: jax.random.KeyArray, max_pad: int
+    arrays: list, subkey: jax.random.KeyArray, max_pad: int = 2**10
 ) -> tuple[jnp.ndarray, str]:
     (ids, _, _) = arrays[0]
     states = [
@@ -74,6 +74,8 @@ def get_padded_array(
     states = jax.random.permutation(subkey, states, 0, True)
 
     pad_size = _nearest_bigger_power_of_two(states.shape[0])
+    if pad_size > max_pad:
+        pad_size = max_pad
 
     states = states.repeat(pad_size // states.shape[0] + 1, 0)
-    return states[:pad_size,:]
+    return states[:pad_size,:], ids[0]

@@ -21,15 +21,18 @@ import optax
 
 import models
 
-import ml_pc_saft
-
 from torch_geometric.loader import DataLoader
-from graphdataset import ThermoMLDataset, ThermoMLjax, ParametersDataset
-from jraphdataloading import get_batched_padded_graph_tuples as batchedjax
+
 
 import wandb
 
 import functools
+
+from graphdataset import pureTMLDataset
+from graph import from_InChI
+from ml_pc_saft import batch_den, batch_VP
+from jraphdataloading import get_padded_array, pad_graph_to_nearest_power_of_two as get_padded_graph
+import pickle
 
 
 def create_model(config: ml_collections.ConfigDict, deterministic: bool) -> nn.Module:
@@ -131,37 +134,44 @@ def get_predicted_para(
     return para
 
 
-@functools.partial(jax.jit, static_argnums=3)
+@functools.partial(jax.jit, static_argnums=4)
 def train_step(
     state: train_state.TrainState,
     graphs: jraph.GraphsTuple,
+    datapoints: jnp.ndarray,
     rngs: Dict[str, jnp.ndarray],
     learning_rate_fn: optax.Schedule,
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
     """Performs one update step over the current batch of graphs."""
 
-    def loss_fn(params, graphs: jraph.GraphsTuple):
+    def loss_fn(params, graphs: jraph.GraphsTuple, datapoints: jnp.ndarray):
         curr_state = state.replace(params=params)
 
         # Extract system state and experimental properties.
-        sysstate = graphs.globals[:-1].reshape(-1, 7)
-        actual_prop = sysstate[:, -1]
+        actual_prop = datapoints[:, -1]
 
         # Replace the global feature for graph prediction.
         graphs = replace_globals(graphs)
 
         # Compute predicted properties and resulting loss.
         pcsaft_params = get_predicted_para(curr_state, graphs, rngs)[:-1, :]
-        pred_prop = ml_pc_saft.batch_pcsaft_layer(pcsaft_params, sysstate)
+        pcsaft_params = pcsaft_params.squeeze()
+        pred_prop = batch_den(pcsaft_params, datapoints)
         loss = jnp.square(
             jnp.log(jnp.abs(actual_prop) + 1) - jnp.log(jnp.abs(pred_prop) + 1)
         )
         mean_loss = jnp.nanmean(loss)
 
         return mean_loss, (pred_prop, actual_prop)
+    
+    def value_and_grad(params, graphs: jraph.GraphsTuple, datapoints: jnp.ndarray):
 
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, (pred_prop, y)), grads = grad_fn(state.params, graphs)
+        loss, (pred_prop, actual_prop) = loss_fn(params, graphs, datapoints)
+        grads = jax.jacfwd(loss_fn, 0, True)(params, graphs, datapoints)
+        return (loss, (pred_prop, actual_prop)), grads
+
+    grad_fn = value_and_grad
+    (loss, (pred_prop, y)), grads = grad_fn(state.params, graphs, datapoints)
     grads = jax.tree_util.tree_map(lambda x: jnp.nan_to_num(x), grads)
     state = state.apply_gradients(grads=grads)
     errp = jnp.nanmean((pred_prop / y) * 100.0)
@@ -236,7 +246,7 @@ def evaluate_step(
 
     # Get predicted properties.
     parameters = get_predicted_para(state, graphs, rngs=None)[:-1, :]
-    pred_prop = ml_pc_saft.batch_epcsaft_layer_test(parameters, sysstate)
+    pred_prop = batch_den(parameters, sysstate)
 
     # Compute the various metrics.
     loss = jnp.square(
@@ -261,7 +271,6 @@ def evaluate_model(
     eval_metric = None
     # Loop over graphs.
     for graphs in dataloader:
-        graphs = batchedjax(graphs)
         graphs = jax.tree_util.tree_map(np.asarray, graphs)
         eval_metric_update = evaluate_step(state, graphs)
 
@@ -304,31 +313,17 @@ def train_and_evaluate(
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
 
-    if config.pre_train:
-        path = osp.join("data", "parameters")
-        train_dataset = ParametersDataset(path)
-        val_dataset = train_dataset
-    else:
-        path = osp.join("data", "thermoml", "train")
-        train_dataset = ThermoMLDataset(path, Notebook=True, subset="train")
-        path = osp.join("data", "thermoml", "val")
-        val_dataset = ThermoMLDataset(path, Notebook=True, subset="val")
-
-    train_dataset = ThermoMLjax(train_dataset)
-    val_dataset = ThermoMLjax(val_dataset)
-    train_loader = DataLoader(
-        train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
-    )
-
-    val_loader = DataLoader(
-        val_dataset, batch_size=config.batch_size, shuffle=False, drop_last=True
-    )
+    
+    path = './data/thermoml/raw'
+    train_dict = pureTMLDataset(path)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
     rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
-    init_graphs = batchedjax(next(iter(train_loader)))
+    inchis = list(train_dict.keys())
+    graph = from_InChI(inchis[0])
+    init_graphs = get_padded_graph(jraph.batch([graph]))
     init_graphs = replace_globals(init_graphs)
     init_net = create_model(config, deterministic=True)
     params = jax.jit(init_net.init)(init_rng, init_graphs)
@@ -365,30 +360,29 @@ def train_and_evaluate(
     logging.info("Starting training.")
     train_metrics = None
     step = initial_step
+    idxs = jnp.arange(len(train_dict))
     while step < config.num_train_steps + 1:
-        for graphs in train_loader:
+        rng, subkey = jax.random.split(rng)
+        idxs = jax.random.permutation(subkey, idxs, independent=True)
+        for idx in idxs:
+            if 1 not in train_dict[inchis[idx]]:
+                continue
             # Split PRNG key, to ensure different 'randomness' for every step.
             rng, dropout_rng = jax.random.split(rng)
+            rng, subkey = jax.random.split(rng)
 
             # Perform one step of training.
             with jax.profiler.StepTraceAnnotation("train", step_num=step):
-                graphs = batchedjax(graphs)
-                graphs = jax.tree_util.tree_map(np.asarray, graphs)
-
-                if config.pre_train:
-                    state, metrics_update = pre_train_step(
-                        state,
-                        graphs,
-                        {"dropout": dropout_rng},
-                        sch,
-                    )
-                else:
-                    state, metrics_update = train_step(
-                        state,
-                        graphs,
-                        {"dropout": dropout_rng},
-                        sch,
-                    )
+                graphs = get_padded_graph(jraph.batch([from_InChI(inchis[idx])]))
+                datapoints, _ = get_padded_array(train_dict[inchis[idx]][1], subkey, 2**14)
+                
+                state, metrics_update = train_step(
+                    state,
+                    graphs,
+                    datapoints,
+                    {"dropout": dropout_rng},
+                    sch,
+                )
 
                 # Update metrics.
                 if train_metrics is None:
@@ -410,16 +404,16 @@ def train_and_evaluate(
                 train_metrics = None
 
             # Evaluate on validation and test splits, if required.
-            if step % config.eval_every_steps == 0 or (
-                is_last_step & (not config.pre_train)
-            ):
-                eval_state = eval_state.replace(params=state.params)
-
-                with report_progress.timed("eval"):
-                    eval_metrics = evaluate_model(eval_state, val_loader)
-                    wandb.log(
-                        add_prefix_to_keys(eval_metrics.compute(), "val"), step=step
-                    )
+            #if step % config.eval_every_steps == 0 or (
+            #    is_last_step & (not config.pre_train)
+            #):
+            #    eval_state = eval_state.replace(params=state.params)
+            #
+            #    with report_progress.timed("eval"):
+            #        eval_metrics = evaluate_model(eval_state, val_loader)
+            #        wandb.log(
+            #            add_prefix_to_keys(eval_metrics.compute(), "val"), step=step
+            #        )
 
             # Checkpoint model, if required.
             if step % config.checkpoint_every_steps == 0 or is_last_step:
@@ -428,66 +422,3 @@ def train_and_evaluate(
             step += 1
     wandb.finish()
     return state
-
-
-from graphdataset import pureTMLDataset
-from jaxopt import LBFGS
-from ml_pc_saft import batch_den, batch_VP
-from jraphdataloading import get_padded_array
-import pickle
-
-
-def train():
-    
-    data_dict = pureTMLDataset("./data/thermoml")
-
-    def res_fn(parameters: jnp.ndarray, den_points: jnp.ndarray, vp_points: jnp.ndarray) -> jnp.ndarray:
-        parameters = jnp.abs(parameters)
-        pred_y_den = batch_den(parameters, den_points)
-        y_den = den_points[:, -1]
-        #pred_y_vp = batch_VP(parameters, vp_points)
-        #y_vp = vp_points[:, -1]
-        res_den = jnp.square(jnp.log(jnp.abs(y_den) + 1) - jnp.log(jnp.abs(pred_y_den) + 1))
-        #res_vp = jnp.square(jnp.log(jnp.abs(y_vp) + 1) - jnp.log(jnp.abs(pred_y_vp) + 1))
-        #res = jnp.concatenate([res_den, res_vp])
-        res = jnp.nanmean(res_den)
-        return res
-    
-    grad_res = jax.jacfwd(res_fn)
-
-    def value_grad_fn(parameters: jnp.ndarray, den_points: jnp.ndarray, vp_points: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-
-        res =  res_fn(parameters, den_points, vp_points)
-        grads = grad_res(parameters, den_points, vp_points)
-
-        return res, grads
-        
-    
-    jit_grad_fn = jax.jit(value_grad_fn)
-
-    solver = LBFGS(jit_grad_fn, True, jit = True)
-    key = jax.random.PRNGKey(0)
-
-    for inchi in data_dict:
-        if 1 not in data_dict[inchi]:
-            continue
-        key, subkey = jax.random.split(key)
-
-        den_p, name = get_padded_array(data_dict[inchi][1], subkey, 50)
-        
-        parameters = jnp.asarray([1.52, 3.23, 188.9, 0.0351, 2899.5, 1.0, 1.0])
-        print(f'\n###### starting solver for {name} ######\n')
-        (params, state) = solver.run(parameters, den_p, None)
-        print(
-            f'parameters: {params.squeeze().tolist()}',
-              f'msle: {state.value}',
-              f'grad error: {state.error}',
-              f'data shape: {den_p.shape}',
-              sep = '\n'
-              )
-        
-
-        data_dict[inchi]['params'] = params.squeeze().tolist()
-    with open('./data/thermoml/processed/pure.pkl', 'wb') as f:
-        pickle.dump(data_dict, f)
-    return data_dict

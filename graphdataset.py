@@ -269,7 +269,7 @@ class ParametersDataset(InMemoryDataset):
         print("Done!")
 
 
-def pureTMLDataset(root: str):
+def pureTMLDataset(root: str) ->dict:
     """
     Dataset creator/manipulator.
 

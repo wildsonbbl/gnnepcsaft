@@ -28,7 +28,7 @@ def get_config():
   config.latent_size = 256
   config.dropout_rate = 0.1
   config.num_mlp_layers = 2
-  config.num_para = 17
+  config.num_para = 7
   config.skip_connections = True
   config.layer_norm = True
   return config

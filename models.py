@@ -37,7 +37,7 @@ class Decoder(nn.Module):
   """A decoder for graph globals."""
 
   feature_size: int
-  activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.leaky_relu
+  activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
 
   @nn.compact
   def __call__(self, inputs):
@@ -45,6 +45,7 @@ class Decoder(nn.Module):
     
     x = nn.Dense(features=self.feature_size)(x)
     x = self.activation(x)
+    x = x + jnp.array([1.0, 1.0, 10.0,0.00001,100.0,0.00001,1.0])
       
     return x
 
