@@ -13,15 +13,23 @@ class PNA(torch.nn.Module):
             propagation_depth: int, 
             num_mlp_layers: int, 
             num_para: int, 
-            deg: torch.Tensor
+            deg: torch.Tensor,
+            layer_norm: bool,
+            dtype: torch.FloatType
             ):
         super().__init__()
 
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.num_mlp_layers = num_mlp_layers
+        self.dtype = dtype
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
+
+        if layer_norm:
+            layer_fn = torch.nn.LayerNorm
+        else:
+            layer_fn = torch.nn.Identity
 
         conv = PNAConv(
             in_channels=9,
@@ -56,21 +64,18 @@ class PNA(torch.nn.Module):
 
         self.mlp = Sequential(
             Linear(hidden_dim, hidden_dim),
-            BatchNorm1d(hidden_dim),
+            layer_fn(hidden_dim),
             ReLU(),
             Linear(hidden_dim, hidden_dim),
-            BatchNorm1d(hidden_dim),
+            layer_fn(hidden_dim),
             ReLU(),
         )
         self.ouput = Sequential(
             Linear(hidden_dim, hidden_dim // 2),
-            BatchNorm1d(hidden_dim // 2),
             ReLU(),
             Linear(hidden_dim // 2, hidden_dim // 4),
-            BatchNorm1d(hidden_dim // 4),
             ReLU(),
-            Linear(hidden_dim // 4, num_para),
-            ReLU(),
+            Linear(hidden_dim // 4, num_para)
         )
 
     def forward(
@@ -78,9 +83,9 @@ class PNA(torch.nn.Module):
         data: Data,
     ):
         x, edge_index, edge_attr, batch = (
-            data.x.to(torch.float),
+            data.x.to(self.dtype),
             data.edge_index.to(torch.int64),
-            data.edge_attr.to(torch.float),
+            data.edge_attr.to(self.dtype),
             data.batch
         )
 

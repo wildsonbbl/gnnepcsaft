@@ -26,9 +26,9 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     platform = "gpu"
     if config.half_precision:
         if platform == "tpu":
-            model_dtype = torch.float16
+            model_dtype = torch.bfloat16
         else:
-            model_dtype = torch.float32
+            model_dtype = torch.float16
     else:
         model_dtype = torch.float32
     if config.model == "PNA":
@@ -38,6 +38,8 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
+            layer_norm=config.layer_norm,
+            dtype=model_dtype
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -80,8 +82,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     logging.info("Obtaining datasets.")
     if config.half_precision:
         input_dtype = torch.int16
+        model_dtype = torch.float16
     else:
         input_dtype = torch.int32
+        model_dtype = torch.float32
 
     path = osp.join("data", "thermoml")
     train_dataset = ThermoMLDataset(path, subset="train", graph_dtype=input_dtype)
@@ -92,7 +96,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config).to(device)
+    model = create_model(config).to(device, model_dtype)
     pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
     pcsaft_layer_test = ml_pc_saft.PCSAFT_layer_test.apply
     lossfn = MeanSquaredLogError().to(device)
