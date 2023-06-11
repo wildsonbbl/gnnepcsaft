@@ -77,12 +77,11 @@ class PNA(torch.nn.Module):
         self,
         data: Data,
     ):
-        x, edge_index, edge_attr, batch, TK = (
+        x, edge_index, edge_attr, batch = (
             data.x.to(torch.float),
             data.edge_index,
             data.edge_attr.to(torch.float),
-            data.batch,
-            data.y.view(-1,7)[:,2],
+            data.batch
         )
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
