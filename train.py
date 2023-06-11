@@ -49,7 +49,12 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
 def create_optimizer(config: ml_collections.ConfigDict, params):
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
-        return torch.optim.AdamW(params, lr=config.learning_rate)
+        return torch.optim.Adam(
+          params,
+          lr=config.learning_rate,
+          weight_decay=1e-2,
+          amsgrad=True
+          )
     if config.optimizer == "sgd":
         return torch.optim.SGD(
             params,
@@ -114,7 +119,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         )
 
     warm_up = config.warmup_steps
-    scheduler_warmup = LinearLR(optimizer, 1 / 10, 1, warm_up)
+    scheduler_warmup = LinearLR(optimizer, 1 / 4, 1, warm_up)
 
     # Set up checkpointing of the model.
     ckp_path = "./training/last_checkpoint.pth"
@@ -150,7 +155,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     step = initial_step
     total_loss = []
     errp = []
-    nan_number = []
     lr = []
     repeat_steps = config.repeat_steps
     while step < config.num_train_steps + 1:
@@ -165,12 +169,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 parameters = model(graphs).to(torch.float64).squeeze()
                 pred_y = pcsaft_layer(parameters, datapoints)
                 y = datapoints[:, -1]
-                loss = lossfn(pred_y[~pred_y.isnan()], y[~pred_y.isnan()])
+                loss = lossfn(pred_y, y)
                 loss.backward()
                 optimizer.step()
                 total_loss += [loss.item()]
-                errp += [(pred_y / y).mean().item()]
-                nan_number += [float(pred_y.isnan().sum().item())]
+                errp += [(pred_y / y * 100).mean().item()]
                 if step < warm_up:
                     scheduler_warmup.step()
                     lr += scheduler_warmup.get_last_lr()
@@ -190,14 +193,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                         {
                             "train_msle": torch.tensor(total_loss).mean().item(),
                             "train_errp": torch.tensor(errp).mean().item(),
-                            "train_nan_number": torch.tensor(nan_number).mean().item(),
                             'train_lr:': torch.tensor(lr).mean().item()
                         },
                         step=step,
                     )
                     total_loss = []
                     errp = []
-                    nan_number = []
                     lr = []
 
                 # Checkpoint model, if required.
