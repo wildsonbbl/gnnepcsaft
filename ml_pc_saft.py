@@ -203,8 +203,8 @@ class PCSAFT_layer(torch.autograd.Function):
     def backward(ctx, dg1: torch.Tensor):
         grad_result = grad_den(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = tdlpack.from_dlpack(grad_result)
-        grad_result = grad_result.nan_to_num(1.0e-8, 1.0e-8, 1.0e-8)
+        grad_result = dg1 @ tdlpack.from_dlpack(grad_result)
+        
         return grad_result, None
 
 
@@ -223,6 +223,6 @@ class PCSAFT_layer_test(torch.autograd.Function):
         return result
 
     @staticmethod
-    def backward(ctx, dg1):
-        grad_result = dg1[..., None]
+    def backward(ctx, dg1: torch.Tensor):
+        grad_result = dg1.sum()
         return grad_result, None
