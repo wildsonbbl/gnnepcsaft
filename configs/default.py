@@ -13,7 +13,7 @@ def get_config():
   # Training hyperparameters.
   config.pre_train = True
   config.batch_size = 1
-  config.max_pad = 2**10
+  config.max_pad = 2**8
   config.num_train_steps = 6_000
   config.warmup_steps = 50
   config.log_every_steps = 10

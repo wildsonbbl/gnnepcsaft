@@ -193,7 +193,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                         {
                             "train_msle": torch.tensor(total_loss).mean().item(),
                             "train_errp": torch.tensor(errp).mean().item(),
-                            'train_lr:': torch.tensor(lr).mean().item()
+                            'train_lr': torch.tensor(lr).mean().item()
                         },
                         step=step,
                     )
