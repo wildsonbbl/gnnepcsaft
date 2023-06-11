@@ -1,8 +1,8 @@
 
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential, BatchNorm1d
-from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
+from torch.nn import Linear, ModuleList, ReLU, Sequential
+from torch_geometric.nn import PNAConv, global_add_pool, LayerNorm
 from torch_geometric.data import Data
 
 
@@ -44,7 +44,7 @@ class PNA(torch.nn.Module):
             divide_input=False,
         )
         self.convs.append(conv)
-        self.batch_norms.append(BatchNorm(hidden_dim))
+        self.batch_norms.append(LayerNorm(hidden_dim))
 
         for _ in range(propagation_depth - 1):
             conv = PNAConv(
@@ -60,7 +60,7 @@ class PNA(torch.nn.Module):
                 divide_input=False,
             )
             self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(hidden_dim))
+            self.batch_norms.append(LayerNorm(hidden_dim))
 
         self.mlp = Sequential(
             Linear(hidden_dim, hidden_dim),

@@ -183,5 +183,5 @@ def get_padded_array(
     states = states[indexes]
     pad_size = max_pad
 
-    states = states.repeat(pad_size // states.shape[0] + 1, 0)
+    states = states.repeat(pad_size // states.shape[0] + 1, 1)
     return states[:pad_size, :]
