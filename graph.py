@@ -79,7 +79,7 @@ e_map = {
 
 
 def from_InChI(InChI: str, with_hydrogen: bool = False,
-                kekulize: bool = False) -> Data:
+                kekulize: bool = False, dtype = torch.int32) -> Data:
     r"""Converts a InChI string to a :class:`torch_geometric.data.Data`
     instance.
 
@@ -120,7 +120,7 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
         x.append(x_map['is_in_ring'].index(atom.IsInRing()))
         xs.append(x)
 
-    x = torch.tensor(xs, dtype=torch.long).view(-1, 9)
+    x = torch.tensor(xs, dtype=dtype).view(-1, 9)
 
     edge_indices, edge_attrs = [], []
     for bond in mol.GetBonds():
@@ -136,8 +136,8 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
         edge_attrs += [e, e]
 
     edge_index = torch.tensor(edge_indices)
-    edge_index = edge_index.t().to(torch.long).view(2, -1)
-    edge_attr = torch.tensor(edge_attrs, dtype=torch.long).view(-1, 3)
+    edge_index = edge_index.t().to(dtype).view(2, -1)
+    edge_attr = torch.tensor(edge_attrs, dtype=dtype).view(-1, 3)
 
     if edge_index.numel() > 0:  # Sort indices.
         perm = (edge_index[0] * x.size(0) + edge_index[1]).argsort()

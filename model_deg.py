@@ -8,19 +8,18 @@ from torch_geometric.utils import degree
 
 from tqdm import tqdm
 
-path = osp.join('data', 'thermoml', 'train')
-train_dataset = ThermoMLDataset(root = './data/thermoml/train', subset='train')
+train_dataset = ThermoMLDataset(root = './data/thermoml')
 
 # Compute the maximum in-degree in the training data.
 max_degree = -1
 for data in tqdm(train_dataset, 'data: ', len(train_dataset)):
-    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+    d = degree(data.edge_index[1].to(torch.int64), num_nodes=data.num_nodes, dtype=torch.int32)
     max_degree = max(max_degree, int(d.max()))
 
 # Compute the in-degree histogram tensor
-deg = torch.zeros(max_degree + 1, dtype=torch.long)
+deg = torch.zeros(max_degree + 1, dtype=torch.int32)
 for data in tqdm(train_dataset, 'data: ', len(train_dataset)):
-    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+    d = degree(data.edge_index[1].to(torch.int64), num_nodes=data.num_nodes, dtype=torch.int32)
     deg += torch.bincount(d, minlength=deg.numel())
 
 print(deg)
