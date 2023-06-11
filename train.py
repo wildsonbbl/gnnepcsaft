@@ -24,6 +24,7 @@ deg = torch.tensor([228, 10738, 15049, 3228, 2083, 0, 34])
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     """Creates a Flax model, as specified by the config."""
     platform = "gpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if config.half_precision:
         if platform == "tpu":
             model_dtype = torch.bfloat16
@@ -39,7 +40,8 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
             num_para=config.num_para,
             deg=deg,
             layer_norm=config.layer_norm,
-            dtype=model_dtype
+            dtype=model_dtype,
+            device=device
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -116,7 +118,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # Set up checkpointing of the model.
     ckp_path = "./training/last_checkpoint.pth"
-    initial_step = 0
+    initial_step = 1
     if osp.exists(ckp_path):
         checkpoint = torch.load(ckp_path)
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -168,7 +170,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 optimizer.step()
                 total_loss += [loss.item()]
                 errp += [(pred_y / y).mean().item()]
-                nan_number += [pred_y.isnan().sum().item()]
+                nan_number += [float(pred_y.isnan().sum().item())]
                 if step < warm_up:
                     scheduler_warmup.step()
                     lr += scheduler_warmup.get_last_lr()
@@ -193,6 +195,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                         },
                         step=step,
                     )
+                    total_loss = []
+                    errp = []
+                    nan_number = []
+                    lr = []
 
                 # Checkpoint model, if required.
                 if step % config.checkpoint_every_steps == 0 or is_last_step:

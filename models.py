@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn.functional as F
 from torch.nn import Linear, ModuleList, ReLU, Sequential
@@ -8,21 +7,23 @@ from torch_geometric.data import Data
 
 class PNA(torch.nn.Module):
     def __init__(
-            self, 
-            hidden_dim: int, 
-            propagation_depth: int, 
-            num_mlp_layers: int, 
-            num_para: int, 
-            deg: torch.Tensor,
-            layer_norm: bool,
-            dtype: torch.FloatType
-            ):
+        self,
+        hidden_dim: int,
+        propagation_depth: int,
+        num_mlp_layers: int,
+        num_para: int,
+        deg: torch.Tensor,
+        layer_norm: bool,
+        dtype: torch.FloatType,
+        device: str,
+    ):
         super().__init__()
 
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.num_mlp_layers = num_mlp_layers
         self.dtype = dtype
+        self.device = device
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
 
@@ -75,7 +76,8 @@ class PNA(torch.nn.Module):
             ReLU(),
             Linear(hidden_dim // 2, hidden_dim // 4),
             ReLU(),
-            Linear(hidden_dim // 4, num_para)
+            Linear(hidden_dim // 4, num_para),
+            ReLU(),
         )
 
     def forward(
@@ -86,7 +88,7 @@ class PNA(torch.nn.Module):
             data.x.to(self.dtype),
             data.edge_index.to(torch.int64),
             data.edge_attr.to(self.dtype),
-            data.batch
+            data.batch,
         )
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
@@ -95,5 +97,7 @@ class PNA(torch.nn.Module):
         x = global_add_pool(x, batch)
         for _ in range(self.num_mlp_layers - 1):
             x = self.mlp(x)
-        x = self.ouput(x)
+        x = self.ouput(x) + torch.tensor(
+            [[1.52, 3.23, 188.9, 0.0351, 2899.5, 1.0, 1.0]]
+        ).to(self.device, self.dtype)
         return x

@@ -203,8 +203,8 @@ class PCSAFT_layer(torch.autograd.Function):
     def backward(ctx, dg1: torch.Tensor):
         grad_result = grad_den(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = tdlpack.from_dlpack(grad_result) * dg1[..., None]
-        grad_result = grad_result.nan_to_num(0, 0, 0)
+        grad_result = tdlpack.from_dlpack(grad_result)
+        grad_result = grad_result.nan_to_num(1.0e-8, 1.0e-8, 1.0e-8)
         return grad_result, None
 
 
