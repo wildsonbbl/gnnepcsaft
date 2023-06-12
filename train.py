@@ -147,10 +147,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             parameters = model(graphs).to(torch.float64).squeeze()
             pred_y = pcsaft_layer_test(parameters, datapoints)
             y = datapoints[:, -1]
-            loss = lossfn(pred_y, y)
+            loss = lossfn(pred_y[~pred_y.isnan()], y[~pred_y.isnan()])
             total_loss += [loss.item()]
 
-        return torch.tensor(total_loss).mean().item()
+        return torch.tensor(total_loss).nanmean().item()
 
     # Begin training loop.
     logging.info("Starting training.")
@@ -160,8 +160,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     errp = []
     lr = []
     repeat_steps = config.repeat_steps
+    model.train()
     while step < config.num_train_steps + 1:
-        model.train()
         for graphs in train_loader:
             graphs = graphs.to(device)
             for _ in range(repeat_steps):
@@ -214,11 +214,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                             "val_msle": test_msle
                         }, step=step
                     )
+                    model.train()
 
                 # Checkpoint model, if required.
                 if step % config.checkpoint_every_steps == 0 or is_last_step:
                     savemodel(model, optimizer, ckp_path, step)
                 step += 1
+            if step > config.num_train_steps:
+                break
     wandb.finish()
 
 
