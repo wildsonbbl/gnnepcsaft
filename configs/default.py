@@ -7,11 +7,11 @@ def get_config():
   config = ml_collections.ConfigDict()
 
   # Optimizer.
-  config.optimizer = 'adam'
+  config.optimizer = 'sgd'
   config.learning_rate = 1e-3
 
   # Training hyperparameters.
-  config.pre_train = True
+  config.pre_train = False
   config.batch_size = 1
   config.max_pad = 2**8
   config.num_train_steps = 6_000

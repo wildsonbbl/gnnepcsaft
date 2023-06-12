@@ -110,6 +110,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
+    
+    # Set up checkpointing of the model.
+    ckp_path = "./training/last_checkpoint.pth"
+    initial_step = 1
+    if osp.exists(ckp_path):
+        checkpoint = torch.load(ckp_path)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        step = checkpoint["step"]
+        initial_step = int(step) + 1
+
+    # Scheduler 
     scheduler = CyclicLR(
         optimizer, 
         0.00001, 
@@ -121,30 +133,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     warm_up = config.warmup_steps
     scheduler_warmup = LinearLR(optimizer, 1 / 4, 1, warm_up)
 
-    # Set up checkpointing of the model.
-    ckp_path = "./training/last_checkpoint.pth"
-    initial_step = 1
-    if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        step = checkpoint["step"]
-        initial_step = int(step) + 1
 
     # test fn
     @torch.no_grad()
-    def test(val_dict):
+    def test(loader):
         model.eval()
         total_loss = []
-        for key in val_dict:
-            graphs = from_InChI(key, dtype=input_dtype)
+        for graphs in loader:
             graphs = graphs.to(device)
-            datapoints, _ = get_padded_array(val_dict[key][1], max_pad)
+            datapoints = graphs.states.view(-1, 5)
+            datapoints = get_padded_array(datapoints, 64)
             datapoints = datapoints.to(device)
-            parameters = model(graphs)
-            pred_y = pcsaft_layer(parameters, datapoints)
+            parameters = model(graphs).to(torch.float64).squeeze()
+            pred_y = pcsaft_layer_test(parameters, datapoints)
             y = datapoints[:, -1]
-            loss = lossfn(pred_y[~pred_y.isnan()], y[~pred_y.isnan()])
+            loss = lossfn(pred_y, y)
             total_loss += [loss.item()]
 
         return torch.tensor(total_loss).mean().item()
@@ -200,6 +203,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                     total_loss = []
                     errp = []
                     lr = []
+                
+                # Evaluate on validation or test, if required.
+                if step % config.eval_every_steps == 0 or (
+                    is_last_step
+                ):
+                    test_msle = test(val_loader)
+                    wandb.log(
+                        {
+                            "val_msle": test_msle
+                        }, step=step
+                    )
 
                 # Checkpoint model, if required.
                 if step % config.checkpoint_every_steps == 0 or is_last_step:
