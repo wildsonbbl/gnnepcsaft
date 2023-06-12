@@ -142,7 +142,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         for graphs in loader:
             graphs = graphs.to(device)
             datapoints = graphs.states.view(-1, 5)
-            datapoints = get_padded_array(datapoints, 64)
+            datapoints = get_padded_array(datapoints, 16)
             datapoints = datapoints.to(device)
             parameters = model(graphs).to(torch.float64).squeeze()
             pred_y = pcsaft_layer_test(parameters, datapoints)
