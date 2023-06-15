@@ -6,10 +6,12 @@
 import jax.numpy as np
 import jax
 
+platform = jax.local_devices()[0].platform
+if platform != "tpu":
+    from jax.config import config
 
-from jax.config import config
-
-config.update("jax_enable_x64", True)
+    config.update("jax_enable_x64", True)
+    print("x64 on")
 
 
 @jax.jit
@@ -380,8 +382,8 @@ def pcsaft_ares(
 
     ares_ion = jax.lax.cond(
         np.any(jax.lax.is_finite(ares_ion)),
-        lambda ares_assoc: ares_ion,
-        lambda ares_assoc: np.zeros_like(ares_ion),
+        lambda ares_ion: ares_ion,
+        lambda ares_ion: np.zeros_like(ares_ion),
         ares_ion,
     )
 
@@ -772,8 +774,19 @@ def pcsaft_den(
         Molar density (mol / m^3)
     """
 
-    nulow = 10 ** -np.arange(13, 4, -1, dtype=np.float64)[..., np.newaxis]
-    nuhigh = np.arange(1.0e-4, 0.7405, 0.0001, dtype=np.float64)[..., np.newaxis]
+    nulow = (
+        10
+        ** -np.arange(
+            13.0,
+            4.0,
+            -1,
+        )[..., np.newaxis]
+    )
+    nuhigh = np.arange(
+        1.0e-4,
+        0.7405,
+        0.0001,
+    )[..., np.newaxis]
     nu = np.concatenate([nulow, nuhigh], 0)
 
     err = vden_err(
@@ -795,7 +808,7 @@ def pcsaft_den(
         dielc,
     )
 
-    nul = np.zeros_like(nu).repeat(3, 1)
+    nul = np.zeros_like(nu).repeat(3, 1) * np.nan
 
     nul = jax.lax.fori_loop(
         0,
@@ -803,23 +816,20 @@ def pcsaft_den(
         lambda i, nul: jax.lax.cond(
             err[i + 1] * err[i] < 0,
             lambda i, nul: nul.at[i, :].set((nu[i, 0], nu[i + 1, 0], 1)),
-            lambda i, nul: nul,
+            lambda i, nul: nul.at[i, :].set((np.nan, np.nan, 0)),
             i,
             nul,
         ),
         nul,
     )
 
-    nul = np.sort(nul, 0)
-
-    roots = np.sum(nul[:, 2]).astype(np.int64)
-
-    nu_max = np.argmax(nul, 0)[0]
+    nu_max = np.nanargmax(nul, 0)[0]
+    nu_min = np.nanargmin(nul, 0)[0]
 
     a, b = jax.lax.cond(
         phase == 1,
         lambda nul: nul[nu_max, 0:2],
-        lambda nul: nul[nu_max - roots + 1, 0:2],
+        lambda nul: nul[nu_min, 0:2],
         nul,
     )
 
