@@ -96,14 +96,6 @@ def gamma(
     return gamma1.squeeze()
 
 
-def VP(
-    x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
-):
-    return pcsaft_VP(
-        x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
-    ).squeeze()
-
-
 def epcsaft_pure_den(parameters: jax.Array, state: jax.Array) -> jax.Array:
     x = jnp.asarray([[1.0]])
     t = state[0]
@@ -182,7 +174,6 @@ def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
 vmap_VP = jax.jit(jax.vmap(epcsaft_pure_VP, (None, 0)))
 
 
-
 class PCSAFT_layer(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
@@ -204,7 +195,6 @@ class PCSAFT_layer(torch.autograd.Function):
         grad_result = grad_den(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
         grad_result = dg1 @ tdlpack.from_dlpack(grad_result)
-        
         return grad_result, None
 
 

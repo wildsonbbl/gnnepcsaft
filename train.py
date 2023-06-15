@@ -11,19 +11,18 @@ from torch.optim.lr_scheduler import CyclicLR, LinearLR
 from torch_geometric.loader import DataLoader
 
 import ml_pc_saft
+import jax
 
 import wandb
 
 from graphdataset import ThermoMLDataset, get_padded_array
-from graph import from_InChI
-
 
 deg = torch.tensor([228, 10738, 15049, 3228, 2083, 0, 34])
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     """Creates a Flax model, as specified by the config."""
-    platform = "gpu"
+    platform = jax.local_devices()[0].platform
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if config.half_precision:
         if platform == "tpu":
@@ -41,7 +40,7 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
             deg=deg,
             layer_norm=config.layer_norm,
             dtype=model_dtype,
-            device=device
+            device=device,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -50,11 +49,8 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
         return torch.optim.Adam(
-          params,
-          lr=config.learning_rate,
-          weight_decay=1e-2,
-          amsgrad=True
-          )
+            params, lr=config.learning_rate, weight_decay=1e-2, amsgrad=True
+        )
     if config.optimizer == "sgd":
         return torch.optim.SGD(
             params,
@@ -75,7 +71,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     """
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    platform = "gpu"
+    platform = jax.local_devices()[0].platform
     # Create writer for logs.
     wandb.login()
     run = wandb.init(
@@ -88,15 +84,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
     if config.half_precision:
-        input_dtype = torch.int16
         model_dtype = torch.float16
     else:
-        input_dtype = torch.int32
         model_dtype = torch.float32
 
     path = osp.join("data", "thermoml")
-    train_dataset = ThermoMLDataset(path, subset="train", graph_dtype=input_dtype)
-    val_dataset = ThermoMLDataset(path, subset="val", graph_dtype=input_dtype)
+    train_dataset = ThermoMLDataset(path, subset="train")
+    val_dataset = ThermoMLDataset(path, subset="val")
 
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
@@ -110,7 +104,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
-    
+
     # Set up checkpointing of the model.
     ckp_path = "./training/last_checkpoint.pth"
     initial_step = 1
@@ -121,18 +115,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         step = checkpoint["step"]
         initial_step = int(step) + 1
 
-    # Scheduler 
+    # Scheduler
     scheduler = CyclicLR(
-        optimizer, 
-        0.00001, 
-        config.learning_rate, 
-        config.patience, 
-        cycle_momentum=False
-        )
+        optimizer, 0.00001, config.learning_rate, config.patience, cycle_momentum=False
+    )
 
     warm_up = config.warmup_steps
     scheduler_warmup = LinearLR(optimizer, 1 / 4, 1, warm_up)
-
 
     # test fn
     @torch.no_grad()
@@ -196,24 +185,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                         {
                             "train_msle": torch.tensor(total_loss).mean().item(),
                             "train_errp": torch.tensor(errp).mean().item(),
-                            'train_lr': torch.tensor(lr).mean().item()
+                            "train_lr": torch.tensor(lr).mean().item(),
                         },
                         step=step,
                     )
                     total_loss = []
                     errp = []
                     lr = []
-                
+
                 # Evaluate on validation or test, if required.
-                if step % config.eval_every_steps == 0 or (
-                    is_last_step
-                ):
+                if step % config.eval_every_steps == 0 or (is_last_step):
                     test_msle = test(val_loader)
-                    wandb.log(
-                        {
-                            "val_msle": test_msle
-                        }, step=step
-                    )
+                    wandb.log({"val_msle": test_msle}, step=step)
                     model.train()
 
                 # Checkpoint model, if required.
