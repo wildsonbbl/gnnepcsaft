@@ -2,7 +2,6 @@ from absl import app
 from absl import flags
 from absl import logging
 from ml_collections import config_flags
-import tensorflow as tf
 import jax
 
 
@@ -22,9 +21,6 @@ config_flags.DEFINE_config_file(
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
-  # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
-  # it unavailable to JAX.
-  tf.config.experimental.set_visible_devices([], 'GPU')
 
   # This example only supports single-host training on a single device.
   logging.info('JAX host: %d / %d', jax.process_index(), jax.process_count())
