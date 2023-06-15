@@ -91,9 +91,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     path = osp.join("data", "thermoml")
     train_dataset = ThermoMLDataset(path, subset="train")
     val_dataset = ThermoMLDataset(path, subset="val")
+    test_dataset = ThermoMLDataset(path, subset="test")
 
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=False)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -198,6 +200,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                     test_msle = test(val_loader)
                     wandb.log({"val_msle": test_msle}, step=step)
                     model.train()
+
+                if (is_last_step):
+                    test_msle = test(test_loader)
+                    wandb.log({"test_msle": test_msle}, step=step)
+                    model.train()
+                    
 
                 # Checkpoint model, if required.
                 if step % config.checkpoint_every_steps == 0 or is_last_step:

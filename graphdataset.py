@@ -124,10 +124,10 @@ class ThermoMLDataset(InMemoryDataset):
         self.dtype = dtype
         self.graph_dtype = graph_dtype
 
-        if subset in ["train", "val"]:
+        if subset in ["train", "val", "test"]:
             self.subset = subset
         else:
-            raise ValueError("subset should be either train or val")
+            raise ValueError("subset should be either train, val or test")
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -145,7 +145,6 @@ class ThermoMLDataset(InMemoryDataset):
     def process(self):
         datalist = []
         print("### Loading dictionary of data ###")
-        data = [1 if self.subset == "train" else 3][0]
         data_dict = pureTMLDataset(self.raw_paths[0])
         print(
             f"### Done!\n Whole dataset size = {len(data_dict)} ###"
@@ -154,21 +153,57 @@ class ThermoMLDataset(InMemoryDataset):
 
         for inchi in data_dict:
             try:
-                graph = from_InChI(inchi, dtype = self.graph_dtype)
-                states = [
-                    torch.concatenate(
-                        [
-                            torch.tensor(state, dtype=self.dtype),
-                            torch.tensor([y], dtype=self.dtype),
+                if self.subset == 'test':
+                    if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
+                        graph = from_InChI(inchi, dtype = self.graph_dtype)
+                        states = [
+                            torch.concatenate(
+                                [
+                                    torch.tensor(state, dtype=self.dtype),
+                                    torch.tensor([y], dtype=self.dtype),
+                                ]
+                            )[None, ...]
+                            for _, state, y in data_dict[inchi][3]
                         ]
-                    )[None, ...]
-                    for _, state, y in data_dict[inchi][data]
-                ]
 
-                states = torch.concatenate(states, 0)
-                graph.states = states
+                        states = torch.concatenate(states, 0)
+                        graph.states = states
 
-                datalist.append(graph)
+                        datalist.append(graph)
+                elif self.subset == 'val':
+                    if (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
+                        graph = from_InChI(inchi, dtype = self.graph_dtype)
+                        states = [
+                            torch.concatenate(
+                                [
+                                    torch.tensor(state, dtype=self.dtype),
+                                    torch.tensor([y], dtype=self.dtype),
+                                ]
+                            )[None, ...]
+                            for _, state, y in data_dict[inchi][3]
+                        ]
+
+                        states = torch.concatenate(states, 0)
+                        graph.states = states
+
+                        datalist.append(graph)
+                else:
+                    if (1 in data_dict[inchi]):
+                        graph = from_InChI(inchi, dtype = self.graph_dtype)
+                        states = [
+                            torch.concatenate(
+                                [
+                                    torch.tensor(state, dtype=self.dtype),
+                                    torch.tensor([y], dtype=self.dtype),
+                                ]
+                            )[None, ...]
+                            for _, state, y in data_dict[inchi][1]
+                        ]
+
+                        states = torch.concatenate(states, 0)
+                        graph.states = states
+
+                        datalist.append(graph)
             except:
                 continue
 
