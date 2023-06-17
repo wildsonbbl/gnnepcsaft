@@ -132,7 +132,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         total_loss = []
         for graphs in loader:
             graphs = graphs.to(device)
-            datapoints = graphs.states.view(-1, 5)
+            datapoints = graphs.states.view(-1, 6)
             datapoints = get_padded_array(datapoints, 16)
             datapoints = datapoints.to(device)
             parameters = model(graphs).to(torch.float64).squeeze()

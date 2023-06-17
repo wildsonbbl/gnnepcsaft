@@ -35,7 +35,7 @@ def BinaryGraph(InChI1: str, InChI2: str):
     x = torch.concatenate((graph1.x, graph2.x))
     edge_attr = torch.concatenate((graph1.edge_attr, graph2.edge_attr))
     edge_index = torch.concatenate(
-        (graph1.edge_index, graph2.edge_index + graph1.num_nodes), axis=1
+        (graph1.edge_index, graph2.edge_index + graph1.num_nodes), dim=1
     )
 
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)

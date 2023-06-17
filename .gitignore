@@ -6,4 +6,6 @@ test*.ipynb
 
 .vscode
 pcsaft*
-
+.devcontainer
+.dockerignore
+Dockerfile
