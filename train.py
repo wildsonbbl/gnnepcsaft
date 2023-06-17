@@ -156,7 +156,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         for graphs in train_loader:
             graphs = graphs.to(device)
             for _ in range(repeat_steps):
-                datapoints = graphs.states.view(-1, 5)
+                datapoints = graphs.states.view(-1, 6)
                 datapoints = get_padded_array(datapoints, max_pad)
                 datapoints = datapoints.to(device)
                 optimizer.zero_grad()

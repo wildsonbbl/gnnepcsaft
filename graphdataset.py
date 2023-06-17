@@ -3,11 +3,13 @@ import torch
 from torch_geometric.data import InMemoryDataset
 import polars as pl
 from graph import from_InChI
+import pickle
 
 from rdkit import Chem, RDLogger
 from rdkit.Chem.rdMolDescriptors import CalcExactMolWt
 
 RDLogger.DisableLog("rdApp.*")
+
 
 
 def BinaryGraph(InChI1: str, InChI2: str):
@@ -37,53 +39,6 @@ def BinaryGraph(InChI1: str, InChI2: str):
     )
 
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
-
-
-def mw(inchi: str) -> float:
-    try:
-        mol = Chem.MolFromInchi(inchi, removeHs=False)
-        mol = Chem.AddHs(mol)
-        mol_weight = CalcExactMolWt(mol)
-    except:
-        mol_weight = 0
-
-    return mol_weight
-
-
-def pureTMLDataset(root: str) -> dict:
-    """
-    Dataset creator/manipulator.
-
-    PARAMETERS
-    ----------
-    root (str) – Path where the pure.parquet file is.
-    """
-
-    pure = pl.read_parquet(root)
-
-    puredatadict = {}
-    for row in pure.iter_rows():
-        inchi = row[1]
-        tp = row[-2]
-        ids = row[:2]
-        state = row[2:-1]
-        y = row[-1]
-        if tp == 1:
-            mol_weight = mw(inchi)
-            if mol_weight == 0:
-                # print(f'error: {ids[0]} with mw = 0')
-                continue
-            y = y * 1000.0 / mol_weight
-
-        if inchi in puredatadict:
-            if tp in puredatadict[inchi]:
-                puredatadict[inchi][tp].append((ids, state, y))
-            else:
-                puredatadict[inchi][tp] = [(ids, state, y)]
-        else:
-            puredatadict[inchi] = {tp: [(ids, state, y)]}
-    return puredatadict
-
 
 class ThermoMLDataset(InMemoryDataset):
 
@@ -133,7 +88,7 @@ class ThermoMLDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return ["pure.parquet"]
+        return ["pure.pkl"]
 
     @property
     def processed_file_names(self):
@@ -145,7 +100,8 @@ class ThermoMLDataset(InMemoryDataset):
     def process(self):
         datalist = []
         print("### Loading dictionary of data ###")
-        data_dict = pureTMLDataset(self.raw_paths[0])
+        with open(self.raw_paths[0], 'rb') as f:
+                data_dict = pickle.load(f)
         print(
             f"### Done!\n Whole dataset size = {len(data_dict)} ###"
             f"\n### Starting to make graphs ###"
