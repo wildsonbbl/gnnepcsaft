@@ -27,6 +27,7 @@ def pureTMLDataset(root: str) -> dict:
     )
     dipole_from_inchi = {}
     list_error = []
+    print('delfta firt try with xtbopt=True')
     for inchi in pure["inchi1"].unique().to_list():
         try:
             mol = readstring("inchi", inchi)
@@ -37,6 +38,7 @@ def pureTMLDataset(root: str) -> dict:
     calc = DelftaCalculator(
         tasks="dipole", delta=False, xtbopt=False, verbose=False, progress=False
     )
+    print('delfta firt try with xtbopt=False')
     for inchi in list_error:
         try:
             mol = readstring("inchi", inchi)
