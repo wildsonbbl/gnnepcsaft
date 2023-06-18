@@ -7,7 +7,7 @@ import models
 
 import torch
 from torchmetrics import MeanSquaredLogError
-from torch.optim.lr_scheduler import CyclicLR, LinearLR
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.loader import DataLoader
 
 import ml_pc_saft
@@ -48,7 +48,7 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
 def create_optimizer(config: ml_collections.ConfigDict, params):
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
-        return torch.optim.Adam(
+        return torch.optim.AdamW(
             params, lr=config.learning_rate, weight_decay=1e-2, amsgrad=True
         )
     if config.optimizer == "sgd":
@@ -118,12 +118,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         initial_step = int(step) + 1
 
     # Scheduler
-    scheduler = CyclicLR(
-        optimizer, 0.00001, config.learning_rate, config.patience, cycle_momentum=False
-    )
-
     warm_up = config.warmup_steps
-    scheduler_warmup = LinearLR(optimizer, 1 / 4, 1, warm_up)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, warm_up)
 
     # test fn
     @torch.no_grad()
@@ -168,12 +164,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 optimizer.step()
                 total_loss += [loss.item()]
                 errp += [(pred_y / y * 100).mean().item()]
-                if step < warm_up:
-                    scheduler_warmup.step()
-                    lr += scheduler_warmup.get_last_lr()
-                else:
-                    scheduler.step()
-                    lr += scheduler.get_last_lr()
+                scheduler.step()
+                lr += scheduler.get_last_lr()
 
                 # Quick indication that training is happening.
                 logging.log_first_n(
