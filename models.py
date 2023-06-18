@@ -76,8 +76,7 @@ class PNA(torch.nn.Module):
             ReLU(),
             Linear(hidden_dim // 2, hidden_dim // 4),
             ReLU(),
-            Linear(hidden_dim // 4, num_para),
-            ReLU(),
+            Linear(hidden_dim // 4, num_para)
         )
 
     def forward(
@@ -97,5 +96,5 @@ class PNA(torch.nn.Module):
         x = global_add_pool(x, batch)
         for _ in range(self.num_mlp_layers - 1):
             x = self.mlp(x)
-        x = self.ouput(x) + 0.000001
+        x = torch.square(self.ouput(x)) + 0.000001
         return x
