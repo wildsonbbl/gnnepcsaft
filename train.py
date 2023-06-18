@@ -49,14 +49,14 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
         return torch.optim.AdamW(
-            params, lr=config.learning_rate, weight_decay=1e-2, amsgrad=True
+            params, lr=config.learning_rate, weight_decay=0, amsgrad=True
         )
     if config.optimizer == "sgd":
         return torch.optim.SGD(
             params,
             lr=config.learning_rate,
             momentum=config.momentum,
-            weight_decay=1e-2,
+            weight_decay=0,
             nesterov=True,
         )
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")

@@ -8,7 +8,7 @@ def get_config():
 
   # Optimizer.
   config.optimizer = 'sgd'
-  config.learning_rate = 1e-3
+  config.learning_rate = 1e-7
 
   # Training hyperparameters.
   config.pre_train = False

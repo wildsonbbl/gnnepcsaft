@@ -96,9 +96,5 @@ class PNA(torch.nn.Module):
         x = global_add_pool(x, batch)
         for _ in range(self.num_mlp_layers - 1):
             x = self.mlp(x)
-        x = (
-            torch.square(self.ouput(x))
-            * torch.tensor([1.0, 1.0, 100.0, 0.01, 1000.0, 1.0, 1.0, 1.0, 1.0], device= self.device)
-            + 0.000001
-        )
-        return x
+        x = self.ouput(x)
+        return x.abs()
