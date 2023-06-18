@@ -79,7 +79,7 @@ e_map = {
 
 
 def from_InChI(InChI: str, with_hydrogen: bool = False,
-                kekulize: bool = False, dtype = torch.int32) -> Data:
+                kekulize: bool = False, dtype = torch.long) -> Data:
     r"""Converts a InChI string to a :class:`torch_geometric.data.Data`
     instance.
 

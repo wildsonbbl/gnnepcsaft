@@ -1,15 +1,8 @@
 from torch_geometric.data import Data
 import torch
 from torch_geometric.data import InMemoryDataset
-import polars as pl
 from graph import from_InChI
 import pickle
-
-from rdkit import Chem, RDLogger
-from rdkit.Chem.rdMolDescriptors import CalcExactMolWt
-
-RDLogger.DisableLog("rdApp.*")
-
 
 
 def BinaryGraph(InChI1: str, InChI2: str):
@@ -32,13 +25,14 @@ def BinaryGraph(InChI1: str, InChI2: str):
     graph1 = from_InChI(InChI1)
     graph2 = from_InChI(InChI2)
 
-    x = torch.concatenate((graph1.x, graph2.x))
-    edge_attr = torch.concatenate((graph1.edge_attr, graph2.edge_attr))
-    edge_index = torch.concatenate(
+    x = torch.cat((graph1.x, graph2.x))
+    edge_attr = torch.cat((graph1.edge_attr, graph2.edge_attr))
+    edge_index = torch.cat(
         (graph1.edge_index, graph2.edge_index + graph1.num_nodes), dim=1
     )
 
     return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+
 
 class ThermoMLDataset(InMemoryDataset):
 
@@ -74,7 +68,7 @@ class ThermoMLDataset(InMemoryDataset):
         pre_filter=None,
         subset="train",
         dtype=torch.float64,
-        graph_dtype=torch.int32
+        graph_dtype=torch.long,
     ):
         self.dtype = dtype
         self.graph_dtype = graph_dtype
@@ -100,76 +94,74 @@ class ThermoMLDataset(InMemoryDataset):
     def process(self):
         datalist = []
         print("### Loading dictionary of data ###")
-        with open(self.raw_paths[0], 'rb') as f:
-                data_dict = pickle.load(f)
+        with open(self.raw_paths[0], "rb") as f:
+            data_dict = pickle.load(f)
         print(
-            f"### Done!\n Whole dataset size = {len(data_dict)} ###"
+            f"Done!\n Whole dataset size = {len(data_dict)}"
             f"\n### Starting to make graphs ###"
         )
 
         for inchi in data_dict:
-            try:
-                if self.subset == 'test':
-                    if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
-                        graph = from_InChI(inchi, dtype = self.graph_dtype)
-                        states = [
-                            torch.concatenate(
-                                [
-                                    torch.tensor(state, dtype=self.dtype),
-                                    torch.tensor([y], dtype=self.dtype),
-                                ]
-                            )[None, ...]
-                            for _, state, y in data_dict[inchi][3]
-                        ]
+            if self.subset == "test":
+                if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
+                    graph = from_InChI(
+                        inchi,
+                    )
+                    states = [
+                        torch.cat(
+                            [
+                                torch.tensor(state, dtype=self.dtype),
+                                torch.tensor([y], dtype=self.dtype),
+                            ]
+                        )[None, ...]
+                        for _, state, y in data_dict[inchi][3]
+                    ]
 
-                        states = torch.concatenate(states, 0)
-                        graph.states = states
+                    states = torch.cat(states, 0)
 
-                        datalist.append(graph)
-                elif self.subset == 'val':
-                    if (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
-                        graph = from_InChI(inchi, dtype = self.graph_dtype)
-                        states = [
-                            torch.concatenate(
-                                [
-                                    torch.tensor(state, dtype=self.dtype),
-                                    torch.tensor([y], dtype=self.dtype),
-                                ]
-                            )[None, ...]
-                            for _, state, y in data_dict[inchi][3]
-                        ]
+                    graph.states = states
 
-                        states = torch.concatenate(states, 0)
-                        graph.states = states
+                    datalist.append(graph)
+            elif self.subset == "val":
+                if (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
+                    graph = from_InChI(
+                        inchi,
+                    )
+                    states = [
+                        torch.cat(
+                            [
+                                torch.tensor(state, dtype=self.dtype),
+                                torch.tensor([y], dtype=self.dtype),
+                            ]
+                        )[None, ...]
+                        for _, state, y in data_dict[inchi][3]
+                    ]
 
-                        datalist.append(graph)
-                else:
-                    if (1 in data_dict[inchi]):
-                        graph = from_InChI(inchi, dtype = self.graph_dtype)
-                        states = [
-                            torch.concatenate(
-                                [
-                                    torch.tensor(state, dtype=self.dtype),
-                                    torch.tensor([y], dtype=self.dtype),
-                                ]
-                            )[None, ...]
-                            for _, state, y in data_dict[inchi][1]
-                        ]
+                    states = torch.cat(states, 0)
+                    graph.states = states
 
-                        states = torch.concatenate(states, 0)
-                        graph.states = states
-
-                        datalist.append(graph)
-            except:
-                continue
+                    datalist.append(graph)
+            else:
+                if 1 in data_dict[inchi]:
+                    graph = from_InChI(inchi)
+                    states = [
+                        torch.cat(
+                            [
+                                torch.tensor(state, dtype=self.dtype),
+                                torch.tensor([y], dtype=self.dtype),
+                            ]
+                        )[None, ...]
+                        for _, state, y in data_dict[inchi][1]
+                    ]
+                    states = torch.cat(states, 0)
+                    graph.states = states
+                    datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
         print("### Done! ###")
 
 
-def get_padded_array(
-    states: torch.Tensor, max_pad: int = 2**10
-) -> torch.Tensor:
+def get_padded_array(states: torch.Tensor, max_pad: int = 2**10) -> torch.Tensor:
     indexes = torch.randperm(states.shape[0])
     states = states[indexes]
     pad_size = max_pad

@@ -102,16 +102,16 @@ def epcsaft_pure_den(parameters: jax.Array, state: jax.Array) -> jax.Array:
     p = state[1]
     phase = state[2]
     fntype = state[3]
-    dipm = state[4].reshape(1, 1)
 
     m = parameters[0].reshape(1, 1)
     s = parameters[1].reshape(1, 1)
     e = parameters[2].reshape(1, 1)
     vol_a = parameters[3].reshape(1, 1)
     e_assoc = parameters[4].reshape(1, 1)
-    dip_num = parameters[5].reshape(1, 1)
-    z = jnp.zeros_like(m)
-    dielc = jnp.zeros_like(m)
+    dipm = parameters[5].reshape(1, 1)
+    dip_num = parameters[6].reshape(1, 1)
+    z = parameters[7].reshape(1, 1)
+    dielc = parameters[8].reshape(1, 1)
 
     k_ij = jnp.zeros_like(m)
     l_ij = jnp.zeros_like(m)
@@ -149,16 +149,16 @@ def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
     p = state[1]
     phase = state[2]
     fntype = state[3]
-    dipm = state[4].reshape(1, 1)
 
     m = parameters[0].reshape(1, 1)
     s = parameters[1].reshape(1, 1)
     e = parameters[2].reshape(1, 1)
     vol_a = parameters[3].reshape(1, 1)
     e_assoc = parameters[4].reshape(1, 1)
-    dip_num = parameters[5].reshape(1, 1)
-    z = jnp.zeros_like(m)
-    dielc = jnp.zeros_like(m)
+    dipm = parameters[5].reshape(1, 1)
+    dip_num = parameters[6].reshape(1, 1)
+    z = parameters[7].reshape(1, 1)
+    dielc = parameters[8].reshape(1, 1)
 
     k_ij = jnp.zeros_like(m)
     l_ij = jnp.zeros_like(m)

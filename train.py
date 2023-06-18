@@ -132,7 +132,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         total_loss = []
         for graphs in loader:
             graphs = graphs.to(device)
-            datapoints = graphs.states.view(-1, 6)
+            datapoints = graphs.states.view(-1, 5)
             datapoints = get_padded_array(datapoints, 16)
             datapoints = datapoints.to(device)
             parameters = model(graphs).to(torch.float64).squeeze()
@@ -156,7 +156,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         for graphs in train_loader:
             graphs = graphs.to(device)
             for _ in range(repeat_steps):
-                datapoints = graphs.states.view(-1, 6)
+                datapoints = graphs.states.view(-1, 5)
                 datapoints = get_padded_array(datapoints, max_pad)
                 datapoints = datapoints.to(device)
                 optimizer.zero_grad()
@@ -201,11 +201,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                     wandb.log({"val_msle": test_msle}, step=step)
                     model.train()
 
-                if (is_last_step):
+                if is_last_step:
                     test_msle = test(test_loader)
                     wandb.log({"test_msle": test_msle}, step=step)
                     model.train()
-                    
 
                 # Checkpoint model, if required.
                 if step % config.checkpoint_every_steps == 0 or is_last_step:

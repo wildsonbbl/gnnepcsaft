@@ -33,7 +33,7 @@ def get_config():
   config.hidden_dim = 256
   config.dropout_rate = 0.1
   config.num_mlp_layers = 1
-  config.num_para = 6
+  config.num_para = 9
   config.skip_connections = True
   config.layer_norm = True
   return config
