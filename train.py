@@ -130,13 +130,16 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     def test(loader):
         model.eval()
         total_loss = []
+        pad_size = config.pad_size
+        para = config.num_para
         for graphs in loader:
             graphs = graphs.to(device)
-            datapoints = graphs.states.view(1, 16, 5)
+            datapoints = graphs.states.view(-1, 5)
             datapoints = datapoints.to(device)
             parameters = model(graphs).to(torch.float64)
+            parameters = parameters.repeat(1, pad_size).reshape(-1, para)
             pred_y = pcsaft_layer_test(parameters, datapoints)
-            y = datapoints[:, :, -1].flatten(0, -2)
+            y = datapoints[:, -1]
             loss = lossfn(pred_y[~pred_y.isnan()], y[~pred_y.isnan()])
             total_loss += [loss.item()]
 
@@ -152,16 +155,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     model.train()
     pad_size = config.pad_size
     batch_size = config.batch_size
+    para = config.num_para
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
             graphs = graphs.to(device)
             for _ in range(repeat_steps):
-                datapoints = graphs.states.view(batch_size, pad_size, 5)
+                datapoints = graphs.states.view(-1, 5)
                 datapoints = datapoints.to(device)
                 optimizer.zero_grad()
                 parameters = model(graphs).to(torch.float64)
+                parameters = parameters.repeat(1, pad_size).reshape(-1, para)
                 pred_y = pcsaft_layer(parameters, datapoints)
-                y = datapoints[:, :, -1].flatten(0, -2)
+                y = datapoints[:, -1]
                 loss = lossfn(pred_y, y)
                 loss.backward()
                 optimizer.step()
