@@ -1,4 +1,5 @@
 from torch_geometric.data import Data
+from torch.utils.data import Dataset as ds
 import torch
 from torch_geometric.data import InMemoryDataset
 from graph import from_InChI
@@ -161,10 +162,38 @@ class ThermoMLDataset(InMemoryDataset):
         print("### Done! ###")
 
 
-def get_padded_array(states: torch.Tensor, max_pad: int = 2**10) -> torch.Tensor:
+class ThermoML_padded(ds):
+    def __init__(self, dataset: ThermoMLDataset, pad_size: int = 32):
+        """Initializes the data reader by loading in data."""
+        self.dataset = dataset
+        self.pad = pad_size
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        sample = self.dataset[idx]
+
+        states = sample.states
+        states = get_padded_array(states, self.pad)
+
+        data = Data(
+            x=sample.x,
+            edge_attr=sample.edge_attr,
+            edge_index=sample.edge_index,
+            states=states,
+        )
+        return data
+
+    def len(self):
+        return self.__len__(self)
+
+    def get(self, idx):
+        return self.__getitem__(self, idx)
+
+
+def get_padded_array(states: torch.Tensor, pad_size: int = 2**10) -> torch.Tensor:
     indexes = torch.randperm(states.shape[0])
     states = states[indexes]
-    pad_size = max_pad
-
     states = states.repeat(pad_size // states.shape[0] + 1, 1)
     return states[:pad_size, :]

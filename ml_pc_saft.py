@@ -139,8 +139,8 @@ def epcsaft_pure_den(parameters: jax.Array, state: jax.Array) -> jax.Array:
     return result.squeeze()
 
 
-vmap_den = jax.jit(jax.vmap(epcsaft_pure_den, (None, 0)))
-grad_den = jax.jit(jax.vmap(jax.jacfwd(epcsaft_pure_den), (None, 0)))
+vmap_den = jax.jit(jax.vmap(jax.vmap(epcsaft_pure_den, (None, 0)), (0, 0)))
+grad_den = jax.jit(jax.vmap(jax.vmap(jax.jacfwd(epcsaft_pure_den), (None, 0)), (0, 0)))
 
 
 def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
@@ -171,7 +171,7 @@ def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
     return result
 
 
-vmap_VP = jax.jit(jax.vmap(epcsaft_pure_VP, (None, 0)))
+vmap_VP = jax.jit(jax.vmap(jax.vmap(epcsaft_pure_VP, (None, 0)), (0, 0)))
 
 
 class PCSAFT_layer(torch.autograd.Function):
@@ -188,13 +188,14 @@ class PCSAFT_layer(torch.autograd.Function):
         result = vmap_den(parameters, state)
         result = jdlpack.to_dlpack(result)
         result = tdlpack.from_dlpack(result)
-        return result
+        return result.flatten(0, -2)
 
     @staticmethod
     def backward(ctx, dg1: torch.Tensor):
         grad_result = grad_den(ctx.parameters, ctx.state)
         grad_result = jdlpack.to_dlpack(grad_result)
-        grad_result = dg1 @ tdlpack.from_dlpack(grad_result)
+        grad_result = tdlpack.from_dlpack(grad_result).flatten(0, -2)
+        grad_result = dg1 @ grad_result
         return grad_result, None
 
 
@@ -210,7 +211,7 @@ class PCSAFT_layer_test(torch.autograd.Function):
         result = vmap_VP(parameters, state)
         result = jdlpack.to_dlpack(result)
         result = tdlpack.from_dlpack(result)
-        return result
+        return result.flatten(0, -2)
 
     @staticmethod
     def backward(ctx, dg1: torch.Tensor):

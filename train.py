@@ -15,7 +15,7 @@ import jax
 
 import wandb
 
-from graphdataset import ThermoMLDataset, get_padded_array
+from graphdataset import ThermoMLDataset, ThermoML_padded
 
 deg = torch.tensor([228, 10738, 15049, 3228, 2083, 0, 34])
 
@@ -93,9 +93,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     val_dataset = ThermoMLDataset(path, subset="val")
     test_dataset = ThermoMLDataset(path, subset="test")
 
+    train_dataset = ThermoML_padded(train_dataset, config.pad_size)
+    val_dataset = ThermoML_padded(val_dataset, 16)
+    test_dataset = ThermoML_padded(test_dataset, 16)
+
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -128,12 +132,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         total_loss = []
         for graphs in loader:
             graphs = graphs.to(device)
-            datapoints = graphs.states.view(-1, 5)
-            datapoints = get_padded_array(datapoints, 16)
+            datapoints = graphs.states.view(1, 16, 5)
             datapoints = datapoints.to(device)
-            parameters = model(graphs).to(torch.float64).squeeze()
+            parameters = model(graphs).to(torch.float64)
             pred_y = pcsaft_layer_test(parameters, datapoints)
-            y = datapoints[:, -1]
+            y = datapoints[:, :, -1].flatten(0, -2)
             loss = lossfn(pred_y[~pred_y.isnan()], y[~pred_y.isnan()])
             total_loss += [loss.item()]
 
@@ -141,24 +144,24 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # Begin training loop.
     logging.info("Starting training.")
-    max_pad = config.max_pad
     step = initial_step
     total_loss = []
     errp = []
     lr = []
     repeat_steps = config.repeat_steps
     model.train()
+    pad_size = config.pad_size
+    batch_size = config.batch_size
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
             graphs = graphs.to(device)
             for _ in range(repeat_steps):
-                datapoints = graphs.states.view(-1, 5)
-                datapoints = get_padded_array(datapoints, max_pad)
+                datapoints = graphs.states.view(batch_size, pad_size, 5)
                 datapoints = datapoints.to(device)
                 optimizer.zero_grad()
-                parameters = model(graphs).to(torch.float64).squeeze()
+                parameters = model(graphs).to(torch.float64)
                 pred_y = pcsaft_layer(parameters, datapoints)
-                y = datapoints[:, -1]
+                y = datapoints[:, :, -1].flatten(0, -2)
                 loss = lossfn(pred_y, y)
                 loss.backward()
                 optimizer.step()
