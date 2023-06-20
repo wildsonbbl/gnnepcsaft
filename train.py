@@ -118,6 +118,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         checkpoint = torch.load(ckp_path)
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        for g in optimizer.param_groups:
+            g['lr']= config.learning_rate
         step = checkpoint["step"]
         initial_step = int(step) + 1
 
