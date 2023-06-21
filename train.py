@@ -56,7 +56,7 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
             params,
             lr=config.learning_rate,
             momentum=config.momentum,
-            weight_decay=0,
+            weight_decay=1e-2,
             nesterov=True,
         )
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
@@ -97,7 +97,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     val_dataset = ThermoML_padded(val_dataset, 16)
     test_dataset = ThermoML_padded(test_dataset, 16)
 
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+    train_loader = DataLoader(
+        train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
+    )
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
@@ -156,6 +158,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     pad_size = config.pad_size
     batch_size = config.batch_size
     para = config.num_para
+    unitscale = torch.tensor(
+        [[1.0, 1.0, 1.0e2, 1.0e-3, 1.0e3, 1.0, 1.0, 1.0, 1.0]], device=device
+    )
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
             graphs = graphs.to(device)
@@ -163,11 +168,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 datapoints = graphs.states.view(-1, 5)
                 datapoints = datapoints.to(device)
                 optimizer.zero_grad()
-                parameters = model(graphs).to(torch.float64)
+                parameters = model(graphs).to(torch.float64) * unitscale
                 parameters = parameters.repeat(1, pad_size).reshape(-1, para)
                 pred_y = pcsaft_layer(parameters, datapoints)
                 y = datapoints[:, -1]
                 loss = lossfn(pred_y, y)
+                if loss.isnan():
+                    print("nan loss")
+                    continue
+
                 loss.backward()
                 optimizer.step()
                 total_loss += [loss.item()]
@@ -194,23 +203,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                     total_loss = []
                     errp = []
                     lr = []
-                    
+
                 # Checkpoint model, if required.
                 if step % config.checkpoint_every_steps == 0 or is_last_step:
                     savemodel(model, optimizer, ckp_path, step)
 
                 # Evaluate on validation or test, if required.
-                #if step % config.eval_every_steps == 0 or (is_last_step):
+                # if step % config.eval_every_steps == 0 or (is_last_step):
                 #    test_msle = test(val_loader)
                 #    wandb.log({"val_msle": test_msle}, step=step)
                 #    model.train()
 
-                #if is_last_step:
+                # if is_last_step:
                 #    test_msle = test(test_loader)
                 #    wandb.log({"test_msle": test_msle}, step=step)
                 #    model.train()
 
-                
                 step += 1
             if step > config.num_train_steps:
                 break
