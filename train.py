@@ -200,15 +200,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                     savemodel(model, optimizer, ckp_path, step)
 
                 # Evaluate on validation or test, if required.
-                if step % config.eval_every_steps == 0 or (is_last_step):
-                    test_msle = test(val_loader)
-                    wandb.log({"val_msle": test_msle}, step=step)
-                    model.train()
+                #if step % config.eval_every_steps == 0 or (is_last_step):
+                #    test_msle = test(val_loader)
+                #    wandb.log({"val_msle": test_msle}, step=step)
+                #    model.train()
 
-                if is_last_step:
-                    test_msle = test(test_loader)
-                    wandb.log({"test_msle": test_msle}, step=step)
-                    model.train()
+                #if is_last_step:
+                #    test_msle = test(test_loader)
+                #    wandb.log({"test_msle": test_msle}, step=step)
+                #    model.train()
+
+                
                 step += 1
             if step > config.num_train_steps:
                 break
