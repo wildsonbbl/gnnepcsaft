@@ -118,8 +118,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         checkpoint = torch.load(ckp_path)
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        for g in optimizer.param_groups:
-            g['lr']= config.learning_rate
         step = checkpoint["step"]
         initial_step = int(step) + 1
 
@@ -196,6 +194,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                     total_loss = []
                     errp = []
                     lr = []
+                    
+                # Checkpoint model, if required.
+                if step % config.checkpoint_every_steps == 0 or is_last_step:
+                    savemodel(model, optimizer, ckp_path, step)
 
                 # Evaluate on validation or test, if required.
                 if step % config.eval_every_steps == 0 or (is_last_step):
@@ -207,10 +209,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                     test_msle = test(test_loader)
                     wandb.log({"test_msle": test_msle}, step=step)
                     model.train()
-
-                # Checkpoint model, if required.
-                if step % config.checkpoint_every_steps == 0 or is_last_step:
-                    savemodel(model, optimizer, ckp_path, step)
                 step += 1
             if step > config.num_train_steps:
                 break
