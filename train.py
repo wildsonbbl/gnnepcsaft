@@ -49,7 +49,7 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
         return torch.optim.AdamW(
-            params, lr=config.learning_rate, weight_decay=0, amsgrad=True
+            params, lr=config.learning_rate, weight_decay=1e-2, amsgrad=True, eps=1e-5
         )
     if config.optimizer == "sgd":
         return torch.optim.SGD(
