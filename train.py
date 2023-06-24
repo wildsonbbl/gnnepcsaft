@@ -222,6 +222,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 step += 1
             if step > config.num_train_steps:
                 break
+            repeat_steps = 1
     wandb.finish()
 
 
