@@ -168,7 +168,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 datapoints = graphs.states.view(-1, 5)
                 datapoints = datapoints.to(device)
                 optimizer.zero_grad()
-                parameters = model(graphs).to(torch.float64) * unitscale
+                parameters = model(graphs).to(torch.float64) * unitscale + 1.0e-6
                 parameters = parameters.repeat(1, pad_size).reshape(-1, para)
                 pred_y = pcsaft_layer(parameters, datapoints)
                 y = datapoints[:, -1]
