@@ -161,6 +161,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     unitscale = torch.tensor(
         [[1.0, 1.0, 1.0e2, 1.0e-3, 1.0e3, 1.0, 1.0, 1.0, 1.0]], device=device
     )
+    break_point = 1
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
             graphs = graphs.to(device)
@@ -175,8 +176,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 loss = lossfn(pred_y, y)
                 if loss.isnan():
                     print("nan loss")
+                    break_point +=1
+                    if break_point > 10:
+                        step = config.num_train_steps + 1
+                        break
                     continue
-
+                break_point = 1
                 loss.backward()
                 optimizer.step()
                 total_loss += [loss.item()]
