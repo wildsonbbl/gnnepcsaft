@@ -35,6 +35,8 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
         return models.PNA(
             hidden_dim=config.hidden_dim,
             propagation_depth=config.propagation_depth,
+            pre_layers=config.pre_layers,
+            post_layers=config.post_layers,
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
@@ -176,7 +178,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                 loss = lossfn(pred_y, y)
                 if loss.isnan():
                     print("nan loss")
-                    break_point +=1
+                    break_point += 1
                     if break_point > 10:
                         step = config.num_train_steps + 1
                         break

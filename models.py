@@ -10,6 +10,8 @@ class PNA(torch.nn.Module):
         self,
         hidden_dim: int,
         propagation_depth: int,
+        pre_layers: int,
+        post_layers: int,
         num_mlp_layers: int,
         num_para: int,
         deg: torch.Tensor,
@@ -40,8 +42,8 @@ class PNA(torch.nn.Module):
             deg=deg,
             edge_dim=3,
             towers=4,
-            pre_layers=1,
-            post_layers=1,
+            pre_layers=pre_layers,
+            post_layers=post_layers,
             divide_input=False,
         )
         self.convs.append(conv)
@@ -56,8 +58,8 @@ class PNA(torch.nn.Module):
                 deg=deg,
                 edge_dim=3,
                 towers=4,
-                pre_layers=1,
-                post_layers=1,
+                pre_layers=pre_layers,
+                post_layers=post_layers,
                 divide_input=False,
             )
             self.convs.append(conv)
