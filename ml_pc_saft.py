@@ -174,7 +174,7 @@ def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
 vmap_VP = jax.vmap(epcsaft_pure_VP)
 
 
-class PCSAFT_layer(torch.autograd.Function):
+class PCSAFT_den(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         parameters = tdlpack.to_dlpack(input)
@@ -199,7 +199,7 @@ class PCSAFT_layer(torch.autograd.Function):
         return grad_result, None
 
 
-class PCSAFT_layer_test(torch.autograd.Function):
+class PCSAFT_vp(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         parameters = tdlpack.to_dlpack(input)

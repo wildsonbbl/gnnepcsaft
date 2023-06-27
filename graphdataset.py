@@ -74,10 +74,10 @@ class ThermoMLDataset(InMemoryDataset):
         self.dtype = dtype
         self.graph_dtype = graph_dtype
 
-        if subset in ["train", "val", "test"]:
+        if subset in ["train", "test"]:
             self.subset = subset
         else:
-            raise ValueError("subset should be either train, val or test")
+            raise ValueError("subset should be either train or test")
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -120,15 +120,17 @@ class ThermoMLDataset(InMemoryDataset):
 
                     states = torch.cat(states, 0)
 
-                    graph.states = states
+                    graph.vp = states
+                    graph.rho = None
+                    graph.inchi = inchi
 
                     datalist.append(graph)
-            elif self.subset == "val":
+            else:
                 if (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
                     graph = from_InChI(
                         inchi,
                     )
-                    states = [
+                    vp = [
                         torch.cat(
                             [
                                 torch.tensor(state, dtype=self.dtype),
@@ -138,14 +140,8 @@ class ThermoMLDataset(InMemoryDataset):
                         for _, state, y in data_dict[inchi][3]
                     ]
 
-                    states = torch.cat(states, 0)
-                    graph.states = states
-
-                    datalist.append(graph)
-            else:
-                if 1 in data_dict[inchi]:
-                    graph = from_InChI(inchi)
-                    states = [
+                    vp = torch.cat(vp, 0)
+                    rho = [
                         torch.cat(
                             [
                                 torch.tensor(state, dtype=self.dtype),
@@ -154,8 +150,34 @@ class ThermoMLDataset(InMemoryDataset):
                         )[None, ...]
                         for _, state, y in data_dict[inchi][1]
                     ]
-                    states = torch.cat(states, 0)
-                    graph.states = states
+
+                    rho = torch.cat(rho, 0)
+
+                    graph.vp = vp
+                    graph.rho = rho
+                    graph.inchi = inchi
+
+                    datalist.append(graph)
+                elif 1 in data_dict[inchi]:
+                    graph = from_InChI(
+                        inchi,
+                    )
+                    vp = None
+                    rho = [
+                        torch.cat(
+                            [
+                                torch.tensor(state, dtype=self.dtype),
+                                torch.tensor([y], dtype=self.dtype),
+                            ]
+                        )[None, ...]
+                        for _, state, y in data_dict[inchi][1]
+                    ]
+
+                    rho = torch.cat(rho, 0)
+
+                    graph.vp = vp
+                    graph.rho = rho
+                    graph.inchi = inchi
                     datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
@@ -174,14 +196,20 @@ class ThermoML_padded(ds):
     def __getitem__(self, idx):
         sample = self.dataset[idx]
 
-        states = sample.states
-        states = get_padded_array(states, self.pad)
+        vp = sample.vp
+        if vp:
+            vp = get_padded_array(vp, self.pad)
+        rho = sample.rho
+        if rho:
+            rho = get_padded_array(rho, self.pad)
 
         data = Data(
             x=sample.x,
             edge_attr=sample.edge_attr,
             edge_index=sample.edge_index,
-            states=states,
+            rho=rho,
+            vp=vp,
+            inchi=sample.inchi
         )
         return data
 

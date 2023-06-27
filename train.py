@@ -108,8 +108,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config).to(device, model_dtype)
-    pcsaft_layer = ml_pc_saft.PCSAFT_layer.apply
-    pcsaft_layer_test = ml_pc_saft.PCSAFT_layer_test.apply
+    pcsaft_layer = ml_pc_saft.PCSAFT_den.apply
+    pcsaft_layer_test = ml_pc_saft.PCSAFT_vp.apply
     lossfn = MeanSquaredLogError().to(device)
 
     # Create the optimizer.
@@ -168,7 +168,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         for graphs in train_loader:
             graphs = graphs.to(device)
             for _ in range(repeat_steps):
-                datapoints = graphs.states.view(-1, 5)
+                datapoints = graphs.rho.view(-1, 5)
                 datapoints = datapoints.to(device)
                 optimizer.zero_grad()
                 parameters = model(graphs).to(torch.float64) * unitscale + 1.0e-6
