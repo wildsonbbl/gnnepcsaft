@@ -1,56 +1,102 @@
-from ml_pc_saft import epcsaft_pure_VP, epcsaft_pure_den
-from graphdataset import ThermoMLDataset, ThermoML_padded
-from jaxopt import LevenbergMarquardt
-import jax.numpy as jnp
-import jax
+import os.path as osp
+import pickle
+
+from absl import logging
+
 import torch
-from jax import dlpack as jdlpack
-from torch.utils import dlpack as tdlpack
+from torchmetrics import MeanSquaredLogError
+from torch_geometric.loader import DataLoader
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+
+import ml_pc_saft
+
+import wandb
+
+from graphdataset import ThermoMLDataset, ThermoML_padded
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def tensor_to_array(tensor: torch.Tensor) -> jnp.ndarray:
-        dlpack = tdlpack.to_dlpack(tensor)
-        array = jdlpack.from_dlpack(dlpack)
-        return array
 
+def fit_para():
+    wandb.login()
+    run = wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+    )
 
-path = osp.join("data", "thermoml")
-train_dataset = ThermoMLDataset(path, subset="train")
-test_dataset = ThermoMLDataset(path, subset="test")
+    # Get datasets, organized by split.
+    logging.info("Obtaining datasets.")
+    path = osp.join("data", "thermoml")
+    train_dataset = ThermoMLDataset(path, subset="train")
+    test_dataset = ThermoMLDataset(path, subset="test")
 
-train_dataset = ThermoML_padded(train_dataset, 64)
-test_dataset = ThermoML_padded(test_dataset, 16)
+    train_dataset = ThermoML_padded(train_dataset, 4096)
+    test_dataset = ThermoML_padded(test_dataset, 16)
 
-train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-pcsaft_den = jax.vmap(epcsaft_pure_den, (None, 0))
-pcsaft_vp = jax.vmap(epcsaft_pure_VP, (None, 0))
+    # Create and initialize the network.
+    logging.info("Initializing network.")
+    pcsaft_layer = ml_pc_saft.PCSAFT_den.apply
+    pcsaft_layer_test = ml_pc_saft.PCSAFT_vp.apply
+    lossfn = MeanSquaredLogError().to(device)
 
-solver = LevenbergMarquardt(OF, 200)
+    # Create the optimizer.
+    para = torch.tensor(
+        [1.52, 3.23, 188.9, 0.0351, 2899.5, 0.01, 1.0]
+    )
+    para = para.to(device)
+    para.requires_grad_()
+    optimizer = torch.optim.SGD(
+        [para],
+        lr=0.01,
+        momentum=0.9,
+        weight_decay=0,
+        nesterov=True,
+    )
+    scheduler = CosineAnnealingWarmRestarts(optimizer, 30)
 
-for graphs in train_loader:
-    graphs = graphs.to(device)
-    if graphs.vp:
-        vp = tensor_to_array(graphs.vp)
+    print("### starting iterations ###")
+    if osp.exists("./data/thermoml/processed/parameters.pkl"):
+        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
     else:
-        vp = None
-    rho = tensor_to_array(graphs.rho)
-    params, state = solver.run(x0, rho, vp)
+        parameters = {}
 
-def OF(params, rho, vp):
-    
-    pred_rho = pcsaft_den(params, rho)
-    msle = jnp.square(
-            jnp.log(jnp.abs(rho[:,-1]) + 1) - jnp.log(jnp.abs(pred_rho) + 1)
-        )
-    if vp:
-        pred_vp = pcsaft_vp(params, vp)
-        msle_vp = jnp.square(
-            jnp.log(jnp.abs(vp[:,-1]) + 1) - jnp.log(jnp.abs(pred_vp) + 1)
-        )
-        msle = jnp.concatenate([msle, msle_vp])
+    # Begin training loop.
+    logging.info("Starting training.")
+    for graphs in train_loader:
+        graphs = graphs.to(device)
+        print(graphs)
+        if graphs.InChI[0] in parameters:
+            continue
+        print(f"for inchi: {graphs.InChI[0]}")
+        loss = 2
+        step = 1
+        while (loss > 0.0001) & (step < 200):
+            optimizer.zero_grad()
+            pred = pcsaft_layer(para.abs() + 1.0e-6, graphs.rho)
+            loss = lossfn(pred, graphs.rho[:, -1])
+            if loss.isnan():
+                print("nan loss")
+                break
+            loss.backward()
+            optimizer.step()
+            lr = scheduler.get_last_lr()[0]
+            scheduler.step(step)
+            step += 1
+            # Quick indication that training is happening.
+            logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
+            wandb.log({"train_msle": loss.item(),
+                      "lr": lr})
+        if (~loss.isnan()) & (loss <= 0.0001):
+            parameters[graphs.InChI[0]] = [para.tolist(), loss.item()]
+        print(f"params: {para}")
+    with open("./data/thermoml/processed/parameters.pkl", "wb") as file:
+        # A new file will be created
+        pickle.dump(parameters, file)
+    wandb.finish()
 
-    return jnp.mean(msle)
-    
+
+if __name__ == "__main__":
+    fit_para()

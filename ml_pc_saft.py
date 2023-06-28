@@ -139,8 +139,8 @@ def epcsaft_pure_den(parameters: jax.Array, state: jax.Array) -> jax.Array:
     return result.squeeze()
 
 
-vmap_den = jax.vmap(epcsaft_pure_den)
-grad_den = jax.vmap(jax.jacfwd(epcsaft_pure_den))
+vmap_den = jax.vmap(epcsaft_pure_den, (None, 0))
+grad_den = jax.vmap(jax.jacfwd(epcsaft_pure_den), (None, 0))
 
 
 def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
@@ -171,7 +171,7 @@ def epcsaft_pure_VP(parameters: jax.Array, state: jax.Array) -> jax.Array:
     return result
 
 
-vmap_VP = jax.vmap(epcsaft_pure_VP)
+vmap_VP = jax.vmap(epcsaft_pure_VP, (None, 0))
 
 
 class PCSAFT_den(torch.autograd.Function):

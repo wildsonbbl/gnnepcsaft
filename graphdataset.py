@@ -121,8 +121,7 @@ class ThermoMLDataset(InMemoryDataset):
                     states = torch.cat(states, 0)
 
                     graph.vp = states
-                    graph.rho = None
-                    graph.inchi = inchi
+                    graph.rho = torch.zeros((1, 5))
 
                     datalist.append(graph)
             else:
@@ -155,14 +154,13 @@ class ThermoMLDataset(InMemoryDataset):
 
                     graph.vp = vp
                     graph.rho = rho
-                    graph.inchi = inchi
 
                     datalist.append(graph)
                 elif 1 in data_dict[inchi]:
                     graph = from_InChI(
                         inchi,
                     )
-                    vp = None
+                    vp = torch.zeros((1, 5))
                     rho = [
                         torch.cat(
                             [
@@ -177,7 +175,6 @@ class ThermoMLDataset(InMemoryDataset):
 
                     graph.vp = vp
                     graph.rho = rho
-                    graph.inchi = inchi
                     datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
@@ -197,11 +194,18 @@ class ThermoML_padded(ds):
         sample = self.dataset[idx]
 
         vp = sample.vp
-        if vp:
-            vp = get_padded_array(vp, self.pad)
+        n = vp.shape[0]
+        pad = _nearest_bigger_power_of_two(n)
+        if pad > self.pad:
+            pad = self.pad
+        vp = get_padded_array(vp, pad)
+        
         rho = sample.rho
-        if rho:
-            rho = get_padded_array(rho, self.pad)
+        n = rho.shape[0]
+        pad = _nearest_bigger_power_of_two(n)
+        if pad > self.pad:
+            pad = self.pad
+        rho = get_padded_array(rho, pad)
 
         data = Data(
             x=sample.x,
@@ -209,7 +213,7 @@ class ThermoML_padded(ds):
             edge_index=sample.edge_index,
             rho=rho,
             vp=vp,
-            inchi=sample.inchi
+            InChI=sample.InChI,
         )
         return data
 
@@ -225,3 +229,10 @@ def get_padded_array(states: torch.Tensor, pad_size: int = 2**10) -> torch.Tenso
     states = states[indexes]
     states = states.repeat(pad_size // states.shape[0] + 1, 1)
     return states[:pad_size, :]
+
+def _nearest_bigger_power_of_two(x: int) -> int:
+    """Computes the nearest power of two greater than x for padding."""
+    y = 2
+    while y < x:
+        y *= 2
+    return y
