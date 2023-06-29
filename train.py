@@ -6,7 +6,7 @@ import ml_collections
 import models
 
 import torch
-from torchmetrics import CosineSimilarity
+from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.loader import DataLoader
 
@@ -114,7 +114,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     model = create_model(config).to(device, model_dtype)
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
     pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
-    lossfn = CosineSimilarity('mean').to(device)
+    lossfn = HuberLoss('mean').to(device)
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
@@ -186,7 +186,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             if step % config.log_every_steps == 0 or is_last_step:
                 wandb.log(
                     {
-                        "train_cosdis": torch.tensor(total_loss).mean().item(),
+                        "train_HuberLoss": torch.tensor(total_loss).mean().item(),
                         "train_lr": torch.tensor(lr).mean().item(),
                     },
                     step=step,
