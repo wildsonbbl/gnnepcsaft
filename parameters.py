@@ -4,7 +4,7 @@ import pickle
 from absl import logging
 
 import torch
-from torchmetrics import MeanSquaredLogError
+from torchmetrics import MeanAbsolutePercentageError
 from torch_geometric.loader import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
@@ -40,7 +40,7 @@ def fit_para():
     logging.info("Initializing network.")
     pcsaft_layer = ml_pc_saft.PCSAFT_den.apply
     pcsaft_layer_test = ml_pc_saft.PCSAFT_vp.apply
-    lossfn = MeanSquaredLogError().to(device)
+    lossfn = MeanAbsolutePercentageError().to(device)
 
     # Create the optimizer.
     unitscale = torch.tensor([10.0, 10.0, 1e3, 1e-2, 1e4, 10.0, 10.0, 10.0, 10.0])
@@ -90,7 +90,7 @@ def fit_para():
             scheduler.step(step)
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
-            wandb.log({"train_msle": loss.item(), "train_lr": lr})
+            wandb.log({"train_mape": loss.item(), "train_lr": lr})
             step += 1
         if ~loss.isnan():
             parameters[graphs.InChI[0]] = [pcsaft_params.tolist(), loss.item()]
