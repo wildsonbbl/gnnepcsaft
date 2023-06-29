@@ -50,12 +50,12 @@ def fit_para():
     )
     para = para.to(device)
     para.requires_grad_()
-    optimizer = torch.optim.SGD(
+    optimizer = torch.optim.AdamW(
         [para],
-        lr=0.001,
-        momentum=0.9,
+        lr=0.01,
+        eps=1e-5,
         weight_decay=0,
-        nesterov=True,
+        amsgrad=True,
     )
     scheduler = CosineAnnealingWarmRestarts(optimizer, 10)
 
@@ -76,7 +76,7 @@ def fit_para():
         print(f"for inchi: {graphs.InChI[0]}")
         loss = 2
         step = 1
-        while (loss > 0.0001) & (step < 100):
+        while (loss > 0.5/100) & (step < 100):
             optimizer.zero_grad()
             pcsaft_params = para.abs() * unitscale + 1e-5
             pred = pcsaft_layer(pcsaft_params, graphs.rho)
@@ -94,7 +94,7 @@ def fit_para():
             step += 1
         if ~loss.isnan():
             parameters[graphs.InChI[0]] = [pcsaft_params.tolist(), loss.item()]
-            print(f"params: {pcsaft_params}")
+        print(f"params: {pcsaft_params}")
         with open("./data/thermoml/processed/parameters.pkl", "wb") as file:
             # A new file will be created
             pickle.dump(parameters, file)
