@@ -43,22 +43,26 @@ def fit_para():
     lossfn = MeanSquaredLogError().to(device)
 
     # Create the optimizer.
-    para = torch.tensor([1.52, 3.23, 188.9, 0.0351, 2899.5, 0.01, 1.0])
+    unitscale = torch.tensor([10.0, 10.0, 1e3, 1e-2, 1e4, 10.0, 10.0, 10.0, 10.0])
+    unitscale = unitscale.to(device)
+    para = torch.tensor(
+        [0.152, 0.323, 0.1889, 0.351, 0.28995, 0.125, 0.323, 0.251, 0.525]
+    )
     para = para.to(device)
     para.requires_grad_()
     optimizer = torch.optim.SGD(
         [para],
-        lr=0.01,
+        lr=0.001,
         momentum=0.9,
         weight_decay=0,
         nesterov=True,
     )
-    scheduler = CosineAnnealingWarmRestarts(optimizer, 30)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, 10)
 
     print("### starting iterations ###")
     if osp.exists("./data/thermoml/processed/parameters.pkl"):
         parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
-        print(f"inchis saved: {len(parameters.keys)}")
+        print(f"inchis saved: {len(parameters.keys())}")
     else:
         parameters = {}
 
@@ -74,7 +78,8 @@ def fit_para():
         step = 1
         while (loss > 0.0001) & (step < 100):
             optimizer.zero_grad()
-            pred = pcsaft_layer(para.abs() + 1.0e-6, graphs.rho)
+            pcsaft_params = para.abs() * unitscale + 1e-5
+            pred = pcsaft_layer(pcsaft_params, graphs.rho)
             loss = lossfn(pred, graphs.rho[:, -1])
             if loss.isnan():
                 print("nan loss")
@@ -85,11 +90,11 @@ def fit_para():
             scheduler.step(step)
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
-            wandb.log({"train_msle": loss.item(), "lr": lr})
+            wandb.log({"train_msle": loss.item(), "train_lr": lr})
             step += 1
-        if (~loss.isnan()):
-            parameters[graphs.InChI[0]] = [para.tolist(), loss.item()]
-            print(f"params: {para}")
+        if ~loss.isnan():
+            parameters[graphs.InChI[0]] = [pcsaft_params.tolist(), loss.item()]
+            print(f"params: {pcsaft_params}")
         with open("./data/thermoml/processed/parameters.pkl", "wb") as file:
             # A new file will be created
             pickle.dump(parameters, file)
