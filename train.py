@@ -6,7 +6,7 @@ import ml_collections
 import models
 
 import torch
-from torchmetrics import MeanSquaredLogError
+from torchmetrics import CosineSimilarity
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.loader import DataLoader
 
@@ -16,6 +16,7 @@ import jax
 import wandb
 
 from graphdataset import ThermoMLDataset, ThermoML_padded
+import pickle
 
 deg = torch.tensor([228, 10738, 15049, 3228, 2083, 0, 34])
 
@@ -92,25 +93,28 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     path = osp.join("data", "thermoml")
     train_dataset = ThermoMLDataset(path, subset="train")
-    val_dataset = ThermoMLDataset(path, subset="val")
     test_dataset = ThermoMLDataset(path, subset="test")
 
     train_dataset = ThermoML_padded(train_dataset, config.pad_size)
-    val_dataset = ThermoML_padded(val_dataset, 16)
     test_dataset = ThermoML_padded(test_dataset, 16)
 
     train_loader = DataLoader(
         train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
     )
-    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
+    if osp.exists("./data/thermoml/processed/parameters.pkl"):
+        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
+        print(f"inchis saved: {len(parameters.keys())}")
+    else:
+        print("missing parameters.pkl")
+        
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config).to(device, model_dtype)
-    pcsaft_layer = ml_pc_saft.PCSAFT_den.apply
-    pcsaft_layer_test = ml_pc_saft.PCSAFT_vp.apply
-    lossfn = MeanSquaredLogError().to(device)
+    pcsaft_den = ml_pc_saft.PCSAFT_den.apply
+    pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
+    lossfn = CosineSimilarity('mean').to(device)
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
@@ -138,13 +142,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         para = config.num_para
         for graphs in loader:
             graphs = graphs.to(device)
-            datapoints = graphs.states.view(-1, 5)
+            datapoints = graphs.vp.view(-1, 5)
             datapoints = datapoints.to(device)
             parameters = model(graphs).to(torch.float64)
-            parameters = parameters.repeat(1, pad_size).reshape(-1, para)
-            pred_y = pcsaft_layer_test(parameters, datapoints)
+            pred_y = pcsaft_vp(parameters, datapoints)
             y = datapoints[:, -1]
-            loss = lossfn(pred_y[~pred_y.isnan()], y[~pred_y.isnan()])
+            loss = torch.square(pred_y-y).mean()
             total_loss += [loss.item()]
 
         return torch.tensor(total_loss).nanmean().item()
@@ -153,83 +156,62 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     logging.info("Starting training.")
     step = initial_step
     total_loss = []
-    errp = []
     lr = []
-    repeat_steps = config.repeat_steps
+
     model.train()
-    pad_size = config.pad_size
-    batch_size = config.batch_size
-    para = config.num_para
     unitscale = torch.tensor(
         [[1.0, 1.0, 1.0e2, 1.0e-3, 1.0e3, 1.0, 1.0, 1.0, 1.0]], device=device
     )
-    break_point = 1
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
             graphs = graphs.to(device)
-            for _ in range(repeat_steps):
-                datapoints = graphs.rho.view(-1, 5)
-                datapoints = datapoints.to(device)
-                optimizer.zero_grad()
-                parameters = model(graphs).to(torch.float64) * unitscale + 1.0e-6
-                parameters = parameters.repeat(1, pad_size).reshape(-1, para)
-                pred_y = pcsaft_layer(parameters, datapoints)
-                y = datapoints[:, -1]
-                loss = lossfn(pred_y, y)
-                if loss.isnan():
-                    print("nan loss")
-                    break_point += 1
-                    if break_point > 10:
-                        step = config.num_train_steps + 1
-                        break
-                    continue
-                break_point = 1
-                loss.backward()
-                optimizer.step()
-                total_loss += [loss.item()]
-                errp += [(pred_y / y * 100).mean().item()]
-                scheduler.step()
-                lr += scheduler.get_last_lr()
+            optimizer.zero_grad()
+            pred = model(graphs)
+            target = [parameters[inchi][0] for inchi in graphs.InChI]
+            target = torch.tensor(target).to(device)
+            loss = 1 - lossfn(pred, target)
+            loss.backward()
+            optimizer.step()
+            total_loss += [loss.item()]
+            lr += scheduler.get_last_lr()
+            scheduler.step()
 
-                # Quick indication that training is happening.
-                logging.log_first_n(
-                    logging.INFO, "Finished training step %d.", 10, step
+            # Quick indication that training is happening.
+            logging.log_first_n(
+                logging.INFO, "Finished training step %d.", 10, step
+            )
+
+            # Log, if required.
+            is_last_step = step == config.num_train_steps - 1
+            if step % config.log_every_steps == 0 or is_last_step:
+                wandb.log(
+                    {
+                        "train_cosdis": torch.tensor(total_loss).mean().item(),
+                        "train_lr": torch.tensor(lr).mean().item(),
+                    },
+                    step=step,
                 )
+                total_loss = []
+                lr = []
 
-                # Log, if required.
-                is_last_step = step == config.num_train_steps - 1
-                if step % config.log_every_steps == 0 or is_last_step:
-                    wandb.log(
-                        {
-                            "train_msle": torch.tensor(total_loss).mean().item(),
-                            "train_errp": torch.tensor(errp).mean().item(),
-                            "train_lr": torch.tensor(lr).mean().item(),
-                        },
-                        step=step,
-                    )
-                    total_loss = []
-                    errp = []
-                    lr = []
+            # Checkpoint model, if required.
+            if step % config.checkpoint_every_steps == 0 or is_last_step:
+                savemodel(model, optimizer, ckp_path, step)
 
-                # Checkpoint model, if required.
-                if step % config.checkpoint_every_steps == 0 or is_last_step:
-                    savemodel(model, optimizer, ckp_path, step)
+            # Evaluate on validation or test, if required.
+            # if step % config.eval_every_steps == 0 or (is_last_step):
+            #    test_msle = test(val_loader)
+            #    wandb.log({"val_msle": test_msle}, step=step)
+            #    model.train()
 
-                # Evaluate on validation or test, if required.
-                # if step % config.eval_every_steps == 0 or (is_last_step):
-                #    test_msle = test(val_loader)
-                #    wandb.log({"val_msle": test_msle}, step=step)
-                #    model.train()
+            # if is_last_step:
+            #    test_msle = test(test_loader)
+            #    wandb.log({"test_msle": test_msle}, step=step)
+            #    model.train()
 
-                # if is_last_step:
-                #    test_msle = test(test_loader)
-                #    wandb.log({"test_msle": test_msle}, step=step)
-                #    model.train()
-
-                step += 1
+            step += 1
             if step > config.num_train_steps:
                 break
-            repeat_steps = 1
     wandb.finish()
 
 
