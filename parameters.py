@@ -43,11 +43,19 @@ def fit_para():
     lossfn = MeanAbsolutePercentageError().to(device)
 
     # Create the optimizer.
-    unitscale = torch.tensor([10.0, 10.0, 1e3, 1e-2, 1e4, 10.0, 10.0, 10.0, 10.0])
-    unitscale = unitscale.to(device)
-    para = torch.tensor(
-        [0.152, 0.323, 0.1889, 0.351, 0.28995, 0.125, 0.323, 0.251, 0.525]
+    unitscale = torch.tensor(
+        [
+            10.0,
+            10.0,
+            1e3,
+            1e-2,
+            1e4,
+            10.0,
+            10.0,
+        ]
     )
+    unitscale = unitscale.to(device)
+    para = torch.tensor([0.152, 0.323, 0.1889, 0.351, 0.28995, 0.125, 0.251])
     para = para.to(device)
     para.requires_grad_()
     optimizer = torch.optim.AdamW(
@@ -70,13 +78,13 @@ def fit_para():
     logging.info("Starting training.")
     for graphs in train_loader:
         graphs = graphs.to(device)
-        print(graphs)
+        # print(graphs)
         if graphs.InChI[0] in parameters:
             continue
-        print(f"for inchi: {graphs.InChI[0]}")
+        # print(f"for inchi: {graphs.InChI[0]}")
         loss = 2
         step = 1
-        while (loss > 0.5/100) & (step < 100):
+        while (loss > 1.0 / 100) & (step < 100):
             optimizer.zero_grad()
             pcsaft_params = para.abs() * unitscale + 1e-5
             pred = pcsaft_layer(pcsaft_params, graphs.rho)
@@ -94,7 +102,7 @@ def fit_para():
             step += 1
         if ~loss.isnan():
             parameters[graphs.InChI[0]] = [pcsaft_params.tolist(), loss.item()]
-        print(f"params: {pcsaft_params}")
+        # print(f"params: {pcsaft_params}")
         with open("./data/thermoml/processed/parameters.pkl", "wb") as file:
             # A new file will be created
             pickle.dump(parameters, file)
