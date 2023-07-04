@@ -168,8 +168,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
-            target = graphs.para.view(-1, 3)
-            loss = 1 - lossfn(pred, target)
+            target = graphs.para.view(-1, 3).to(model_dtype)
+            loss = lossfn(pred, target)
             loss.backward()
             optimizer.step()
             total_loss += [loss.item()]

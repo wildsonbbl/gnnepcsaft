@@ -21,7 +21,7 @@ def get_config():
     config.add_virtual_node = False
     config.add_undirected_edges = True
     config.add_self_loops = True
-    config.half_precision = True
+    config.half_precision = False
     config.momentum = 0.9
     config.patience = 100
     config.repeat_steps = 5
