@@ -98,9 +98,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     val_dataset = ThermoML_padded(val_dataset, config.pad_size)
     test_dataset = ThermoML_padded(test_dataset, 16)
 
-    val_loader = DataLoader(
-        val_dataset, batch_size=config.batch_size, shuffle=False
-    )
+    val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     train_dataset = ramirez("./data/ramirez2022")
@@ -170,7 +168,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
-            target = graphs.para
+            target = graphs.para.view(-1, 3)
             loss = 1 - lossfn(pred, target)
             loss.backward()
             optimizer.step()
