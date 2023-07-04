@@ -4,6 +4,7 @@ import torch
 from torch_geometric.data import InMemoryDataset
 from graph import from_InChI
 import pickle
+import polars as pl
 
 
 def BinaryGraph(InChI1: str, InChI2: str):
@@ -94,13 +95,9 @@ class ThermoMLDataset(InMemoryDataset):
 
     def process(self):
         datalist = []
-        print("### Loading dictionary of data ###")
+
         with open(self.raw_paths[0], "rb") as f:
             data_dict = pickle.load(f)
-        print(
-            f"Done!\n Whole dataset size = {len(data_dict)}"
-            f"\n### Starting to make graphs ###"
-        )
 
         for inchi in data_dict:
             if self.subset == "test":
@@ -178,7 +175,6 @@ class ThermoMLDataset(InMemoryDataset):
                     datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
-        print("### Done! ###")
 
 
 class ThermoML_padded(ds):
@@ -199,7 +195,7 @@ class ThermoML_padded(ds):
         if pad > self.pad:
             pad = self.pad
         vp = get_padded_array(vp, pad)
-        
+
         rho = sample.rho
         n = rho.shape[0]
         pad = _nearest_bigger_power_of_two(n)
@@ -230,9 +226,66 @@ def get_padded_array(states: torch.Tensor, pad_size: int = 2**10) -> torch.Tenso
     states = states.repeat(pad_size // states.shape[0] + 1, 1)
     return states[:pad_size, :]
 
+
 def _nearest_bigger_power_of_two(x: int) -> int:
     """Computes the nearest power of two greater than x for padding."""
     y = 2
     while y < x:
         y *= 2
     return y
+
+
+class ramirez(InMemoryDataset):
+
+    """
+    Molecular Graph dataset creator/manipulator.
+
+    PARAMETERS
+    ----------
+    root (str, optional) – Root directory where the dataset should be saved. (optional: None).
+
+    transform (callable, optional) – A function/transform that takes in an Data object and
+    returns a transformed version. The data object will be transformed
+    before every access. (default: None).
+
+    pre_transform (callable, optional) – A function/transform that takes in
+    an Data object and returns a transformed version. The data object will be
+    transformed before being saved to disk. (default: None).
+
+    pre_filter (callable, optional) – A function that takes in an Data object
+    and returns a boolean value, indicating whether the data object should be
+    included in the final dataset. (default: None).
+
+    log (bool, optional) – Whether to print any console output while downloading
+    and processing the dataset. (default: True).
+
+    """
+
+    def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
+        super().__init__(root, transform, pre_transform, pre_filter)
+        self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def raw_file_names(self):
+        return ["data.parquet"]
+
+    @property
+    def processed_file_names(self):
+        return ["graph_data.pt"]
+
+    def download(self):
+        return print("no url to download from")
+
+    def process(self):
+        datalist = []
+        data = pl.read_parquet(self.raw_paths[0])
+
+        for row in data.iter_rows():
+            inchi = row[-1]
+            para = row[3:6]
+            graph = from_InChI(inchi)
+
+            graph.para = torch.tensor(para)
+            datalist.append(graph)
+
+        torch.save(self.collate(datalist), self.processed_paths[0])

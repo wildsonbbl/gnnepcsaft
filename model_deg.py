@@ -2,13 +2,13 @@ import os.path as osp
 
 import torch
 
-from graphdataset import ThermoMLDataset
+from graphdataset import ThermoMLDataset, ramirez
 
 from torch_geometric.utils import degree
 
 from tqdm import tqdm
 
-train_dataset = ThermoMLDataset(root = './data/thermoml')
+train_dataset = ramirez("./data/ramirez2022")
 
 # Compute the maximum in-degree in the training data.
 max_degree = -1

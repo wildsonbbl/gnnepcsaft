@@ -15,10 +15,10 @@ import jax
 
 import wandb
 
-from graphdataset import ThermoMLDataset, ThermoML_padded
+from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
 
-deg = torch.tensor([228, 10738, 15049, 3228, 2083, 0, 34])
+deg = torch.tensor([78, 5572, 8525, 2569, 602, 1, 2])
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
@@ -92,29 +92,32 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         model_dtype = torch.float32
 
     path = osp.join("data", "thermoml")
-    train_dataset = ThermoMLDataset(path, subset="train")
+    val_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
-    train_dataset = ThermoML_padded(train_dataset, config.pad_size)
+    val_dataset = ThermoML_padded(val_dataset, config.pad_size)
     test_dataset = ThermoML_padded(test_dataset, 16)
 
-    train_loader = DataLoader(
-        train_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True
+    val_loader = DataLoader(
+        val_dataset, batch_size=config.batch_size, shuffle=False
     )
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+    train_dataset = ramirez("./data/ramirez2022")
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     if osp.exists("./data/thermoml/processed/parameters.pkl"):
         parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
         print(f"inchis saved: {len(parameters.keys())}")
     else:
         print("missing parameters.pkl")
-        
+
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config).to(device, model_dtype)
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
     pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
-    lossfn = HuberLoss('mean').to(device)
+    lossfn = HuberLoss("mean").to(device)
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
@@ -147,7 +150,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             parameters = model(graphs).to(torch.float64)
             pred_y = pcsaft_vp(parameters, datapoints)
             y = datapoints[:, -1]
-            loss = torch.square(pred_y-y).mean()
+            loss = torch.square(pred_y - y).mean()
             total_loss += [loss.item()]
 
         return torch.tensor(total_loss).nanmean().item()
@@ -167,8 +170,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
-            target = [parameters[inchi][0] for inchi in graphs.InChI]
-            target = torch.tensor(target).to(device)
+            target = graphs.para
             loss = 1 - lossfn(pred, target)
             loss.backward()
             optimizer.step()
@@ -177,9 +179,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             scheduler.step()
 
             # Quick indication that training is happening.
-            logging.log_first_n(
-                logging.INFO, "Finished training step %d.", 10, step
-            )
+            logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
 
             # Log, if required.
             is_last_step = step == config.num_train_steps - 1

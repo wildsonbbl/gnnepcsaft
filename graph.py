@@ -96,7 +96,7 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
 
     RDLogger.DisableLog('rdApp.*')
 
-    mol = Chem.MolFromInchi(InChI)
+    mol = Chem.MolFromInchi(InChI, sanitize=False)
 
     if mol is None:
         mol = Chem.MolFromInchi('')
