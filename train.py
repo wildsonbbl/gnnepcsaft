@@ -12,6 +12,7 @@ import torch
 from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.loader import DataLoader
+from torchmetrics import MeanAbsolutePercentageError
 
 import ml_pc_saft
 import jax
@@ -94,17 +95,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     else:
         model_dtype = torch.float32
 
-    path = osp.join("data", "thermoml")
+    path = osp.join(workdir, "data/thermoml")
     val_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
     val_dataset = ThermoML_padded(val_dataset, config.pad_size)
-    test_dataset = ThermoML_padded(test_dataset, 16)
+    test_dataset = ThermoML_padded(test_dataset, config.pad_size)
 
-    val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    train_dataset = ramirez("./data/ramirez2022")
+    path = osp.join(workdir, "data/ramirez2022")
+    train_dataset = ramirez(path)
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     if osp.exists("./data/thermoml/processed/parameters.pkl"):
@@ -119,12 +121,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
     pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
     lossfn = HuberLoss("mean").to(device)
+    mape = MeanAbsolutePercentageError().to(device)
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
 
     # Set up checkpointing of the model.
-    ckp_path = "./training/last_checkpoint.pth"
+    ckp_path = osp.join(workdir, "training/last_checkpoint.pth")
     initial_step = 1
     if osp.exists(ckp_path):
         checkpoint = torch.load(ckp_path)
@@ -142,16 +145,23 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     def test(loader):
         model.eval()
         total_loss = []
-        pad_size = config.pad_size
-        para = config.num_para
         for graphs in loader:
             graphs = graphs.to(device)
-            datapoints = graphs.vp.view(-1, 5)
+            datapoints = graphs.rho.view(-1, 5)
             datapoints = datapoints.to(device)
             parameters = model(graphs).to(torch.float64)
-            pred_y = pcsaft_vp(parameters, datapoints)
+            pred_y = pcsaft_den(parameters, datapoints)
             y = datapoints[:, -1]
-            loss = torch.square(pred_y - y).mean()
+            if torch.all(
+                graphs.vp.view(-1, 5) != torch.zeros_like(graphs.vp.view(-1, 5))
+            ):
+                datapoints = graphs.vp.view(-1, 5)
+                datapoints = datapoints.to(device)
+                pred_y_vp = pcsaft_vp(parameters, datapoints)
+                y_vp = datapoints[:, -1]
+                pred_y = torch.concat([pred_y, pred_y_vp])
+                y = torch.concat([y, y_vp])
+            loss = mape(pred_y, y)
             total_loss += [loss.item()]
 
         return torch.tensor(total_loss).nanmean().item()
@@ -226,29 +236,30 @@ def savemodel(model, optimizer, path, step):
         path,
     )
 
+
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('workdir', None, 'Directory to store model data.')
+flags.DEFINE_string("workdir", None, "Directory to store model data.")
 config_flags.DEFINE_config_file(
-    'config',
+    "config",
     None,
-    'File path to the training hyperparameter configuration.',
-    lock_config=True)
+    "File path to the training hyperparameter configuration.",
+    lock_config=True,
+)
 
 
 def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+    if len(argv) > 1:
+        raise app.UsageError("Too many command-line arguments.")
 
-  
-  logging.info('JAX host: %d / %d', jax.process_index(), jax.process_count())
-  logging.info('JAX local devices: %r', jax.local_devices())
-  
-  logging.info('Calling train and evaluate')
+    logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
+    logging.info("JAX local devices: %r", jax.local_devices())
 
-  train_and_evaluate(FLAGS.config, FLAGS.workdir)
+    logging.info("Calling train and evaluate")
+
+    train_and_evaluate(FLAGS.config, FLAGS.workdir)
 
 
-if __name__ == '__main__':
-  flags.mark_flags_as_required(['config', 'workdir'])
-  app.run(main)
+if __name__ == "__main__":
+    flags.mark_flags_as_required(["config", "workdir"])
+    app.run(main)

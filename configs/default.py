@@ -7,15 +7,15 @@ def get_config():
 
     # Optimizer.
     config.optimizer = "sgd"
-    config.learning_rate = 1e-7
+    config.learning_rate = 1e-3
 
     # Training hyperparameters.
-    config.pre_train = False
-    config.batch_size = 8
+    
+    config.batch_size = 128
     config.pad_size = 128
     config.num_train_steps = 6_000
-    config.warmup_steps = 50
-    config.log_every_steps = 10
+    config.warmup_steps = 100
+    config.log_every_steps = 100
     config.eval_every_steps = 2_000
     config.checkpoint_every_steps = 3_000
     config.add_virtual_node = False
@@ -24,7 +24,7 @@ def get_config():
     config.half_precision = False
     config.momentum = 0.9
     config.patience = 100
-    config.repeat_steps = 5
+    
 
     # GNN hyperparameters.
     config.model = "PNA"
@@ -32,7 +32,7 @@ def get_config():
     config.hidden_dim = 256
     config.dropout_rate = 0.1
     config.num_mlp_layers = 1
-    config.num_para = 9
+    config.num_para = 3
     config.skip_connections = True
     config.layer_norm = True
     config.pre_layers = 1

@@ -13,6 +13,7 @@ import torch
 from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.loader import DataLoader
+from torchmetrics import MeanAbsolutePercentageError
 
 import ml_pc_saft
 import jax
@@ -84,7 +85,7 @@ def train_and_evaluate(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     platform = jax.local_devices()[0].platform
-    # Create writer for logs.
+
     config.propagation_depth = config_tuner["propagation_depth"]
     config.hidden_dim = config_tuner["hidden_dim"]
     config.num_mlp_layers = config_tuner["num_mlp_layers"]
@@ -117,6 +118,7 @@ def train_and_evaluate(
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
     pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
     lossfn = HuberLoss("mean").to(device)
+    mape = MeanAbsolutePercentageError().to(device)
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
@@ -130,16 +132,23 @@ def train_and_evaluate(
     def test(loader):
         model.eval()
         total_loss = []
-        pad_size = config.pad_size
-        para = config.num_para
         for graphs in loader:
             graphs = graphs.to(device)
-            datapoints = graphs.vp.view(-1, 5)
+            datapoints = graphs.rho.view(-1, 5)
             datapoints = datapoints.to(device)
             parameters = model(graphs).to(torch.float64)
-            pred_y = pcsaft_vp(parameters, datapoints)
+            pred_y = pcsaft_den(parameters, datapoints)
             y = datapoints[:, -1]
-            loss = torch.square(pred_y - y).mean()
+            if torch.all(
+                graphs.vp.view(-1, 5) != torch.zeros_like(graphs.vp.view(-1, 5))
+            ):
+                datapoints = graphs.vp.view(-1, 5)
+                datapoints = datapoints.to(device)
+                pred_y_vp = pcsaft_vp(parameters, datapoints)
+                y_vp = datapoints[:, -1]
+                pred_y = torch.concat([pred_y, pred_y_vp])
+                y = torch.concat([y, y_vp])
+            loss = mape(pred_y, y)
             total_loss += [loss.item()]
 
         return torch.tensor(total_loss).nanmean().item()
