@@ -2,6 +2,7 @@ import os.path as osp
 from absl import app
 from absl import flags
 from ml_collections import config_flags
+from functools import partial
 
 from absl import logging
 import ml_collections
@@ -16,10 +17,12 @@ from torch_geometric.loader import DataLoader
 import ml_pc_saft
 import jax
 
-import wandb
-
 from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
+
+from ray import tune
+from ray.air import Checkpoint, session
+from ray.tune.schedulers import ASHAScheduler
 
 deg = torch.tensor([78, 5572, 8525, 2569, 602, 1, 2])
 
@@ -68,7 +71,9 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
+def train_and_evaluate(
+    config_tuner: dict, config: ml_collections.ConfigDict, workdir: str
+):
     """Execute model training and evaluation loop.
 
     Args:
@@ -79,16 +84,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     platform = jax.local_devices()[0].platform
     # Create writer for logs.
-    wandb.login()
-    run = wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-    )
+    config.propagation_depth = config_tuner["propagation_depth"]
+    config.hidden_dim = config_tuner["hidden_dim"]
+    config.num_mlp_layers = config_tuner["num_mlp_layers"]
+    config.pre_layers = config_tuner["pre_layers"]
+    config.post_layers = config_tuner["post_layers"]
 
     # Get datasets, organized by split.
-    logging.info("Obtaining datasets.")
+
     if config.half_precision:
         model_dtype = torch.float16
     else:
@@ -107,14 +110,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     train_dataset = ramirez("./data/ramirez2022")
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
-    if osp.exists("./data/thermoml/processed/parameters.pkl"):
-        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
-        print(f"inchis saved: {len(parameters.keys())}")
-    else:
-        print("missing parameters.pkl")
-
-    # Create and initialize the network.
-    logging.info("Initializing network.")
     model = create_model(config).to(device, model_dtype)
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
     pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
@@ -124,14 +119,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     optimizer = create_optimizer(config, model.parameters())
 
     # Set up checkpointing of the model.
-    ckp_path = "./training/last_checkpoint.pth"
-    initial_step = 1
-    if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        step = checkpoint["step"]
-        initial_step = int(step) + 1
+    checkpoint = session.get_checkpoint()
+
+    if checkpoint:
+        checkpoint_state = checkpoint.to_dict()
+        initial_step = checkpoint_state["step"]
+        model.load_state_dict(checkpoint_state["model_state_dict"])
+        optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
+    else:
+        initial_step = 1
 
     # Scheduler
     warm_up = config.warmup_steps
@@ -157,7 +153,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         return torch.tensor(total_loss).nanmean().item()
 
     # Begin training loop.
-    logging.info("Starting training.")
     step = initial_step
     total_loss = []
     lr = []
@@ -179,76 +174,76 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             lr += scheduler.get_last_lr()
             scheduler.step()
 
-            # Quick indication that training is happening.
-            logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
+            # Log
+            if step % config.log_every_steps:
+                checkpoint_data = {
+                    "step": step,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                }
+                checkpoint = Checkpoint.from_dict(checkpoint_data)
 
-            # Log, if required.
-            is_last_step = step == config.num_train_steps - 1
-            if step % config.log_every_steps == 0 or is_last_step:
-                wandb.log(
-                    {
-                        "train_HuberLoss": torch.tensor(total_loss).mean().item(),
-                        "train_lr": torch.tensor(lr).mean().item(),
-                    },
-                    step=step,
+                session.report(
+                    {"train_HuberLoss": torch.tensor(total_loss).mean().item()},
+                    checkpoint=checkpoint,
                 )
-                total_loss = []
-                lr = []
-
-            # Checkpoint model, if required.
-            if step % config.checkpoint_every_steps == 0 or is_last_step:
-                savemodel(model, optimizer, ckp_path, step)
-
-            # Evaluate on validation or test, if required.
-            # if step % config.eval_every_steps == 0 or (is_last_step):
-            #    test_msle = test(val_loader)
-            #    wandb.log({"val_msle": test_msle}, step=step)
-            #    model.train()
-
-            # if is_last_step:
-            #    test_msle = test(test_loader)
-            #    wandb.log({"test_msle": test_msle}, step=step)
-            #    model.train()
 
             step += 1
             if step > config.num_train_steps:
                 break
-    wandb.finish()
 
-
-def savemodel(model, optimizer, path, step):
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "step": step,
-        },
-        path,
-    )
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('workdir', None, 'Directory to store model data.')
+flags.DEFINE_string("workdir", None, "Directory to store model data.")
 config_flags.DEFINE_config_file(
-    'config',
+    "config",
     None,
-    'File path to the training hyperparameter configuration.',
-    lock_config=True)
+    "File path to the training hyperparameter configuration.",
+    lock_config=True,
+)
 
 
 def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+    if len(argv) > 1:
+        raise app.UsageError("Too many command-line arguments.")
 
-  
-  logging.info('JAX host: %d / %d', jax.process_index(), jax.process_count())
-  logging.info('JAX local devices: %r', jax.local_devices())
-  
-  logging.info('Calling train and evaluate')
+    logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
+    logging.info("JAX local devices: %r", jax.local_devices())
 
-  train_and_evaluate(FLAGS.config, FLAGS.workdir)
+    logging.info("Calling tuner")
+
+    ptrain = partial(train_and_evaluate, config=FLAGS.config, workdir=FLAGS.workdir)
+    config = {
+        "propagation_depth": tune.choice([3, 4, 5, 6, 7]),
+        "hidden_dim": tune.choice([64, 128, 256, 512]),
+        "num_mlp_layers": tune.choice([1, 2, 3]),
+        "pre_layers": tune.choice([1, 2, 3]),
+        "post_layers": tune.choice([1, 2, 3]),
+    }
+    scheduler = ASHAScheduler(
+        metric="train_HuberLoss",
+        mode="min",
+        max_t=60,
+        grace_period=10,
+        reduction_factor=2,
+    )
+
+    result = tune.run(
+        ptrain,
+        resources_per_trial={"cpu": 8, "gpu": 1},
+        scheduler=scheduler,
+        config=config,
+        num_samples=20,
+    )
+
+    best_trial = result.get_best_trial("train_HuberLoss", "min", "last")
+    print(f"Best trial config: {best_trial.config}")
+    print(
+        f"Best trial final validation loss: {best_trial.last_result['train_HuberLoss']}"
+    )
 
 
-if __name__ == '__main__':
-  flags.mark_flags_as_required(['config', 'workdir'])
-  app.run(main)
+if __name__ == "__main__":
+    flags.mark_flags_as_required(["config", "workdir"])
+    app.run(main)
