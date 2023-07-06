@@ -21,6 +21,7 @@ from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
 
 from ray import tune
+import ray
 from ray.air import Checkpoint, session
 from ray.tune.schedulers import ASHAScheduler
 
@@ -97,7 +98,8 @@ def train_and_evaluate(
     else:
         model_dtype = torch.float32
 
-    path = "./data/thermoml"
+    #workdir = osp.abspath(workdir)
+    path = osp.join(workdir, 'data/thermoml')
     val_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
@@ -107,7 +109,8 @@ def train_and_evaluate(
     val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    train_dataset = ramirez("./data/ramirez2022")
+    path = osp.join(workdir, 'data/ramirez2022')
+    train_dataset = ramirez(path)
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     model = create_model(config).to(device, model_dtype)
@@ -206,14 +209,16 @@ def main(argv):
         reduction_factor=2,
     )
 
+    ray.init(num_gpus=1)
+
     result = tune.run(
         ptrain,
-        resources_per_trial={"cpu": 8, "gpu": 1},
+        resources_per_trial={"cpu": 4, "gpu": 1},
         scheduler=scheduler,
         config=config,
         num_samples=20,
         storage_path="./ray",
-        verbose=1,
+        verbose=3,
     )
 
     best_trial = result.get_best_trial("train_HuberLoss", "min", "last")
