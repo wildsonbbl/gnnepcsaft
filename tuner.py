@@ -20,7 +20,7 @@ import jax
 from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
 
-from ray import tune
+from ray import tune, air
 import ray
 from ray.air import Checkpoint, session
 from ray.tune.schedulers import ASHAScheduler
@@ -98,8 +98,8 @@ def train_and_evaluate(
     else:
         model_dtype = torch.float32
 
-    #workdir = osp.abspath(workdir)
-    path = osp.join(workdir, 'data/thermoml')
+    # workdir = osp.abspath(workdir)
+    path = osp.join(workdir, "data/thermoml")
     val_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
@@ -109,7 +109,7 @@ def train_and_evaluate(
     val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    path = osp.join(workdir, 'data/ramirez2022')
+    path = osp.join(workdir, "data/ramirez2022")
     train_dataset = ramirez(path)
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
@@ -194,7 +194,7 @@ def main(argv):
     logging.info("Calling tuner")
 
     ptrain = partial(train_and_evaluate, config=FLAGS.config, workdir=FLAGS.workdir)
-    config = {
+    search_space = {
         "propagation_depth": tune.choice([3, 4, 5, 6, 7]),
         "hidden_dim": tune.choice([64, 128, 256, 512]),
         "num_mlp_layers": tune.choice([1, 2, 3]),
@@ -211,21 +211,22 @@ def main(argv):
 
     ray.init(num_gpus=1)
 
-    result = tune.run(
-        ptrain,
-        resources_per_trial={"cpu": 4, "gpu": 1},
-        scheduler=scheduler,
-        config=config,
-        num_samples=20,
-        storage_path="./ray",
-        verbose=3,
+    tuner = tune.Tuner(
+        tune.with_resources(
+            tune.with_parameters(ptrain), resources={"cpu": 8, "gpu": 1}
+        ),
+        param_space=search_space,
+        tune_config=tune.TuneConfig(
+            scheduler=scheduler, time_budget_s=21000, num_samples=-1
+        ),
+        run_config=air.RunConfig(storage_path="./ray", verbose=1),
     )
 
-    best_trial = result.get_best_trial("train_HuberLoss", "min", "last")
+    result = tuner.fit()
+
+    best_trial = result.get_best_result()
     print(f"Best trial config: {best_trial.config}")
-    print(
-        f"Best trial final validation loss: {best_trial.last_result['train_HuberLoss']}"
-    )
+    print(f"Best trial final loss: {best_trial.metrics_dataframe}")
 
 
 if __name__ == "__main__":
