@@ -97,7 +97,7 @@ def train_and_evaluate(
     else:
         model_dtype = torch.float32
 
-    path = osp.join("data", "thermoml")
+    path = "./data/thermoml"
     val_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
@@ -117,17 +117,6 @@ def train_and_evaluate(
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
-
-    # Set up checkpointing of the model.
-    checkpoint = session.get_checkpoint()
-
-    if checkpoint:
-        checkpoint_state = checkpoint.to_dict()
-        initial_step = checkpoint_state["step"]
-        model.load_state_dict(checkpoint_state["model_state_dict"])
-        optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])
-    else:
-        initial_step = 1
 
     # Scheduler
     warm_up = config.warmup_steps
@@ -153,10 +142,8 @@ def train_and_evaluate(
         return torch.tensor(total_loss).nanmean().item()
 
     # Begin training loop.
-    step = initial_step
-    total_loss = []
+    step = 1
     lr = []
-
     model.train()
     unitscale = torch.tensor(
         [[1.0, 1.0, 1.0e2, 1.0e-3, 1.0e3, 1.0, 1.0, 1.0, 1.0]], device=device
@@ -170,23 +157,13 @@ def train_and_evaluate(
             loss = lossfn(pred, target)
             loss.backward()
             optimizer.step()
-            total_loss += [loss.item()]
             lr += scheduler.get_last_lr()
             scheduler.step()
 
             # Log
-            if step % config.log_every_steps:
-                checkpoint_data = {
-                    "step": step,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                }
-                checkpoint = Checkpoint.from_dict(checkpoint_data)
-
-                session.report(
-                    {"train_HuberLoss": torch.tensor(total_loss).mean().item()},
-                    checkpoint=checkpoint,
-                )
+            session.report(
+                {"train_HuberLoss": loss.item()},
+            )
 
             step += 1
             if step > config.num_train_steps:
@@ -224,8 +201,8 @@ def main(argv):
     scheduler = ASHAScheduler(
         metric="train_HuberLoss",
         mode="min",
-        max_t=60,
-        grace_period=10,
+        max_t=6000,
+        grace_period=1000,
         reduction_factor=2,
     )
 
@@ -235,6 +212,8 @@ def main(argv):
         scheduler=scheduler,
         config=config,
         num_samples=20,
+        storage_path="./ray",
+        verbose=1,
     )
 
     best_trial = result.get_best_trial("train_HuberLoss", "min", "last")
