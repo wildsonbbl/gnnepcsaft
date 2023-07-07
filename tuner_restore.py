@@ -155,7 +155,7 @@ def train_and_evaluate(
 
     # Begin training loop.
     step = 1
-    lr = []
+    total_loss = []
     model.train()
     unitscale = torch.tensor(
         [[1.0, 1.0, 1.0e2, 1.0e-3, 1.0e3, 1.0, 1.0, 1.0, 1.0]], device=device
@@ -169,12 +169,13 @@ def train_and_evaluate(
             loss = lossfn(pred, target)
             loss.backward()
             optimizer.step()
-            lr += scheduler.get_last_lr()
+            total_loss += [loss.item()]
             scheduler.step()
 
             # Log
-            session.report(
-                {"train_HuberLoss": loss.item()},
+            if step % config.log_every_steps == 0:
+                session.report(
+                {"train_HuberLoss": torch.tensor(total_loss).mean().item()},
             )
 
             step += 1
@@ -227,11 +228,11 @@ def main(argv):
         )
     )
 
-    result = tuner.get_results()
+    result = tuner.fit()
 
     best_trial = result.get_best_result(metric="train_HuberLoss", mode="min",)
-    print(f"Best trial config: {best_trial.config}")
-    print(f"Best trial final loss: {best_trial.metrics_dataframe}")
+    print(f"\nBest trial config:\n {best_trial.config}")
+    print(f"\nBest trial final metrics:\n {best_trial.metrics}")
 
 
 if __name__ == "__main__":
