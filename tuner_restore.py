@@ -220,18 +220,14 @@ def main(argv):
 
     ray.init(num_gpus=1)
 
-    tuner = tune.Tuner(
+    tuner = tune.Tuner.restore(
+        "./ray/tune_with_parameters_2023-07-06_23-07-53", 
         tune.with_resources(
             tune.with_parameters(ptrain), resources={"cpu": 8, "gpu": 1}
-        ),
-        param_space=search_space,
-        tune_config=tune.TuneConfig(
-            scheduler=scheduler, time_budget_s=21000, num_samples=-1
-        ),
-        run_config=air.RunConfig(storage_path="./ray", verbose=1),
+        )
     )
 
-    result = tuner.fit()
+    result = tuner.get_results()
 
     best_trial = result.get_best_result(metric="train_HuberLoss", mode="min",)
     print(f"Best trial config: {best_trial.config}")
