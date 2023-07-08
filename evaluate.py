@@ -106,7 +106,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             graphs = graphs.to(device)
             datapoints = graphs.rho.view(-1, 5)
             datapoints = datapoints.to(device, torch.float64)
-            parameters = model(graphs)
+            para = model(graphs).squeeze()
+            parameters = torch.zeros(7)
+            parameters[:para.shape[0]] = para
             pred_y = pcsaft_den(parameters, datapoints)
             y = datapoints[:, -1]
             loss = mape(pred_y, y)
@@ -131,7 +133,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
                 continue
             datapoints = graphs.vp.view(-1, 5)
             datapoints = datapoints.to(device, torch.float64)
-            parameters = model(graphs)
+            para = model(graphs).squeeze()
+            parameters = torch.zeros(7)
+            parameters[:para.shape[0]] = para
             pred_y = pcsaft_vp(parameters, datapoints)
             y = datapoints[:, -1]
             loss = mape(pred_y, y)
