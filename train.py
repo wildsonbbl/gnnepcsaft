@@ -149,7 +149,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             graphs = graphs.to(device)
             datapoints = graphs.rho.view(-1, 5)
             datapoints = datapoints.to(device)
-            parameters = model(graphs).to(torch.float64)
+            parameters = model(graphs)
             pred_y = pcsaft_den(parameters, datapoints)
             y = datapoints[:, -1]
             if torch.all(
