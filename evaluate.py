@@ -29,13 +29,7 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     """Creates a Flax model, as specified by the config."""
     platform = jax.local_devices()[0].platform
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if config.half_precision:
-        if platform == "tpu":
-            model_dtype = torch.bfloat16
-        else:
-            model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
+    model_dtype = torch.float64
     if config.model == "PNA":
         return models.PNA(
             hidden_dim=config.hidden_dim,
