@@ -157,8 +157,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             "val_mape_den": val_mape_den,
             "test_mape_vp": test_mape_vp,
             "val_mape_vp": val_mape_vp,
-        },
-        step=1,
+        }
     )
 
     wandb.finish()
@@ -182,7 +181,7 @@ def main(argv):
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging.info("JAX local devices: %r", jax.local_devices())
 
-    logging.info("Calling train and evaluate")
+    logging.info("Calling evaluate")
 
     evaluate(FLAGS.config, FLAGS.workdir)
 
