@@ -100,19 +100,24 @@ def train_and_evaluate(
         model_dtype = torch.float32
 
     # workdir = osp.abspath(workdir)
-    path = osp.join(workdir, "data/thermoml")
-    val_dataset = ThermoMLDataset(path, subset="train")
+    train_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
-    val_dataset = ThermoML_padded(val_dataset, config.pad_size)
-    test_dataset = ThermoML_padded(test_dataset, 16)
+    train_dataset = ThermoML_padded(val_dataset, config.pad_size)
+    test_dataset = ThermoML_padded(test_dataset, config.pad_size)
 
-    val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     path = osp.join(workdir, "data/ramirez2022")
-    train_dataset = ramirez(path)
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+    #train_dataset = ramirez(path)
+    #train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+
+    if osp.exists("./data/thermoml/processed/parameters.pkl"):
+        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
+        print(f"inchis saved: {len(parameters.keys())}")
+    else:
+        print("missing parameters.pkl")
 
     model = create_model(config).to(device, model_dtype)
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
@@ -157,15 +162,13 @@ def train_and_evaluate(
     step = 1
     total_loss = []
     model.train()
-    unitscale = torch.tensor(
-        [[1.0, 1.0, 1.0e2, 1.0e-3, 1.0e3, 1.0, 1.0, 1.0, 1.0]], device=device
-    )
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
+            target = [parameters[inchi] for inchi in graphs.InChI]
+            target = torch.tensor(target, device = device, dtype = model_dtype)
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
-            target = graphs.para.view(-1, 3).to(model_dtype)
             loss = lossfn(pred, target)
             loss.backward()
             optimizer.step()

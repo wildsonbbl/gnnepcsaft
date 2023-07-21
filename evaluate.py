@@ -69,21 +69,22 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     logging.info("Obtaining datasets.")
     model_dtype = torch.float64
 
-    path = osp.join(workdir, "data/thermoml")
-    val_dataset = ThermoMLDataset(path, subset="train")
-    test_dataset = ThermoMLDataset(path, subset="test")
-
-    val_dataset = ThermoML_padded(val_dataset, config.pad_size)
-    test_dataset = ThermoML_padded(test_dataset, config.pad_size)
-
-    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    path = osp.join(workdir, "data/ramirez2022")
+    dataset = ramirez(path)
+    loader = DataLoader(dataset, batch_size=1, shuffle=True)
 
     if osp.exists("./data/thermoml/processed/parameters.pkl"):
         parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
         print(f"inchis saved: {len(parameters.keys())}")
     else:
         print("missing parameters.pkl")
+    
+    randn = torch.rand(128)
+    temperature = 283.15 * (1.0 - randn) + 423.15 * randn
+    pressure = 50662.5 * (1.0 - randn) + 506625 * randn
+    phase = fntype = torch.ones(128)
+    datapoints = torch.stack([temperature, pressure, phase, fntype], dim=1)
+    datapoints = datapoints.to(device, torch.float64)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -99,18 +100,24 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # test fn
     @torch.no_grad()
-    def test_den(loader):
+    def test_den(test='test'):
         model.eval()
         total_loss = []
         for graphs in loader:
+            if test == "test":
+                if (graphs.InChI[0] in parameters):
+                    continue
+            else:
+                if (graphs.InChI[0] not in parameters):
+                    continue
+            ref_para = graphs.para
+            ref_zeros = torch.zeros(4)
+            ref_para = torch.cat([ref_para, ref_zeros], 0)
+            ref_para = ref_para.to(device)
             graphs = graphs.to(device)
-            datapoints = graphs.rho.view(-1, 5)
-            datapoints = datapoints.to(device, torch.float64)
-            para = model(graphs).squeeze()
-            parameters = torch.zeros(7, device=device)
-            parameters[: para.shape[0]] = para
-            pred_y = pcsaft_den(parameters, datapoints)
-            y = datapoints[:, -1]
+            target_para = model(graphs).squeeze()
+            pred_y = pcsaft_den(target_para, datapoints)
+            y = pcsaft_den(ref_para, datapoints)
             loss = mape(pred_y, y)
             wandb.log(
                 {
@@ -121,42 +128,14 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
         return torch.tensor(total_loss).nanmean().item()
 
-    @torch.no_grad()
-    def test_vp(loader):
-        model.eval()
-        total_loss = []
-        for graphs in loader:
-            graphs = graphs.to(device)
-            if torch.all(
-                graphs.vp.view(-1, 5) == torch.zeros_like(graphs.vp.view(-1, 5))
-            ):
-                continue
-            datapoints = graphs.vp.view(-1, 5)
-            datapoints = datapoints.to(device, torch.float64)
-            para = model(graphs).squeeze()
-            parameters = torch.zeros(7, device=device)
-            parameters[: para.shape[0]] = para
-            pred_y = pcsaft_vp(parameters, datapoints)
-            y = datapoints[:, -1]
-            loss = mape(pred_y, y)
-            wandb.log(
-                {
-                    "mape_vp": loss.item(),
-                },
-            )
-            total_loss += [loss.item()]
-
-        return torch.tensor(total_loss).nanmean().item()
-
     # Evaluate on validation or test, if required.
-    val_mape_den = test_den(val_loader)
-    val_mape_vp = test_vp(val_loader)
-    test_mape_vp = test_vp(test_loader)
+    val_mape_den = test_den("val")
+    test_mape_den = test_den("test")
+
     wandb.log(
         {
             "val_mape_den": val_mape_den,
-            "test_mape_vp": test_mape_vp,
-            "val_mape_vp": val_mape_vp,
+            "test_mape_den": test_mape_den
         }
     )
 
