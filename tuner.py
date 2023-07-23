@@ -26,7 +26,7 @@ import ray
 from ray.air import Checkpoint, session
 from ray.tune.schedulers import ASHAScheduler
 
-deg = torch.tensor([78, 5572, 8525, 2569, 602, 1, 2])
+deg = torch.tensor([228, 10903, 14978, 3205, 2177, 0, 34])
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
@@ -93,25 +93,25 @@ def train_and_evaluate(
     config.post_layers = config_tuner["post_layers"]
 
     # Get datasets, organized by split.
-
+    logging.info("Obtaining datasets.")
     if config.half_precision:
         model_dtype = torch.float16
     else:
         model_dtype = torch.float32
 
-    # workdir = osp.abspath(workdir)
+    path = osp.join(workdir, "data/thermoml")
     train_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
-    train_dataset = ThermoML_padded(val_dataset, config.pad_size)
+    train_dataset = ThermoML_padded(train_dataset, config.pad_size)
     test_dataset = ThermoML_padded(test_dataset, config.pad_size)
 
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     path = osp.join(workdir, "data/ramirez2022")
-    #train_dataset = ramirez(path)
-    #train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+    # train_dataset = ramirez(path)
+    # train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     if osp.exists("./data/thermoml/processed/parameters.pkl"):
         parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
@@ -119,14 +119,20 @@ def train_and_evaluate(
     else:
         print("missing parameters.pkl")
 
+    # Create and initialize the network.
+    logging.info("Initializing network.")
     model = create_model(config).to(device, model_dtype)
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
     pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
-    lossfn = HuberLoss("mean").to(device)
+    HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
+
+    # Set up checkpointing of the model.
+    ckp_path = osp.join(workdir, "training/last_checkpoint.pth")
+    initial_step = 1
 
     # Scheduler
     warm_up = config.warmup_steps
@@ -141,7 +147,7 @@ def train_and_evaluate(
             graphs = graphs.to(device)
             datapoints = graphs.rho.view(-1, 5)
             datapoints = datapoints.to(device)
-            parameters = model(graphs).to(torch.float64)
+            parameters = model(graphs)
             pred_y = pcsaft_den(parameters, datapoints)
             y = datapoints[:, -1]
             if torch.all(
@@ -159,17 +165,20 @@ def train_and_evaluate(
         return torch.tensor(total_loss).nanmean().item()
 
     # Begin training loop.
-    step = 1
+    logging.info("Starting training.")
+    step = initial_step
     total_loss = []
+    lr = []
+
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = [parameters[inchi] for inchi in graphs.InChI]
-            target = torch.tensor(target, device = device, dtype = model_dtype)
+            target = [parameters[inchi][0] for inchi in graphs.InChI]
+            target = torch.tensor(target, device=device, dtype=model_dtype)
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
-            loss = lossfn(pred, target)
+            loss = mape(pred, target)
             loss.backward()
             optimizer.step()
             total_loss += [loss.item()]
@@ -178,7 +187,7 @@ def train_and_evaluate(
             # Log
             if step % config.log_every_steps == 0:
                 session.report(
-                {"train_HuberLoss": torch.tensor(total_loss).mean().item()},
+                {"train_mape": torch.tensor(total_loss).mean().item()},
             )
 
             step += 1
@@ -215,7 +224,7 @@ def main(argv):
         "post_layers": tune.choice([1, 2, 3]),
     }
     scheduler = ASHAScheduler(
-        metric="train_HuberLoss",
+        metric="train_mape",
         mode="min",
         max_t=6000,
         grace_period=1000,
@@ -237,7 +246,7 @@ def main(argv):
 
     result = tuner.fit()
 
-    best_trial = result.get_best_result(metric="train_HuberLoss", mode="min",)
+    best_trial = result.get_best_result(metric="train_mape", mode="min",)
     print(f"\nBest trial config:\n {best_trial.config}")
     print(f"\nBest trial final metrics:\n {best_trial.metrics}")
 
