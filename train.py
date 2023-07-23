@@ -132,7 +132,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     if osp.exists(ckp_path):
         checkpoint = torch.load(ckp_path)
         model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        #optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
 

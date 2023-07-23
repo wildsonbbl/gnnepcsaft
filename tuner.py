@@ -112,9 +112,10 @@ def train_and_evaluate(
     path = osp.join(workdir, "data/ramirez2022")
     # train_dataset = ramirez(path)
     # train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    if osp.exists("./data/thermoml/processed/parameters.pkl"):
-        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
+    
+    para_path = osp.join(workdir, "data/thermoml/processed/parameters.pkl")
+    if osp.exists(para_path):
+        parameters = pickle.load(open(para_path, "rb"))
         print(f"inchis saved: {len(parameters.keys())}")
     else:
         print("missing parameters.pkl")
@@ -241,7 +242,7 @@ def main(argv):
         tune_config=tune.TuneConfig(
             scheduler=scheduler, time_budget_s=21000, num_samples=-1
         ),
-        run_config=air.RunConfig(storage_path="./ray", verbose=1),
+        run_config=air.RunConfig(storage_path="./ray", verbose=0),
     )
 
     result = tuner.fit()
