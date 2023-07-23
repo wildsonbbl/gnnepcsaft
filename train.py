@@ -99,7 +99,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     train_dataset = ThermoMLDataset(path, subset="train")
     test_dataset = ThermoMLDataset(path, subset="test")
 
-    train_dataset = ThermoML_padded(val_dataset, config.pad_size)
+    train_dataset = ThermoML_padded(train_dataset, config.pad_size)
     test_dataset = ThermoML_padded(test_dataset, config.pad_size)
 
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
@@ -175,7 +175,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = [parameters[inchi] for inchi in graphs.InChI]
+            target = [parameters[inchi][0] for inchi in graphs.InChI]
             target = torch.tensor(target, device = device, dtype = model_dtype)
             graphs = graphs.to(device)
             optimizer.zero_grad()
