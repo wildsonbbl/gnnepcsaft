@@ -198,7 +198,7 @@ def train_and_evaluate(
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("workdir", None, "Directory to store model data.")
+flags.DEFINE_string("workdir", None, "Working Directory")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -227,8 +227,8 @@ def main(argv):
     scheduler = ASHAScheduler(
         metric="train_mape",
         mode="min",
-        max_t=6000,
-        grace_period=1000,
+        max_t=60,
+        grace_period=10,
         reduction_factor=2,
     )
 
@@ -240,7 +240,7 @@ def main(argv):
         ),
         param_space=search_space,
         tune_config=tune.TuneConfig(
-            scheduler=scheduler, time_budget_s=21000, num_samples=-1
+            scheduler=scheduler, num_samples=100
         ),
         run_config=air.RunConfig(storage_path="./ray", verbose=0),
     )

@@ -237,7 +237,7 @@ def savemodel(model, optimizer, path, step):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("workdir", None, "Directory to store model data.")
+flags.DEFINE_string("workdir", None, "Working Directory.")
 config_flags.DEFINE_config_file(
     "config",
     None,

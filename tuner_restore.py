@@ -112,9 +112,10 @@ def train_and_evaluate(
     path = osp.join(workdir, "data/ramirez2022")
     # train_dataset = ramirez(path)
     # train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    if osp.exists("./data/thermoml/processed/parameters.pkl"):
-        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
+    
+    para_path = osp.join(workdir, "data/thermoml/processed/parameters.pkl")
+    if osp.exists(para_path):
+        parameters = pickle.load(open(para_path, "rb"))
         print(f"inchis saved: {len(parameters.keys())}")
     else:
         print("missing parameters.pkl")
@@ -197,7 +198,8 @@ def train_and_evaluate(
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("workdir", None, "Directory to store model data.")
+flags.DEFINE_string("workdir", None, "Working Directory.")
+flags.DEFINE_string("restoredir", None, "Directory where data was stored.")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -226,18 +228,19 @@ def main(argv):
     scheduler = ASHAScheduler(
         metric="train_mape",
         mode="min",
-        max_t=6000,
-        grace_period=1000,
+        max_t=60,
+        grace_period=10,
         reduction_factor=2,
     )
 
     ray.init(num_gpus=1)
 
     tuner = tune.Tuner.restore(
-        "./ray/tune_with_parameters_2023-07-06_23-07-53", 
+        FLAGS.restoredir, 
         tune.with_resources(
             tune.with_parameters(ptrain), resources={"cpu": 8, "gpu": 1}
-        )
+        ),
+        resume_unfinished = True, resume_errored = False, restart_errored = True,
     )
 
     result = tuner.fit()
@@ -248,5 +251,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["config", "workdir"])
+    flags.mark_flags_as_required(["config", "workdir", "restoredir"])
     app.run(main)
