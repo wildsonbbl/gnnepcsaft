@@ -91,6 +91,8 @@ def train_and_evaluate(
     config.num_mlp_layers = config_tuner["num_mlp_layers"]
     config.pre_layers = config_tuner["pre_layers"]
     config.post_layers = config_tuner["post_layers"]
+    config.patience = config_tuner["patience"]
+    config.warmup_steps = config_tuner["warmup_steps"]
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -139,7 +141,7 @@ def train_and_evaluate(
     warm_up = config.warmup_steps
     scheduler1 = CosineAnnealingWarmRestarts(optimizer, warm_up)
     scheduler2 = ReduceLROnPlateau(optimizer, patience = config.patience)
-    scheduler = ChainedScheduler([scheduler1, scheduler2])
+    
 
     # test fn
     @torch.no_grad()
@@ -185,7 +187,8 @@ def train_and_evaluate(
             loss.backward()
             optimizer.step()
             total_loss += [loss.item()]
-            scheduler.step()
+            scheduler1.step()
+            scheduler2.step(metrics=loss)
 
             # Log
             if step % config.log_every_steps == 0:
@@ -225,12 +228,14 @@ def main(argv):
         "num_mlp_layers": tune.choice([1, 2, 3]),
         "pre_layers": tune.choice([1, 2, 3]),
         "post_layers": tune.choice([1, 2, 3]),
+        "patience": tune.choice([10, 20, 50, 100]),
+        "warmup_steps": tune.choice([10, 50, 100, 200]),
     }
     scheduler = ASHAScheduler(
         metric="train_mape",
         mode="min",
-        max_t=60,
-        grace_period=10,
+        max_t=100,
+        grace_period=30,
         reduction_factor=2,
     )
 
