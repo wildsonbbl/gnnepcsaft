@@ -140,7 +140,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     warm_up = config.warmup_steps
     scheduler1 = CosineAnnealingWarmRestarts(optimizer, warm_up)
     scheduler2 = ReduceLROnPlateau(optimizer, patience = config.patience)
-    scheduler = ChainedScheduler([scheduler1, scheduler2])
 
     # test fn
     @torch.no_grad()
@@ -186,8 +185,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             loss.backward()
             optimizer.step()
             total_loss += [loss.item()]
-            lr += scheduler.get_last_lr()
-            scheduler.step()
+            lr += scheduler1.get_last_lr()
+            scheduler1.step()
+            scheduler2.step(metrics=loss)
 
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
