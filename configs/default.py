@@ -23,7 +23,7 @@ def get_config():
     config.add_self_loops = True
     config.half_precision = False
     config.momentum = 0.9
-    config.patience = 100
+    config.patience = 1000
     
 
     # GNN hyperparameters.

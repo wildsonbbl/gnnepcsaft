@@ -10,7 +10,7 @@ import models
 
 import torch
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau, ChainedScheduler
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
@@ -138,7 +138,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # Scheduler
     warm_up = config.warmup_steps
-    scheduler = CosineAnnealingWarmRestarts(optimizer, warm_up)
+    scheduler1 = CosineAnnealingWarmRestarts(optimizer, warm_up)
+    scheduler2 = ReduceLROnPlateau(optimizer, patience = config.patience)
+    scheduler = ChainedScheduler([scheduler1, scheduler2])
 
     # test fn
     @torch.no_grad()
