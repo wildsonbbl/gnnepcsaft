@@ -22,7 +22,7 @@ import wandb
 from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
 
-deg = torch.tensor([78, 5572, 8525, 2569, 602, 1, 2])
+deg = torch.tensor([228, 10903, 14978, 3205, 2177, 0, 34])
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
@@ -71,7 +71,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     path = osp.join(workdir, "data/ramirez2022")
     dataset = ramirez(path)
-    loader = DataLoader(dataset, batch_size=1, shuffle=True)
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     if osp.exists("./data/thermoml/processed/parameters.pkl"):
         parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
@@ -115,8 +115,8 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             ref_para = torch.cat([ref_para, ref_zeros], 0)
             ref_para = ref_para.to(device)
             graphs = graphs.to(device)
-            target_para = model(graphs).squeeze()
-            pred_y = pcsaft_den(target_para, datapoints)
+            pred_para = model(graphs).squeeze()
+            pred_y = pcsaft_den(pred_para, datapoints)
             y = pcsaft_den(ref_para, datapoints)
             loss = mape(pred_y, y)
             wandb.log(
