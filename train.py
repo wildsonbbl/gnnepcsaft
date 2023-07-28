@@ -170,7 +170,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Begin training loop.
     logging.info("Starting training.")
     step = initial_step
-    total_loss = []
+    total_loss_mape = []
+    total_loss_huber = []
     lr = []
 
     model.train()
@@ -181,13 +182,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
-            loss = mape(pred, target)
-            loss.backward()
+            loss_mape = mape(pred, target)
+            loss_huber = HLoss(pred, target)
+            loss_huber.backward()
             optimizer.step()
-            total_loss += [loss.item()]
+            total_loss_mape += [loss_mape.item()]
+            total_loss_huber += [loss_huber.item()]
             lr += scheduler1.get_last_lr()
             scheduler1.step()
-            scheduler2.step(metrics=loss)
+            scheduler2.step(metrics=loss_huber)
 
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
@@ -197,12 +200,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             if step % config.log_every_steps == 0 or is_last_step:
                 wandb.log(
                     {
-                        "train_mape": torch.tensor(total_loss).mean().item(),
+                        "train_mape": torch.tensor(total_loss_mape).mean().item(),
+                        "train_huber": torch.tensor(total_loss_huber).mean().item(),
                         "train_lr": torch.tensor(lr).mean().item(),
                     },
                     step=step,
                 )
-                total_loss = []
+                total_loss_mape = []
+                total_loss_huber = []
                 lr = []
 
             # Checkpoint model, if required.

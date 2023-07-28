@@ -172,7 +172,8 @@ def train_and_evaluate(
     # Begin training loop.
     logging.info("Starting training.")
     step = initial_step
-    total_loss = []
+    total_loss_mape = []
+    total_loss_huber = []
     lr = []
 
     model.train()
@@ -183,18 +184,26 @@ def train_and_evaluate(
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
-            loss = mape(pred, target)
-            loss.backward()
+            loss_mape = mape(pred, target)
+            loss_huber = HLoss(pred, target)
+            loss_huber.backward()
             optimizer.step()
-            total_loss += [loss.item()]
+            total_loss_mape += [loss_mape.item()]
+            total_loss_huber += [loss_huber.item()]
             scheduler1.step()
-            scheduler2.step(metrics=loss)
-
+            scheduler2.step(metrics=loss_huber)
             # Log
             if step % config.log_every_steps == 0:
                 session.report(
-                {"train_mape": torch.tensor(total_loss).mean().item()},
+                {
+                        "train_mape": torch.tensor(total_loss_mape).mean().item(),
+                        "train_huber": torch.tensor(total_loss_huber).mean().item(),
+                        "train_lr": torch.tensor(lr).mean().item(),
+                    },
             )
+                total_loss_mape = []
+                total_loss_huber = []
+                lr = []
 
             step += 1
             if step > config.num_train_steps:
