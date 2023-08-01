@@ -8,7 +8,7 @@ from torch_geometric.utils import degree
 
 from tqdm import tqdm
 
-train_dataset = ThermoMLDataset(root = './data/thermoml')
+train_dataset = ramirez(root = './data/ramirez2022')
 
 # Compute the maximum in-degree in the training data.
 max_degree = -1

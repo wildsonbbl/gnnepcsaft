@@ -26,7 +26,7 @@ import ray
 from ray.air import Checkpoint, session
 from ray.tune.schedulers import ASHAScheduler
 
-deg = torch.tensor([228, 10903, 14978, 3205, 2177, 0, 34])
+from model_deg import deg
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
@@ -91,7 +91,6 @@ def train_and_evaluate(
     config.num_mlp_layers = config_tuner["num_mlp_layers"]
     config.pre_layers = config_tuner["pre_layers"]
     config.post_layers = config_tuner["post_layers"]
-    config.patience = config_tuner["patience"]
     config.warmup_steps = config_tuner["warmup_steps"]
 
     # Get datasets, organized by split.
@@ -101,26 +100,9 @@ def train_and_evaluate(
     else:
         model_dtype = torch.float32
 
-    path = osp.join(workdir, "data/thermoml")
-    train_dataset = ThermoMLDataset(path, subset="train")
-    test_dataset = ThermoMLDataset(path, subset="test")
-
-    train_dataset = ThermoML_padded(train_dataset, config.pad_size)
-    test_dataset = ThermoML_padded(test_dataset, config.pad_size)
-
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-
     path = osp.join(workdir, "data/ramirez2022")
-    # train_dataset = ramirez(path)
-    # train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    
-    para_path = osp.join(workdir, "data/thermoml/processed/parameters.pkl")
-    if osp.exists(para_path):
-        parameters = pickle.load(open(para_path, "rb"))
-        print(f"inchis saved: {len(parameters.keys())}")
-    else:
-        print("missing parameters.pkl")
+    train_dataset = ramirez(path)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -138,35 +120,7 @@ def train_and_evaluate(
     initial_step = 1
 
     # Scheduler
-    warm_up = config.warmup_steps
-    scheduler1 = CosineAnnealingWarmRestarts(optimizer, warm_up)
-    scheduler2 = ReduceLROnPlateau(optimizer, patience = config.patience)
-
-    # test fn
-    @torch.no_grad()
-    def test(loader):
-        model.eval()
-        total_loss = []
-        for graphs in loader:
-            graphs = graphs.to(device)
-            datapoints = graphs.rho.view(-1, 5)
-            datapoints = datapoints.to(device)
-            parameters = model(graphs)
-            pred_y = pcsaft_den(parameters, datapoints)
-            y = datapoints[:, -1]
-            if torch.all(
-                graphs.vp.view(-1, 5) != torch.zeros_like(graphs.vp.view(-1, 5))
-            ):
-                datapoints = graphs.vp.view(-1, 5)
-                datapoints = datapoints.to(device)
-                pred_y_vp = pcsaft_vp(parameters, datapoints)
-                y_vp = datapoints[:, -1]
-                pred_y = torch.concat([pred_y, pred_y_vp])
-                y = torch.concat([y, y_vp])
-            loss = mape(pred_y, y)
-            total_loss += [loss.item()]
-
-        return torch.tensor(total_loss).nanmean().item()
+    scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
 
     # Begin training loop.
     logging.info("Starting training.")
@@ -178,19 +132,19 @@ def train_and_evaluate(
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = [parameters[inchi][0] for inchi in graphs.InChI]
-            target = torch.tensor(target, device=device, dtype=model_dtype)
+            target = graphs.para.to(device, model_dtype).view(-1, 3)
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
             loss_mape = mape(pred, target)
             loss_huber = HLoss(pred, target)
-            loss_huber.backward()
+            loss_mape.backward()
             optimizer.step()
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
-            scheduler1.step()
-            scheduler2.step(metrics=loss_huber)
+            lr += scheduler.get_last_lr()
+            scheduler.step()
+            
             # Log
             if step % config.log_every_steps == 0:
                 session.report(

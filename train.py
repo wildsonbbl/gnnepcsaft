@@ -22,7 +22,7 @@ import wandb
 from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
 
-deg = torch.tensor([228, 10903, 14978, 3205, 2177, 0, 34])
+from model_deg import deg
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
@@ -95,25 +95,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     else:
         model_dtype = torch.float32
 
-    path = osp.join(workdir, "data/thermoml")
-    train_dataset = ThermoMLDataset(path, subset="train")
-    test_dataset = ThermoMLDataset(path, subset="test")
-
-    train_dataset = ThermoML_padded(train_dataset, config.pad_size)
-    test_dataset = ThermoML_padded(test_dataset, config.pad_size)
-
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-
     path = osp.join(workdir, "data/ramirez2022")
-    # train_dataset = ramirez(path)
-    # train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    if osp.exists("./data/thermoml/processed/parameters.pkl"):
-        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
-        print(f"inchis saved: {len(parameters.keys())}")
-    else:
-        print("missing parameters.pkl")
+    train_dataset = ramirez(path)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -132,40 +116,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     if osp.exists(ckp_path):
         checkpoint = torch.load(ckp_path)
         model.load_state_dict(checkpoint["model_state_dict"])
-        #optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
 
     # Scheduler
-    warm_up = config.warmup_steps
-    scheduler1 = CosineAnnealingWarmRestarts(optimizer, warm_up)
-    scheduler2 = ReduceLROnPlateau(optimizer, patience = config.patience)
-
-    # test fn
-    @torch.no_grad()
-    def test(loader):
-        model.eval()
-        total_loss = []
-        for graphs in loader:
-            graphs = graphs.to(device)
-            datapoints = graphs.rho.view(-1, 5)
-            datapoints = datapoints.to(device)
-            parameters = model(graphs)
-            pred_y = pcsaft_den(parameters, datapoints)
-            y = datapoints[:, -1]
-            if torch.all(
-                graphs.vp.view(-1, 5) != torch.zeros_like(graphs.vp.view(-1, 5))
-            ):
-                datapoints = graphs.vp.view(-1, 5)
-                datapoints = datapoints.to(device)
-                pred_y_vp = pcsaft_vp(parameters, datapoints)
-                y_vp = datapoints[:, -1]
-                pred_y = torch.concat([pred_y, pred_y_vp])
-                y = torch.concat([y, y_vp])
-            loss = mape(pred_y, y)
-            total_loss += [loss.item()]
-
-        return torch.tensor(total_loss).nanmean().item()
+    scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
 
     # Begin training loop.
     logging.info("Starting training.")
@@ -177,20 +133,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = [parameters[inchi][0] for inchi in graphs.InChI]
-            target = torch.tensor(target, device=device, dtype=model_dtype)
+            target = graphs.para.to(device, model_dtype).view(-1, 3)
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
             loss_mape = mape(pred, target)
             loss_huber = HLoss(pred, target)
-            loss_huber.backward()
+            loss_mape.backward()
             optimizer.step()
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
-            lr += scheduler1.get_last_lr()
+            lr += scheduler.get_last_lr()
             scheduler1.step()
-            scheduler2.step(metrics=loss_huber)
 
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
