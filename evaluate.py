@@ -22,7 +22,7 @@ import wandb
 from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
 
-deg = torch.tensor([228, 10903, 14978, 3205, 2177, 0, 34])
+from model_deg import deg
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
@@ -69,22 +69,15 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     logging.info("Obtaining datasets.")
     model_dtype = torch.float64
 
-    path = osp.join(workdir, "data/ramirez2022")
-    dataset = ramirez(path)
-    loader = DataLoader(dataset, batch_size=1, shuffle=False)
+    path = osp.join(workdir, "data/thermoml")
+    dataset = ThermoMLDataset(path)
+    dataset = ThermoML_padded(dataset=dataset, pad_size=config.pad_size)
+    test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
+    train_loader = DataLoader(ramirez("./data/ramirez2022"), batch_size=1, shuffle=False)
 
-    if osp.exists("./data/thermoml/processed/parameters.pkl"):
-        parameters = pickle.load(open("./data/thermoml/processed/parameters.pkl", "rb"))
-        print(f"inchis saved: {len(parameters.keys())}")
-    else:
-        print("missing parameters.pkl")
-    
-    randn = torch.rand(128)
-    temperature = 283.15 * (1.0 - randn) + 423.15 * randn
-    pressure = 50662.5 * (1.0 - randn) + 506625 * randn
-    phase = fntype = torch.ones(128)
-    datapoints = torch.stack([temperature, pressure, phase, fntype], dim=1)
-    datapoints = datapoints.to(device, torch.float64)
+    ra_data = {}
+    for graph in train_loader:
+        ra_data[graph.InChI[0]] = graph.para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -103,21 +96,18 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     def test_den(test='test'):
         model.eval()
         total_loss = []
-        for graphs in loader:
-            if test == "test":
-                if (graphs.InChI[0] in parameters):
+        for graphs in test_loader:
+            if test == 'test':
+                if graphs.InChI[0] in ra_data:
                     continue
-            else:
-                if (graphs.InChI[0] not in parameters):
+            if test == "val":
+                if graphs.InChI[0] not in ra_data:
                     continue
-            ref_para = graphs.para
-            ref_zeros = torch.zeros(4)
-            ref_para = torch.cat([ref_para, ref_zeros], 0)
-            ref_para = ref_para.to(device)
+            datapoints = graphs.rho.view(-1, 5).to(device, model_dtype)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze()
             pred_y = pcsaft_den(pred_para, datapoints)
-            y = pcsaft_den(ref_para, datapoints)
+            y = datapoints[:, -1]
             loss = mape(pred_y, y)
             wandb.log(
                 {
