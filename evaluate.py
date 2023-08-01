@@ -73,7 +73,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     dataset = ThermoMLDataset(path)
     dataset = ThermoML_padded(dataset=dataset, pad_size=config.pad_size)
     test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
-    train_loader = DataLoader(ramirez("./data/ramirez2022"), batch_size=1, shuffle=False)
+    train_loader = DataLoader(
+        ramirez("./data/ramirez2022"), batch_size=1, shuffle=False
+    )
 
     ra_data = {}
     for graph in train_loader:
@@ -84,6 +86,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     model = create_model(config).to(device, model_dtype)
     pcsaft_den = ml_pc_saft.PCSAFT_den.apply
     pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
+    HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
 
     # Set up checkpointing of the model.
@@ -93,11 +96,12 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # test fn
     @torch.no_grad()
-    def test_den(test='test'):
+    def test_den(test="test"):
         model.eval()
-        total_loss = []
+        total_loss_mape = []
+        total_loss_huber = []
         for graphs in test_loader:
-            if test == 'test':
+            if test == "test":
                 if graphs.InChI[0] in ra_data:
                     continue
             if test == "val":
@@ -106,26 +110,34 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             datapoints = graphs.rho.view(-1, 5).to(device, model_dtype)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze()
-            pred_y = pcsaft_den(pred_para, datapoints)
-            y = datapoints[:, -1]
-            loss = mape(pred_y, y)
+            pred = pcsaft_den(pred_para, datapoints)
+            target = datapoints[:, -1]
+            loss_mape = mape(pred, target)
+            loss_huber = HLoss(pred, target)
             wandb.log(
                 {
-                    "mape_den": loss.item(),
+                    "mape_den": loss_mape.item(),
+                    "huber_den": loss_huber.item(),
                 },
             )
-            total_loss += [loss.item()]
+            total_loss_mape += [loss_mape.item()]
+            total_loss_huber += [loss_huber.item()]
 
-        return torch.tensor(total_loss).nanmean().item()
+        return (
+            torch.tensor(total_loss_mape).nanmean().item(),
+            torch.tensor(total_loss_huber).nanmean().item(),
+        )
 
     # Evaluate on validation or test, if required.
-    val_mape_den = test_den("val")
-    test_mape_den = test_den("test")
+    val_mape_den, val_huber_den = test_den("val")
+    test_mape_den, test_huber_den = test_den("test")
 
     wandb.log(
         {
             "val_mape_den": val_mape_den,
-            "test_mape_den": test_mape_den
+            "val_huber_den": val_huber_den,
+            "test_huber_den": test_huber_den,
+            "test_mape_den": test_mape_den,
         }
     )
 

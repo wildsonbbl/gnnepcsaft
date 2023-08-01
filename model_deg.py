@@ -21,5 +21,3 @@ deg = torch.zeros(max_degree + 1, dtype=torch.int32)
 for data in tqdm(train_dataset, 'data: ', len(train_dataset)):
     d = degree(data.edge_index[1].to(torch.int64), num_nodes=data.num_nodes, dtype=torch.int32)
     deg += torch.bincount(d, minlength=deg.numel())
-
-print(deg)
