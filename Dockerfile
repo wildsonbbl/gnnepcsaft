@@ -10,8 +10,6 @@ ENV PYTHONUNBUFFERED=1
 
 # Install requirements
 RUN pip install --upgrade pip
-RUN pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-1.12.1+cu116.html
 RUN pip install rdkit torchmetrics ml-collections polars clu jraph jaxopt
 RUN pip install -U "ray[tune]"
 RUN pip install torch_geometric
-
