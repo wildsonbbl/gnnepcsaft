@@ -1286,6 +1286,9 @@ def pcsaft_VP(
         Vapor Pressure (Pa)
     """
 
+    p_guess = vp_pguess(
+        x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
+    )
     pref = p_guess - 0.01 * p_guess
 
     pprime = jax.lax.cond(
@@ -1347,3 +1350,71 @@ def pcsaft_VP(
     p = 1.0 / (1.0 / pref + (np.log(1.0) - A) / B)
 
     return p.squeeze()
+
+
+def vp_pguess(
+    x, m, s, e, t, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc
+):
+    ki_vmap = jax.vmap(
+        k_i,
+        in_axes=(
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ),
+    )
+
+    p_guess = 10.0 ** np.arange(-6, 9, 0.05)
+    phases = np.asarray([[1.0, 0.0]]).repeat(p_guess.shape[0], axis=0)
+
+    ki = ki_vmap(
+        p_guess,
+        x,
+        m,
+        s,
+        e,
+        t,
+        k_ij,
+        l_ij,
+        khb_ij,
+        e_assoc,
+        vol_a,
+        dipm,
+        dip_num,
+        z,
+        dielc,
+    )
+    nul = np.zeros_like(ki) * np.nan
+
+    nul = jax.lax.fori_loop(
+        0,
+        nul.shape[0] - 1,
+        lambda i, nul: jax.lax.cond(
+            (ki[i + 1] <= 1.0)
+            & (np.isfinite(ki[i + 1]))
+            & (ki[i] > 1.0)
+            & (np.isfinite(ki[i])),
+            lambda i, nul: nul.at[i].set(ki[i]),
+            lambda i, nul: nul,
+            i,
+            nul,
+        ),
+        nul,
+    )
+    idx = np.nanargmax(nul)
+
+    #print(p_guess[idx - 1 : idx + 2], ki[idx - 5 : idx + 5], sep="\n")
+
+    return p_guess[idx]

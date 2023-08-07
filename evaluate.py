@@ -58,12 +58,6 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     platform = jax.local_devices()[0].platform
     # Create writer for logs.
     wandb.login()
-    run = wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-    )
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -127,7 +121,49 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             torch.tensor(total_loss_mape).nanmean().item(),
             torch.tensor(total_loss_huber).nanmean().item(),
         )
+    
+    @torch.no_grad()
+    def test_vp(test="test"):
+        model.eval()
+        total_loss_mape = []
+        total_loss_huber = []
+        for graphs in test_loader:
+            if test == "test":
+                if graphs.InChI[0] in ra_data:
+                    continue
+            if test == "val":
+                if graphs.InChI[0] not in ra_data:
+                    continue
+            datapoints = graphs.vp.view(-1, 5).to(device, model_dtype)
+            if torch.all(datapoints == torch.zeros_like(datapoints)):
+                continue
+            graphs = graphs.to(device)
+            pred_para = model(graphs).squeeze()
+            pred = pcsaft_vp(pred_para, datapoints)
+            target = datapoints[:, -1]
+            pred_filter = pred.isnan()
+            loss_mape = mape(pred[~pred_filter], target[~pred_filter])
+            loss_huber = HLoss(pred[~pred_filter], target[~pred_filter])
+            wandb.log(
+                {
+                    "mape_vp": loss_mape.item(),
+                    "huber_vp": loss_huber.item(),
+                },
+            )
+            total_loss_mape += [loss_mape.item()]
+            total_loss_huber += [loss_huber.item()]
 
+        return (
+            torch.tensor(total_loss_mape).nanmean().item(),
+            torch.tensor(total_loss_huber).nanmean().item(),
+        )
+
+    run = wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=config.to_dict(),
+    )
     # Evaluate on validation or test, if required.
     val_mape_den, val_huber_den = test_den("val")
     test_mape_den, test_huber_den = test_den("test")
@@ -138,6 +174,27 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             "val_huber_den": val_huber_den,
             "test_huber_den": test_huber_den,
             "test_mape_den": test_mape_den,
+        }
+    )
+
+    wandb.finish()
+
+    run = wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=config.to_dict(),
+    )
+    # Evaluate on validation or test, if required.
+    val_mape_vp, val_huber_vp = test_vp("val")
+    test_mape_vp, test_huber_vp = test_vp("test")
+
+    wandb.log(
+        {
+            "val_mape_vp": val_mape_vp,
+            "val_huber_vp": val_huber_vp,
+            "test_huber_vp": test_huber_vp,
+            "test_mape_vp": test_mape_vp,
         }
     )
 
