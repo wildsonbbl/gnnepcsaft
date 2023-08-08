@@ -10,25 +10,23 @@ import models
 
 import torch
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
-import ml_pc_saft
+import epcsaft_cython
 import jax
 
 import wandb
 
 from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
-import pickle
 
 from model_deg import deg
 
+device = "cpu"
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     """Creates a Flax model, as specified by the config."""
     platform = jax.local_devices()[0].platform
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_dtype = torch.float64
     if config.model == "PNA":
         return models.PNAPCSAFT(
@@ -51,11 +49,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     Args:
       config: Hyperparameter configuration for training and evaluation.
-      workdir: Directory where the TensorBoard summaries are written to.
+      workdir: Working Directory .
     """
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    platform = jax.local_devices()[0].platform
     # Create writer for logs.
     wandb.login()
 
@@ -65,7 +61,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     path = osp.join(workdir, "data/thermoml")
     dataset = ThermoMLDataset(path)
-    dataset = ThermoML_padded(dataset=dataset, pad_size=config.pad_size)
+    dataset = ThermoML_padded(dataset=dataset, pad_size = 4096 * 2)
     test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
     train_loader = DataLoader(
         ramirez("./data/ramirez2022"), batch_size=1, shuffle=False
@@ -78,8 +74,8 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config).to(device, model_dtype)
-    pcsaft_den = ml_pc_saft.PCSAFT_den.apply
-    pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
+    pcsaft_den = epcsaft_cython.PCSAFT_den.apply
+    pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
 
@@ -101,7 +97,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             if test == "val":
                 if graphs.InChI[0] not in ra_data:
                     continue
-            datapoints = graphs.rho.view(-1, 5).to(device, model_dtype)
+            datapoints = graphs.rho.to(device, model_dtype)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze()
             pred = pcsaft_den(pred_para, datapoints)
@@ -134,16 +130,16 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             if test == "val":
                 if graphs.InChI[0] not in ra_data:
                     continue
-            datapoints = graphs.vp.view(-1, 5).to(device, model_dtype)
+            datapoints = graphs.vp.to(device, model_dtype)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
                 continue
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze()
             pred = pcsaft_vp(pred_para, datapoints)
             target = datapoints[:, -1]
-            pred_filter = pred.isnan()
-            loss_mape = mape(pred[~pred_filter], target[~pred_filter])
-            loss_huber = HLoss(pred[~pred_filter], target[~pred_filter])
+            result_filter = ~torch.isnan(pred)
+            loss_mape = mape(pred[result_filter], target[result_filter])
+            loss_huber = HLoss(pred[result_filter], target[result_filter])
             wandb.log(
                 {
                     "mape_vp": loss_mape.item(),
