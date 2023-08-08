@@ -10,11 +10,15 @@ import models
 
 import torch
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau, ChainedScheduler
+from torch.optim.lr_scheduler import (
+    CosineAnnealingWarmRestarts,
+    ReduceLROnPlateau,
+    ChainedScheduler,
+)
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
-import ml_pc_saft
+import epcsaft_cython
 import jax
 
 import wandb
@@ -26,7 +30,7 @@ from model_deg import deg
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
-    """Creates a Flax model, as specified by the config."""
+    """Creates a model, as specified by the config."""
     platform = jax.local_devices()[0].platform
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if config.half_precision:
@@ -74,7 +78,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     Args:
       config: Hyperparameter configuration for training and evaluation.
-      workdir: Directory where the TensorBoard summaries are written to.
+      workdir: Working Directory.
     """
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -99,11 +103,20 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     train_dataset = ramirez(path)
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
+    test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+    test_dataset = ThermoML_padded(test_dataset, 4096 * 2)
+    test_loader = DataLoader(test_dataset)
+
+    ra_data = {}
+    for graph in train_loader:
+        for inchi, para in zip(graph.InChI, graph.para):
+            ra_data[inchi] = para
+
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config).to(device, model_dtype)
-    pcsaft_den = ml_pc_saft.PCSAFT_den.apply
-    pcsaft_vp = ml_pc_saft.PCSAFT_vp.apply
+    pcsaft_den = epcsaft_cython.PCSAFT_den.apply
+    pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
 
@@ -122,7 +135,49 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-    #scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
+    # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
+
+    @torch.no_grad()
+    def test(test="test"):
+        model.eval()
+        total_mape_den = []
+        total_huber_den = []
+        total_mape_vp = []
+        total_huber_vp = []
+        for graphs in test_loader:
+            if test == "test":
+                if graphs.InChI[0] in ra_data:
+                    continue
+            if test == "val":
+                if graphs.InChI[0] not in ra_data:
+                    continue
+            datapoints = graphs.rho.to("cpu", model_dtype)
+            graphs = graphs.to(device)
+            pred_para = model(graphs).squeeze().to("cpu")
+            pred = pcsaft_den(pred_para, datapoints)
+            target = datapoints[:, -1]
+            loss_mape = mape(pred, target)
+            loss_huber = HLoss(pred, target)
+            total_mape_den += [loss_mape.item()]
+            total_huber_den += [loss_huber.item()]
+
+            datapoints = graphs.vp.to(device, model_dtype)
+            if torch.all(datapoints == torch.zeros_like(datapoints)):
+                continue
+            pred = pcsaft_vp(pred_para, datapoints)
+            target = datapoints[:, -1]
+            result_filter = ~torch.isnan(pred)
+            loss_mape = mape(pred[result_filter], target[result_filter])
+            loss_huber = HLoss(pred[result_filter], target[result_filter])
+            total_mape_vp += [loss_mape.item()]
+            total_huber_vp += [loss_huber.item()]
+
+        return (
+            torch.tensor(total_mape_den).nanmean().item(),
+            torch.tensor(total_huber_den).nanmean().item(),
+            torch.tensor(total_mape_vp).nanmean().item(),
+            torch.tensor(total_huber_vp).nanmean().item(),
+        )
 
     # Begin training loop.
     logging.info("Starting training.")
@@ -169,16 +224,19 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             if step % config.checkpoint_every_steps == 0 or is_last_step:
                 savemodel(model, optimizer, ckp_path, step)
 
-            # Evaluate on validation or test, if required.
-            # if step % config.eval_every_steps == 0 or (is_last_step):
-            #    test_msle = test(val_loader)
-            #    wandb.log({"val_msle": test_msle}, step=step)
-            #    model.train()
-
-            # if is_last_step:
-            #    test_msle = test(test_loader)
-            #    wandb.log({"test_msle": test_msle}, step=step)
-            #    model.train()
+            # Evaluate on validation.
+            if step % config.eval_every_steps == 0 or (is_last_step):
+                mape_den, huber_den, mape_vp, huber_vp = test(test="val")
+                wandb.log(
+                    {
+                        "mape_den": mape_den,
+                        "huber_den": huber_den,
+                        "mape_vp": mape_vp,
+                        "huber_vp": huber_vp,
+                    },
+                    step=step,
+                )
+                model.train()
 
             step += 1
             if step > config.num_train_steps:
