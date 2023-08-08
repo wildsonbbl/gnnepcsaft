@@ -114,7 +114,7 @@ def train_and_evaluate(
 
     ra_data = {}
     for graph in train_loader:
-        for inchi, para in zip(graph.InChI, graph.para.view(-1,3)):
+        for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
             ra_data[inchi] = para
 
     # Create and initialize the network.
@@ -149,9 +149,9 @@ def train_and_evaluate(
             if test == "val":
                 if graphs.InChI[0] not in ra_data:
                     continue
-            datapoints = graphs.rho.to("cpu", model_dtype).view(-1,5)
+            datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
             graphs = graphs.to(device)
-            pred_para = model(graphs).squeeze().to("cpu")
+            pred_para = model(graphs).squeeze().to("cpu", torch.float64)
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1]
             loss_mape = mape(pred, target)
@@ -159,7 +159,7 @@ def train_and_evaluate(
             total_mape_den += [loss_mape.item()]
             total_huber_den += [loss_huber.item()]
 
-            datapoints = graphs.vp.to(device, model_dtype).view(-1,5).to("cpu")
+            datapoints = graphs.vp.to("cpu", torch.float64).view(-1, 5)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
                 continue
             pred = pcsaft_vp(pred_para, datapoints)
@@ -187,7 +187,7 @@ def train_and_evaluate(
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = graphs.para.to(device, model_dtype).view(-1,3)
+            target = graphs.para.to(device, model_dtype).view(-1, 3)
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
@@ -226,6 +226,7 @@ def train_and_evaluate(
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory")
+flags.DEFINE_string("restoredir", None, "Restore Directory")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -261,15 +262,23 @@ def main(argv):
     )
 
     ray.init(num_gpus=1)
+    resources = {"cpu": 8, "gpu": 1}
 
-    tuner = tune.Tuner(
-        tune.with_resources(
-            tune.with_parameters(ptrain), resources={"cpu": 8, "gpu": 1}
-        ),
-        param_space=search_space,
-        tune_config=tune.TuneConfig(scheduler=scheduler, num_samples=100),
-        run_config=air.RunConfig(storage_path="./ray", verbose=1),
-    )
+    if FLAGS.restoredir:
+        tuner = tune.Tuner.restore(
+            FLAGS.restoredir,
+            tune.with_resources(tune.with_parameters(ptrain), resources=resources),
+            resume_unfinished=True,
+            resume_errored=False,
+            restart_errored=True,
+        )
+    else:
+        tuner = tune.Tuner(
+            tune.with_resources(tune.with_parameters(ptrain), resources=resources),
+            param_space=search_space,
+            tune_config=tune.TuneConfig(scheduler=scheduler, num_samples=100),
+            run_config=air.RunConfig(storage_path="./ray", verbose=1),
+        )
 
     result = tuner.fit()
 
@@ -282,5 +291,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["config", "workdir"])
+    flags.mark_flags_as_required(["config", "workdir", "restoredir"])
     app.run(main)

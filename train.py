@@ -109,7 +109,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     ra_data = {}
     for graph in train_loader:
-        for inchi, para in zip(graph.InChI, graph.para):
+        for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
             ra_data[inchi] = para
 
     # Create and initialize the network.
@@ -151,9 +151,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             if test == "val":
                 if graphs.InChI[0] not in ra_data:
                     continue
-            datapoints = graphs.rho.to("cpu", model_dtype)
+            datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
             graphs = graphs.to(device)
-            pred_para = model(graphs).squeeze().to("cpu")
+            pred_para = model(graphs).squeeze().to("cpu", torch.float64)
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1]
             loss_mape = mape(pred, target)
@@ -161,7 +161,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             total_mape_den += [loss_mape.item()]
             total_huber_den += [loss_huber.item()]
 
-            datapoints = graphs.vp.to(device, model_dtype)
+            datapoints = graphs.vp.to("cpu", torch.float64).view(-1, 5)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
                 continue
             pred = pcsaft_vp(pred_para, datapoints)
