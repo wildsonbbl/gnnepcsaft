@@ -109,7 +109,7 @@ def train_and_evaluate(
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-    test_dataset = ThermoML_padded(test_dataset, 4096 * 2)
+    test_dataset = ThermoML_padded(test_dataset, 32)
     test_loader = DataLoader(test_dataset)
 
     ra_data = {}
@@ -246,8 +246,10 @@ def main(argv):
     logging.info(f"config file below: \n{FLAGS.config}")
 
     logging.info("Calling tuner")
+    
+    config = FLAGS.config
 
-    ptrain = partial(train_and_evaluate, config=FLAGS.config, workdir=FLAGS.workdir)
+    ptrain = partial(train_and_evaluate, config=config, workdir=FLAGS.workdir)
     search_space = {
         "propagation_depth": tune.choice([3, 4, 5, 6, 7]),
         "hidden_dim": tune.choice([64, 128, 256, 512]),
@@ -256,11 +258,13 @@ def main(argv):
         "post_layers": tune.choice([1, 2, 3]),
         "warmup_steps": tune.choice([100, 500, 1000, 2000]),
     }
+    max_t = config.num_train_steps // config.log_every_steps
+    grace_period = max_t // 3
     scheduler = ASHAScheduler(
         metric="mape_den",
         mode="min",
-        max_t=100,
-        grace_period=30,
+        max_t=max_t,
+        grace_period=grace_period,
         reduction_factor=2,
     )
 
