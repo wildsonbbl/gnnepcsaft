@@ -241,6 +241,7 @@ def main(argv):
 
     logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
     logging.info("JAX local devices: %r", jax.local_devices())
+    logging.info(f"config file below: \n{FLAGS.config}")
 
     logging.info("Calling tuner")
 
@@ -291,5 +292,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["config", "workdir", "restoredir"])
+    flags.mark_flags_as_required(["config", "workdir"])
     app.run(main)
