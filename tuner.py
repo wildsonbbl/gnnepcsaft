@@ -227,6 +227,8 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory")
 flags.DEFINE_string("restoredir", None, "Restore Directory")
+flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads")
+flags.DEFINE_integer('num_gpus', 1, "Number of GPUs")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -262,8 +264,8 @@ def main(argv):
         reduction_factor=2,
     )
 
-    ray.init(num_gpus=1)
-    resources = {"cpu": 8, "gpu": 1}
+    ray.init(num_gpus=FLAGS.num_gpus)
+    resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
 
     if FLAGS.restoredir:
         tuner = tune.Tuner.restore(
