@@ -173,14 +173,6 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
         }
     )
 
-    wandb.finish()
-
-    run = wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-    )
     # Evaluate on validation or test, if required.
     val_mape_vp, val_huber_vp = test_vp("val")
     test_mape_vp, test_huber_vp = test_vp("test")
