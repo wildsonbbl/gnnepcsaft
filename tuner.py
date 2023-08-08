@@ -45,7 +45,7 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     else:
         model_dtype = torch.float32
     if config.model == "PNA":
-        return models.PNA(
+        return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             propagation_depth=config.propagation_depth,
             pre_layers=config.pre_layers,
@@ -114,7 +114,7 @@ def train_and_evaluate(
 
     ra_data = {}
     for graph in train_loader:
-        for inchi, para in zip(graph.InChI, graph.para):
+        for inchi, para in zip(graph.InChI, graph.para.view(-1,3)):
             ra_data[inchi] = para
 
     # Create and initialize the network.
@@ -149,7 +149,7 @@ def train_and_evaluate(
             if test == "val":
                 if graphs.InChI[0] not in ra_data:
                     continue
-            datapoints = graphs.rho.to("cpu", model_dtype)
+            datapoints = graphs.rho.to("cpu", model_dtype).view(-1,5)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze().to("cpu")
             pred = pcsaft_den(pred_para, datapoints)
@@ -159,7 +159,7 @@ def train_and_evaluate(
             total_mape_den += [loss_mape.item()]
             total_huber_den += [loss_huber.item()]
 
-            datapoints = graphs.vp.to(device, model_dtype)
+            datapoints = graphs.vp.to(device, model_dtype).view(-1,5).to("cpu")
             if torch.all(datapoints == torch.zeros_like(datapoints)):
                 continue
             pred = pcsaft_vp(pred_para, datapoints)
@@ -187,7 +187,7 @@ def train_and_evaluate(
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = graphs.para.to(device, model_dtype)
+            target = graphs.para.to(device, model_dtype).view(-1,3)
             graphs = graphs.to(device)
             optimizer.zero_grad()
             pred = model(graphs)
@@ -264,7 +264,7 @@ def main(argv):
 
     tuner = tune.Tuner(
         tune.with_resources(
-            tune.with_parameters(ptrain), resources={"cpu": 2, "gpu": 1}
+            tune.with_parameters(ptrain), resources={"cpu": 8, "gpu": 1}
         ),
         param_space=search_space,
         tune_config=tune.TuneConfig(scheduler=scheduler, num_samples=100),

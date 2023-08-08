@@ -45,7 +45,7 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     else:
         model_dtype = torch.float32
     if config.model == "PNA":
-        return models.PNA(
+        return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             propagation_depth=config.propagation_depth,
             pre_layers=config.pre_layers,
