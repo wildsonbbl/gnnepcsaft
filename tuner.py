@@ -109,7 +109,7 @@ def train_and_evaluate(
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-    test_dataset = ThermoML_padded(test_dataset, 32)
+    test_dataset = ThermoML_padded(test_dataset, config.pad_size)
     test_loader = DataLoader(test_dataset)
 
     ra_data = {}
@@ -140,8 +140,6 @@ def train_and_evaluate(
         model.eval()
         total_mape_den = []
         total_huber_den = []
-        total_mape_vp = []
-        total_huber_vp = []
         for graphs in test_loader:
             if test == "test":
                 if graphs.InChI[0] in ra_data:
@@ -160,21 +158,9 @@ def train_and_evaluate(
                 total_mape_den += [loss_mape.item()]
                 total_huber_den += [loss_huber.item()]
 
-            datapoints = graphs.vp.to("cpu", torch.float64).view(-1, 5)
-            if ~torch.all(datapoints == torch.zeros_like(datapoints)):
-                pred = pcsaft_vp(pred_para, datapoints)
-                target = datapoints[:, -1]
-                result_filter = ~torch.isnan(pred)
-                loss_mape = mape(pred[result_filter], target[result_filter])
-                loss_huber = HLoss(pred[result_filter], target[result_filter])
-                total_mape_vp += [loss_mape.item()]
-                total_huber_vp += [loss_huber.item()]
-
         return (
             torch.tensor(total_mape_den).nanmean().item(),
             torch.tensor(total_huber_den).nanmean().item(),
-            torch.tensor(total_mape_vp).nanmean().item(),
-            torch.tensor(total_huber_vp).nanmean().item(),
         )
 
     # Begin training loop.
@@ -202,7 +188,7 @@ def train_and_evaluate(
 
             # Log
             if step % config.log_every_steps == 0:
-                mape_den, huber_den, mape_vp, huber_vp = test(test="val")
+                mape_den, huber_den = test(test="val")
                 session.report(
                     {
                         "train_mape": torch.tensor(total_loss_mape).mean().item(),
@@ -210,8 +196,6 @@ def train_and_evaluate(
                         "train_lr": torch.tensor(lr).mean().item(),
                         "mape_den": mape_den,
                         "huber_den": huber_den,
-                        "mape_vp": mape_vp,
-                        "huber_vp": huber_vp,
                     },
                 )
                 total_loss_mape = []
