@@ -68,17 +68,12 @@ class ThermoMLDataset(InMemoryDataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        subset="train",
         dtype=torch.float64,
         graph_dtype=torch.long,
     ):
         self.dtype = dtype
         self.graph_dtype = graph_dtype
 
-        if subset in ["train", "test"]:
-            self.subset = subset
-        else:
-            raise ValueError("subset should be either train or test")
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -88,7 +83,7 @@ class ThermoMLDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return [self.subset + "_pure.pt"]
+        return ["pure.pt"]
 
     def download(self):
         return print("no url to download from")
@@ -100,11 +95,10 @@ class ThermoMLDataset(InMemoryDataset):
             data_dict = pickle.load(f)
 
         for inchi in data_dict:
-            if self.subset == "test":
-                if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
-                    graph = from_InChI(
+            graph = from_InChI(
                         inchi,
                     )
+            if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):     
                     states = [
                         torch.cat(
                             [
@@ -121,11 +115,7 @@ class ThermoMLDataset(InMemoryDataset):
                     graph.rho = torch.zeros((1, 5))
 
                     datalist.append(graph)
-            else:
-                if (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
-                    graph = from_InChI(
-                        inchi,
-                    )
+            elif (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
                     vp = [
                         torch.cat(
                             [
@@ -153,10 +143,7 @@ class ThermoMLDataset(InMemoryDataset):
                     graph.rho = rho
 
                     datalist.append(graph)
-                elif 1 in data_dict[inchi]:
-                    graph = from_InChI(
-                        inchi,
-                    )
+            elif 1 in data_dict[inchi]:
                     vp = torch.zeros((1, 5))
                     rho = [
                         torch.cat(

@@ -24,8 +24,9 @@ from model_deg import deg
 
 device = "cpu"
 
+
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
-    """Creates a Flax model, as specified by the config."""
+    """Creates a model, as specified by the config."""
     platform = jax.local_devices()[0].platform
     model_dtype = torch.float64
     if config.model == "PNA":
@@ -49,7 +50,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     Args:
       config: Hyperparameter configuration for training and evaluation.
-      workdir: Working Directory .
+      workdir: Working Directory.
     """
 
     # Create writer for logs.
@@ -61,7 +62,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     path = osp.join(workdir, "data/thermoml")
     dataset = ThermoMLDataset(path)
-    dataset = ThermoML_padded(dataset=dataset, pad_size = 4096 * 2)
+    dataset = ThermoML_padded(dataset=dataset, pad_size=4096 * 2)
     test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
     train_loader = DataLoader(
         ramirez("./data/ramirez2022"), batch_size=1, shuffle=False
@@ -98,6 +99,8 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
                 if graphs.InChI[0] not in ra_data:
                     continue
             datapoints = graphs.rho.to(device, model_dtype)
+            if torch.all(datapoints == torch.zeros_like(datapoints)):
+                continue
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze()
             pred = pcsaft_den(pred_para, datapoints)
@@ -117,7 +120,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
             torch.tensor(total_loss_mape).nanmean().item(),
             torch.tensor(total_loss_huber).nanmean().item(),
         )
-    
+
     @torch.no_grad()
     def test_vp(test="test"):
         model.eval()
@@ -191,7 +194,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("workdir", None, "Directory to store model data.")
+flags.DEFINE_string("workdir", None, "Working Directory.")
 config_flags.DEFINE_config_file(
     "config",
     None,

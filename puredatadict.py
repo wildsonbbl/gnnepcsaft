@@ -22,9 +22,11 @@ def pureTMLDataset(root: str) -> dict:
     puredatadict = {}
     for row in pure.iter_rows():
         inchi = row[1]
+        if check_if_elementary(inchi):
+            continue
         tp = row[-2]
         ids = row[:2]
-        state = row[2:-1] 
+        state = row[2:-1]
         y = row[-1]
         if tp == 1:
             mol_weight = mw(inchi)
@@ -48,7 +50,7 @@ def pureTMLDataset(root: str) -> dict:
 
 def mw(inchi: str) -> float:
     try:
-        mol = Chem.MolFromInchi(inchi, removeHs=False)
+        mol = Chem.MolFromInchi(inchi, removeHs=False, sanitize=False)
         mol_weight = CalcExactMolWt(mol)
     except:
         mol_weight = 0
@@ -56,5 +58,16 @@ def mw(inchi: str) -> float:
     return mol_weight
 
 
-if ~os.path.exists("./data/thermoml/raw/pure.pkl"):
+def check_if_elementary(inchi: str) -> bool:
+    mol = Chem.MolFromInchi(inchi, removeHs=False, sanitize=False)
+    mol = Chem.AddHs(mol)
+    atoms = []
+    for atom in mol.GetAtoms():
+        atoms += [atom.GetAtomicNum()]
+    unique_atoms = set(atoms)
+
+    return len(unique_atoms) == 1
+
+
+if __name__ == "__main__":
     pureTMLDataset("./data/thermoml/raw/pure.parquet")

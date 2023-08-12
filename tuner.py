@@ -150,25 +150,25 @@ def train_and_evaluate(
                 if graphs.InChI[0] not in ra_data:
                     continue
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
-            graphs = graphs.to(device)
-            pred_para = model(graphs).squeeze().to("cpu", torch.float64)
-            pred = pcsaft_den(pred_para, datapoints)
-            target = datapoints[:, -1]
-            loss_mape = mape(pred, target)
-            loss_huber = HLoss(pred, target)
-            total_mape_den += [loss_mape.item()]
-            total_huber_den += [loss_huber.item()]
+            if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+                graphs = graphs.to(device)
+                pred_para = model(graphs).squeeze().to("cpu", torch.float64)
+                pred = pcsaft_den(pred_para, datapoints)
+                target = datapoints[:, -1]
+                loss_mape = mape(pred, target)
+                loss_huber = HLoss(pred, target)
+                total_mape_den += [loss_mape.item()]
+                total_huber_den += [loss_huber.item()]
 
             datapoints = graphs.vp.to("cpu", torch.float64).view(-1, 5)
-            if torch.all(datapoints == torch.zeros_like(datapoints)):
-                continue
-            pred = pcsaft_vp(pred_para, datapoints)
-            target = datapoints[:, -1]
-            result_filter = ~torch.isnan(pred)
-            loss_mape = mape(pred[result_filter], target[result_filter])
-            loss_huber = HLoss(pred[result_filter], target[result_filter])
-            total_mape_vp += [loss_mape.item()]
-            total_huber_vp += [loss_huber.item()]
+            if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+                pred = pcsaft_vp(pred_para, datapoints)
+                target = datapoints[:, -1]
+                result_filter = ~torch.isnan(pred)
+                loss_mape = mape(pred[result_filter], target[result_filter])
+                loss_huber = HLoss(pred[result_filter], target[result_filter])
+                total_mape_vp += [loss_mape.item()]
+                total_huber_vp += [loss_huber.item()]
 
         return (
             torch.tensor(total_mape_den).nanmean().item(),
@@ -228,7 +228,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("workdir", None, "Working Directory")
 flags.DEFINE_string("restoredir", None, "Restore Directory")
 flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads")
-flags.DEFINE_integer('num_gpus', 1, "Number of GPUs")
+flags.DEFINE_integer("num_gpus", 1, "Number of GPUs")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -246,7 +246,7 @@ def main(argv):
     logging.info(f"config file below: \n{FLAGS.config}")
 
     logging.info("Calling tuner")
-    
+
     config = FLAGS.config
 
     ptrain = partial(train_and_evaluate, config=config, workdir=FLAGS.workdir)
