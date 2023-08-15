@@ -7,7 +7,7 @@ from functools import partial
 from absl import logging
 import ml_collections
 
-import models
+import train.models
 
 import torch
 from torch.nn import HuberLoss
@@ -19,10 +19,10 @@ from torch.optim.lr_scheduler import (
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
-import epcsaft_cython
+from epcsaft import epcsaft_cython
 import jax
 
-from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
+from data.graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
 import pickle
 
 from ray import tune, air
@@ -30,7 +30,7 @@ import ray
 from ray.air import Checkpoint, session
 from ray.tune.schedulers import ASHAScheduler
 
-from model_deg import deg
+from train.model_deg import deg
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:

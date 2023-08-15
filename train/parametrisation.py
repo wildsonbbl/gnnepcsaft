@@ -5,7 +5,7 @@ import numpy as np
 import os.path as osp, pickle
 import torch
 from torch_geometric.loader import DataLoader
-from graphdataset import ThermoMLDataset
+from data.graphdataset import ThermoMLDataset
 
 
 path = osp.join("data", "thermoml")

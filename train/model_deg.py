@@ -2,7 +2,7 @@ import os.path as osp
 
 import torch
 
-from graphdataset import ThermoMLDataset, ramirez
+from data.graphdataset import ThermoMLDataset, ramirez
 
 from torch_geometric.utils import degree
 

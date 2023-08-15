@@ -6,7 +6,7 @@ from ml_collections import config_flags
 from absl import logging
 import ml_collections
 
-import models
+import train.models
 
 import torch
 from torch.nn import HuberLoss
@@ -16,14 +16,14 @@ from torch.optim.lr_scheduler import (
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
-import epcsaft_cython
+from epcsaft import epcsaft_cython
 import jax
 
 import wandb
 
-from graphdataset import ThermoMLDataset, ramirez
+from data.graphdataset import ThermoMLDataset, ramirez
 
-from model_deg import deg
+from train.model_deg import deg
 
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:

@@ -2,7 +2,7 @@ from torch_geometric.data import Data
 from torch.utils.data import Dataset as ds
 import torch
 from torch_geometric.data import InMemoryDataset
-from graph import from_InChI
+from data.graph import from_InChI
 import pickle
 import polars as pl
 
