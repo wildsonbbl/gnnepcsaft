@@ -26,7 +26,7 @@ def loss(parameters, rho, vp):
     if ~np.all(rho == np.zeros_like(rho)):
         for state in rho:
             x = np.asarray([1.0])
-            t = rho[0]
+            t = state[0]
             p = state[1]
             phase = ["liq" if state[2] == 1 else "vap"][0]
             params = {"m": m, "s": s, "e": e}
@@ -36,7 +36,7 @@ def loss(parameters, rho, vp):
     if ~np.all(vp == np.zeros_like(vp)):
         for state in vp:
             x = np.asarray([1.0])
-            t = rho[0]
+            t = state[0]
 
             phase = ["liq" if state[2] == 1 else "vap"][0]
             params = {"m": m, "s": s, "e": e}
