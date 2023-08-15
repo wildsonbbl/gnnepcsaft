@@ -53,7 +53,7 @@ if __name__ == "__main__":
     for graph in loader:
         rho = graph.rho.view(-1, 5).numpy()
         vp = graph.vp.view(-1, 5).numpy()
-        params = np.asarray(init_para(graph.InChI[0])[0])
+        params = np.asarray(init_para[graph.InChI[0]][0])
         res = least_squares(loss, params, method="lm", args=(rho, vp))
         fit_para = res.x.tolist()
         cost = res.cost
