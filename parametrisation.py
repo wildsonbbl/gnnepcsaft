@@ -57,8 +57,8 @@ if __name__ == "__main__":
         rho = graph.rho.view(-1, 5).numpy()
         vp = graph.vp.view(-1, 5).numpy()
         n_datapoints = rho.shape[0] + vp.shape[0]
-        if n_datapoints < 3:
-            print(f"skipping {graph.InChI[0]} for having {n_datapoints} datapoints")
+        if n_datapoints < 4:
+            print(f"skipping {graph.InChI[0]} for having {n_datapoints} or less datapoints")
             continue
         params = np.asarray(init_para[graph.InChI[0]][0])
         res = least_squares(loss, params, method="lm", args=(rho, vp))
