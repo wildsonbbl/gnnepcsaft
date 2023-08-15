@@ -37,10 +37,13 @@ def loss(parameters, rho, vp):
         for state in vp:
             x = np.asarray([1.0])
             t = state[0]
-
+            p = state[1]
             phase = ["liq" if state[2] == 1 else "vap"][0]
             params = {"m": m, "s": s, "e": e}
-            vp, xl, xv = flashTQ(t, 0, x, params)
+            try:
+                vp, xl, xv = flashTQ(t, 0, x, params, p)
+            except:
+                continue
             loss += [((state[-1] - vp) / state[-1]) ** 2 * 2]
     loss = np.asarray(loss).flatten()
 
