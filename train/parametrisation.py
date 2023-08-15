@@ -64,7 +64,7 @@ if __name__ == "__main__":
             continue
         params = np.asarray(init_para[graph.InChI[0]][0])
         res = least_squares(loss, params, method="lm", args=(rho, vp))
-        fit_para = res.x.tolist()
+        fit_para = res.x.abs().tolist()
         cost = res.cost
         print(cost, fit_para)
         fitted_para[graph.InChI[0]] = (fit_para, cost)
