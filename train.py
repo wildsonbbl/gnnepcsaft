@@ -12,8 +12,6 @@ import torch
 from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
-    ReduceLROnPlateau,
-    ChainedScheduler,
 )
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
@@ -23,8 +21,7 @@ import jax
 
 import wandb
 
-from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
-import pickle
+from graphdataset import ThermoMLDataset, ramirez
 
 from model_deg import deg
 
@@ -104,7 +101,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-    test_dataset = ThermoML_padded(test_dataset, 4096 * 2)
     test_loader = DataLoader(test_dataset)
 
     ra_data = {}

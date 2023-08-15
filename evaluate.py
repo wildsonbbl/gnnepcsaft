@@ -18,7 +18,7 @@ import jax
 
 import wandb
 
-from graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
+from graphdataset import ThermoMLDataset, ramirez
 
 from model_deg import deg
 
@@ -62,7 +62,6 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     path = osp.join(workdir, "data/thermoml")
     dataset = ThermoMLDataset(path)
-    dataset = ThermoML_padded(dataset=dataset, pad_size=4096 * 2)
     test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
     train_loader = DataLoader(
         ramirez("./data/ramirez2022"), batch_size=1, shuffle=False

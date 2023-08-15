@@ -96,70 +96,70 @@ class ThermoMLDataset(InMemoryDataset):
 
         for inchi in data_dict:
             graph = from_InChI(
-                        inchi,
-                    )
-            if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):     
-                    states = [
-                        torch.cat(
-                            [
-                                torch.tensor(state, dtype=self.dtype),
-                                torch.tensor([y], dtype=self.dtype),
-                            ]
-                        )[None, ...]
-                        for _, state, y in data_dict[inchi][3]
-                    ]
+                inchi,
+            )
+            if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
+                states = [
+                    torch.cat(
+                        [
+                            torch.tensor(state, dtype=self.dtype),
+                            torch.tensor([y], dtype=self.dtype),
+                        ]
+                    )[None, ...]
+                    for _, state, y in data_dict[inchi][3]
+                ]
 
-                    states = torch.cat(states, 0)
+                states = torch.cat(states, 0)
 
-                    graph.vp = states
-                    graph.rho = torch.zeros((1, 5))
+                graph.vp = states
+                graph.rho = torch.zeros((1, 5))
 
-                    datalist.append(graph)
+                datalist.append(graph)
             elif (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
-                    vp = [
-                        torch.cat(
-                            [
-                                torch.tensor(state, dtype=self.dtype),
-                                torch.tensor([y], dtype=self.dtype),
-                            ]
-                        )[None, ...]
-                        for _, state, y in data_dict[inchi][3]
-                    ]
+                vp = [
+                    torch.cat(
+                        [
+                            torch.tensor(state, dtype=self.dtype),
+                            torch.tensor([y], dtype=self.dtype),
+                        ]
+                    )[None, ...]
+                    for _, state, y in data_dict[inchi][3]
+                ]
 
-                    vp = torch.cat(vp, 0)
-                    rho = [
-                        torch.cat(
-                            [
-                                torch.tensor(state, dtype=self.dtype),
-                                torch.tensor([y], dtype=self.dtype),
-                            ]
-                        )[None, ...]
-                        for _, state, y in data_dict[inchi][1]
-                    ]
+                vp = torch.cat(vp, 0)
+                rho = [
+                    torch.cat(
+                        [
+                            torch.tensor(state, dtype=self.dtype),
+                            torch.tensor([y], dtype=self.dtype),
+                        ]
+                    )[None, ...]
+                    for _, state, y in data_dict[inchi][1]
+                ]
 
-                    rho = torch.cat(rho, 0)
+                rho = torch.cat(rho, 0)
 
-                    graph.vp = vp
-                    graph.rho = rho
+                graph.vp = vp
+                graph.rho = rho
 
-                    datalist.append(graph)
+                datalist.append(graph)
             elif 1 in data_dict[inchi]:
-                    vp = torch.zeros((1, 5))
-                    rho = [
-                        torch.cat(
-                            [
-                                torch.tensor(state, dtype=self.dtype),
-                                torch.tensor([y], dtype=self.dtype),
-                            ]
-                        )[None, ...]
-                        for _, state, y in data_dict[inchi][1]
-                    ]
+                vp = torch.zeros((1, 5))
+                rho = [
+                    torch.cat(
+                        [
+                            torch.tensor(state, dtype=self.dtype),
+                            torch.tensor([y], dtype=self.dtype),
+                        ]
+                    )[None, ...]
+                    for _, state, y in data_dict[inchi][1]
+                ]
 
-                    rho = torch.cat(rho, 0)
+                rho = torch.cat(rho, 0)
 
-                    graph.vp = vp
-                    graph.rho = rho
-                    datalist.append(graph)
+                graph.vp = vp
+                graph.rho = rho
+                datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
 
