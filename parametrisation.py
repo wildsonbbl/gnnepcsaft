@@ -31,7 +31,7 @@ def loss(parameters, rho, vp):
             phase = ["liq" if state[2] == 1 else "vap"][0]
             params = {"m": m, "s": s, "e": e}
             den = pcsaft_den(t, p, x, params, phase=phase)
-            loss += ((state[-1] - den) / state[-1]) ** 2 * 3
+            loss += [((state[-1] - den) / state[-1]) ** 2 * 3]
 
     if ~np.all(vp == np.zeros_like(vp)):
         for state in vp:
@@ -41,8 +41,8 @@ def loss(parameters, rho, vp):
             phase = ["liq" if state[2] == 1 else "vap"][0]
             params = {"m": m, "s": s, "e": e}
             vp, xl, xv = flashTQ(t, 0, x, params)
-            loss += ((state[-1] - vp) / state[-1]) ** 2 * 2
-    loss = np.asarray(loss).flatten().mean()
+            loss += [((state[-1] - vp) / state[-1]) ** 2 * 2]
+    loss = np.asarray(loss).mean()
 
     return loss
 
