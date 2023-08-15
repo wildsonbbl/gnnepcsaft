@@ -17,7 +17,8 @@ with open("./data/thermoml/processed/para3.pkl", "rb") as file:
     init_para = pickle.load(file)
 
 
-def loss(parameters, rho, vp):
+def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
+    parameters = np.minimum(parameters, 1.0)
     m = parameters[0]
     s = parameters[1]
     e = parameters[2]
@@ -53,12 +54,13 @@ def loss(parameters, rho, vp):
 if __name__ == "__main__":
     fitted_para = {}
 
+    n_skipped = 0
     for graph in loader:
         rho = graph.rho.view(-1, 5).numpy()
         vp = graph.vp.view(-1, 5).numpy()
         n_datapoints = rho.shape[0] + vp.shape[0]
         if n_datapoints < 4:
-            print(f"skipping {graph.InChI[0]} for having {n_datapoints} or less datapoints")
+            n_skipped += 1
             continue
         params = np.asarray(init_para[graph.InChI[0]][0])
         res = least_squares(loss, params, method="lm", args=(rho, vp))
@@ -68,3 +70,4 @@ if __name__ == "__main__":
         fitted_para[graph.InChI[0]] = (fit_para, cost)
         with open("./data/thermoml/processed/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
+    print(f"number of skipped molecules for having lower than 4 datapoints = {n_skipped}")
