@@ -18,7 +18,7 @@ with open("./data/thermoml/processed/para3.pkl", "rb") as file:
 
 
 def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
-    parameters = np.minimum(parameters, 1.0)
+    parameters = np.abs(parameters)
     m = parameters[0]
     s = parameters[1]
     e = parameters[2]
