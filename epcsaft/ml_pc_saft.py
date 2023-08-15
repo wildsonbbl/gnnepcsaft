@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import jax
 from jax import dlpack as jdlpack
 from torch.utils import dlpack as tdlpack
-from epcsaft_complete import pcsaft_den, pcsaft_VP, pcsaft_fugcoef
+from epcsaft.epcsaft_complete import pcsaft_den, pcsaft_VP, pcsaft_fugcoef
 import torch
 
 

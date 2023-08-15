@@ -7,7 +7,7 @@ from functools import partial
 from absl import logging
 import ml_collections
 
-import train.models
+from train import models
 
 import torch
 from torch.nn import HuberLoss
@@ -129,7 +129,6 @@ def train_and_evaluate(
     optimizer = create_optimizer(config, model.parameters())
 
     # Set up checkpointing of the model.
-    ckp_path = osp.join(workdir, "training/last_checkpoint.pth")
     initial_step = 1
 
     # Scheduler

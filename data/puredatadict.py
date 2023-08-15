@@ -1,6 +1,5 @@
 import polars as pl
 import pickle
-import os
 
 from rdkit import Chem, RDLogger
 from rdkit.Chem.rdMolDescriptors import CalcExactMolWt

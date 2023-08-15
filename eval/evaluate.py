@@ -6,21 +6,21 @@ from ml_collections import config_flags
 from absl import logging
 import ml_collections
 
-import models
+from train import models
 
 import torch
 from torch.nn import HuberLoss
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
-import epcsaft_cython
+from epcsaft import epcsaft_cython
 import jax
 
 import wandb
 
-from graphdataset import ThermoMLDataset, ramirez
+from data.graphdataset import ThermoMLDataset, ramirez
 
-from model_deg import deg
+from train.model_deg import deg
 
 device = "cpu"
 
@@ -80,7 +80,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     mape = MeanAbsolutePercentageError().to(device)
 
     # Set up checkpointing of the model.
-    ckp_path = osp.join(workdir, "training/last_checkpoint.pth")
+    ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
     checkpoint = torch.load(ckp_path)
     model.load_state_dict(checkpoint["model_state_dict"])
 

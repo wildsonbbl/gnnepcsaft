@@ -7,7 +7,6 @@ import torch
 from torch_geometric.loader import DataLoader
 from data.graphdataset import ThermoMLDataset
 
-
 path = osp.join("data", "thermoml")
 dataset = ThermoMLDataset(path)
 loader = DataLoader(dataset, batch_size=1, shuffle=False)
@@ -51,7 +50,7 @@ def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     return loss
 
 
-if __name__ == "__main__":
+def parametrisation():
     fitted_para = {}
 
     n_skipped = 0
@@ -64,10 +63,17 @@ if __name__ == "__main__":
             continue
         params = np.asarray(init_para[graph.InChI[0]][0])
         res = least_squares(loss, params, method="lm", args=(rho, vp))
-        fit_para = res.x.abs().tolist()
+        fit_para = np.abs(res.x).tolist()
         cost = res.cost
         print(cost, fit_para)
         fitted_para[graph.InChI[0]] = (fit_para, cost)
         with open("./data/thermoml/processed/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
-    print(f"number of skipped molecules for having lower than 4 datapoints = {n_skipped}")
+    print(
+        f"number of skipped molecules for having lower than 4 datapoints = {n_skipped}"
+    )
+
+
+if __name__ == "__main__":
+    print("starting parametrization")
+    parametrisation()
