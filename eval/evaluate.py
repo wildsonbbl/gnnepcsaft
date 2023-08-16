@@ -18,7 +18,7 @@ import jax
 
 import wandb
 
-from data.graphdataset import ThermoMLDataset, ramirez
+from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import deg
 
@@ -45,7 +45,7 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
-def evaluate(config: ml_collections.ConfigDict, workdir: str):
+def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
     """Execute model training and evaluation loop.
 
     Args:
@@ -61,15 +61,24 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     model_dtype = torch.float64
 
     path = osp.join(workdir, "data/thermoml")
-    dataset = ThermoMLDataset(path)
-    test_loader = DataLoader(dataset, batch_size=1, shuffle=False)
-    train_loader = DataLoader(
-        ramirez("./data/ramirez2022"), batch_size=1, shuffle=False
-    )
+    test_dataset = ThermoMLDataset(path)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    ra_data = {}
+    if dataset == "ramirez":
+        path = osp.join(workdir, "data/ramirez2022")
+        train_dataset = ramirez(path)
+    elif dataset == "thermoml":
+        path = osp.join(workdir, "data/thermoml")
+        train_dataset = ThermoMLpara(path)
+    else:
+        ValueError(
+            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+        )
+    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False)
+
+    para_data = {}
     for graph in train_loader:
-        ra_data[graph.InChI[0]] = graph.para
+        para_data[graph.InChI[0]] = graph.para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -80,7 +89,10 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
     mape = MeanAbsolutePercentageError().to(device)
 
     # Set up checkpointing of the model.
-    ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
+    if dataset == "ramirez":
+        ckp_path = osp.join(workdir,  "train/checkpoints/ra_last_checkpoint.pth")
+    else:
+        ckp_path = osp.join(workdir,  "train/checkpoints/tml_last_checkpoint.pth")
     checkpoint = torch.load(ckp_path)
     model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -92,10 +104,10 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
         total_loss_huber = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in ra_data:
+                if graphs.InChI[0] in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in ra_data:
+                if graphs.InChI[0] not in para_data:
                     continue
             datapoints = graphs.rho.to(device, model_dtype)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -127,10 +139,10 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
         total_loss_huber = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in ra_data:
+                if graphs.InChI[0] in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in ra_data:
+                if graphs.InChI[0] not in para_data:
                     continue
             datapoints = graphs.vp.to(device, model_dtype)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -194,6 +206,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str):
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
+flags.DEFINE_string("dataset", None, "Dataset to train model on")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -211,7 +224,7 @@ def main(argv):
 
     logging.info("Calling evaluate")
 
-    evaluate(FLAGS.config, FLAGS.workdir)
+    evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
 
 
 if __name__ == "__main__":

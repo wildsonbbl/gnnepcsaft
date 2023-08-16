@@ -31,7 +31,7 @@ def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
             phase = ["liq" if state[2] == 1 else "vap"][0]
             params = {"m": m, "s": s, "e": e}
             den = pcsaft_den(t, p, x, params, phase=phase)
-            loss += [((state[-1] - den) / state[-1]) ** 2 * 3]
+            loss += [((state[-1] - den) / state[-1]) * np.sqrt(3)]
 
     if ~np.all(vp == np.zeros_like(vp)):
         for state in vp:
@@ -42,9 +42,10 @@ def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
             params = {"m": m, "s": s, "e": e}
             try:
                 vp, xl, xv = flashTQ(t, 0, x, params, p)
+                loss += [((state[-1] - vp) / state[-1]) * np.sqrt(2)]
             except:
-                vp = 0
-            loss += [((state[-1] - vp) / state[-1]) ** 2 * 2]
+                loss += [0.0]
+            
     loss = np.asarray(loss).flatten()
 
     return loss
