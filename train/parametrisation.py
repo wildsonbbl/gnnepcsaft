@@ -2,7 +2,7 @@ from scipy.optimize import least_squares
 from pcsaft import pcsaft_den, flashTQ
 import numpy as np
 
-import os.path as osp, pickle
+import os.path as osp, pickle, wandb
 import torch
 from torch_geometric.loader import DataLoader
 from data.graphdataset import ThermoMLDataset
@@ -22,6 +22,9 @@ def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     s = parameters[1]
     e = parameters[2]
     loss = []
+    
+    n = rho.shape[0] + vp.shape[0]
+    weight_decay = np.sum(parameters**2) * 0.0001 / n
 
     if ~np.all(rho == np.zeros_like(rho)):
         for state in rho:
@@ -31,7 +34,7 @@ def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
             phase = ["liq" if state[2] == 1 else "vap"][0]
             params = {"m": m, "s": s, "e": e}
             den = pcsaft_den(t, p, x, params, phase=phase)
-            loss += [((state[-1] - den) / state[-1]) * np.sqrt(3)]
+            loss += [((state[-1] - den) / state[-1]) * np.sqrt(3) + weight_decay]
 
     if ~np.all(vp == np.zeros_like(vp)):
         for state in vp:
@@ -42,9 +45,9 @@ def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
             params = {"m": m, "s": s, "e": e}
             try:
                 vp, xl, xv = flashTQ(t, 0, x, params, p)
-                loss += [((state[-1] - vp) / state[-1]) * np.sqrt(2)]
+                loss += [((state[-1] - vp) / state[-1]) * np.sqrt(2) + weight_decay]
             except:
-                loss += [0.0]
+                loss += [1.0 + weight_decay]
             
     loss = np.asarray(loss).flatten()
 
@@ -52,6 +55,10 @@ def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
 
 
 def parametrisation():
+    run = wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+    )
     fitted_para = {}
 
     n_skipped = 0
@@ -66,13 +73,21 @@ def parametrisation():
         res = least_squares(loss, params, method="lm", args=(rho, vp))
         fit_para = np.abs(res.x).tolist()
         cost = res.cost
-        print(cost, fit_para)
+        wandb.log(
+                    {
+                        "cost": cost,
+                        "m": fit_para[0],
+                        "s": fit_para[1],
+                        "e": fit_para[2]
+                    },
+        )
         fitted_para[graph.InChI[0]] = (fit_para, cost)
         with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
     print(
         f"number of skipped molecules for having lower than 4 datapoints = {n_skipped}"
     )
+    wandb.finish()
 
 
 if __name__ == "__main__":
