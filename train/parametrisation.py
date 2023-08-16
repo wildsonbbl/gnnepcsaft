@@ -67,7 +67,7 @@ def parametrisation():
         cost = res.cost
         print(cost, fit_para)
         fitted_para[graph.InChI[0]] = (fit_para, cost)
-        with open("./data/thermoml/processed/para3_fitted.pkl", "wb") as file:
+        with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
     print(
         f"number of skipped molecules for having lower than 4 datapoints = {n_skipped}"

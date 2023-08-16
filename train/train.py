@@ -21,7 +21,7 @@ import jax
 
 import wandb
 
-from data.graphdataset import ThermoMLDataset, ramirez
+from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import deg
 
@@ -70,7 +70,7 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
     """Execute model training and evaluation loop.
 
     Args:
@@ -96,17 +96,23 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     else:
         model_dtype = torch.float32
 
-    path = osp.join(workdir, "data/ramirez2022")
-    train_dataset = ramirez(path)
+    if dataset == "ramirez":
+        path = osp.join(workdir, "data/ramirez2022")
+        train_dataset = ramirez(path)
+    elif dataset == "thermoml":
+        path = osp.join(workdir, "data/thermoml")
+        train_dataset = ThermoMLpara(path)
+    else:
+        ValueError(f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead")
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
     test_loader = DataLoader(test_dataset)
 
-    ra_data = {}
+    para_data = {}
     for graph in train_loader:
         for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
-            ra_data[inchi] = para
+            para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -120,7 +126,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     optimizer = create_optimizer(config, model.parameters())
 
     # Set up checkpointing of the model.
-    ckp_path = osp.join(workdir,  "train/checkpoints/last_checkpoint.pth")
+    if dataset == "ramirez":
+        ckp_path = osp.join(workdir,  "train/checkpoints/ra_last_checkpoint.pth")
+    else:
+        ckp_path = osp.join(workdir,  "train/checkpoints/tml_last_checkpoint.pth")
     initial_step = 1
     if osp.exists(ckp_path):
         checkpoint = torch.load(ckp_path)
@@ -142,10 +151,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         total_huber_vp = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in ra_data:
+                if graphs.InChI[0] in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in ra_data:
+                if graphs.InChI[0] not in para_data:
                     continue
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
             if ~torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -254,6 +263,7 @@ def savemodel(model, optimizer, path, step):
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
+flags.DEFINE_string("dataset", None, "Dataset to train model on")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -271,9 +281,9 @@ def main(argv):
 
     logging.info("Calling train and evaluate")
 
-    train_and_evaluate(FLAGS.config, FLAGS.workdir)
+    train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["config", "workdir"])
+    flags.mark_flags_as_required(["config", "workdir", "dataset"])
     app.run(main)

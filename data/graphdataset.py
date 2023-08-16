@@ -276,3 +276,58 @@ class ramirez(InMemoryDataset):
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
+
+class ThermoMLpara(InMemoryDataset):
+
+    """
+    Molecular Graph dataset creator/manipulator.
+
+    PARAMETERS
+    ----------
+    root (str, optional) – Root directory where the dataset should be saved. (optional: None).
+
+    transform (callable, optional) – A function/transform that takes in an Data object and
+    returns a transformed version. The data object will be transformed
+    before every access. (default: None).
+
+    pre_transform (callable, optional) – A function/transform that takes in
+    an Data object and returns a transformed version. The data object will be
+    transformed before being saved to disk. (default: None).
+
+    pre_filter (callable, optional) – A function that takes in an Data object
+    and returns a boolean value, indicating whether the data object should be
+    included in the final dataset. (default: None).
+
+    log (bool, optional) – Whether to print any console output while downloading
+    and processing the dataset. (default: True).
+
+    """
+
+    def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
+        super().__init__(root, transform, pre_transform, pre_filter)
+        self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def raw_file_names(self):
+        return ["para3_fitted.pkl"]
+
+    @property
+    def processed_file_names(self):
+        return ["graph_data.pt"]
+
+    def download(self):
+        return print("no url to download from")
+
+    def process(self):
+        datalist = []
+        with open(self.raw_paths[0], "rb") as file:
+            data = pickle.load(file)
+
+        for inchi in data:
+            para = data[inchi][0]
+            graph = from_InChI(inchi)
+
+            graph.para = torch.tensor(para)
+            datalist.append(graph)
+
+        torch.save(self.collate(datalist), self.processed_paths[0])
