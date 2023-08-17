@@ -83,7 +83,7 @@ class ThermoMLDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return ["pure.pt"]
+        return ["tml_graph_data.pt"]
 
     def download(self):
         return print("no url to download from")
@@ -258,7 +258,7 @@ class ramirez(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return ["graph_data.pt"]
+        return ["ra_graph_data.pt"]
 
     def download(self):
         return print("no url to download from")
@@ -276,6 +276,7 @@ class ramirez(InMemoryDataset):
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
+
 
 class ThermoMLpara(InMemoryDataset):
 
@@ -309,11 +310,11 @@ class ThermoMLpara(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return ["para3_fitted.pkl"]
+        return ["para3_fitted.pkl", "para_ramirez.parquet"]
 
     @property
     def processed_file_names(self):
-        return ["graph_data.pt"]
+        return ["tml_para_graph_data.pt"]
 
     def download(self):
         return print("no url to download from")
@@ -322,9 +323,19 @@ class ThermoMLpara(InMemoryDataset):
         datalist = []
         with open(self.raw_paths[0], "rb") as file:
             data = pickle.load(file)
-
+        print(f"thermoml dataset size: {len(data)}")
         for inchi in data:
             para = data[inchi][0]
+            graph = from_InChI(inchi)
+
+            graph.para = torch.tensor(para)
+            datalist.append(graph)
+
+        data = pl.read_parquet(self.raw_paths[1])
+        print(f"ramirez dataset size: {data.shape[0]}")
+        for row in data.iter_rows():
+            inchi = row[-1]
+            para = row[3:6]
             graph = from_InChI(inchi)
 
             graph.para = torch.tensor(para)

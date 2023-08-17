@@ -1,3 +1,9 @@
+from absl import app
+from absl import flags
+from ml_collections import config_flags
+
+from absl import logging
+import ml_collections
 from scipy.optimize import least_squares
 from pcsaft import pcsaft_den, flashTQ
 import numpy as np
@@ -15,49 +21,51 @@ device = torch.device("cpu")
 with open("./data/thermoml/processed/para3.pkl", "rb") as file:
     init_para = pickle.load(file)
 
+def parametrisation(gamma):
 
-def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
-    parameters = np.abs(parameters)
-    m = parameters[0]
-    s = parameters[1]
-    e = parameters[2]
-    loss = []
-    
-    n = rho.shape[0] + vp.shape[0]
-    weight_decay = np.sum(parameters**2) * 0.0001 / n
+    def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
+        parameters = np.abs(parameters)
+        m = parameters[0]
+        s = parameters[1]
+        e = parameters[2]
+        loss = []
+        
+        n = rho.shape[0] + vp.shape[0]
+        weight_decay = np.sum(parameters**2) * gamma / n
 
-    if ~np.all(rho == np.zeros_like(rho)):
-        for state in rho:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
-            den = pcsaft_den(t, p, x, params, phase=phase)
-            loss += [((state[-1] - den) / state[-1]) * np.sqrt(3) + weight_decay]
+        if ~np.all(rho == np.zeros_like(rho)):
+            for state in rho:
+                x = np.asarray([1.0])
+                t = state[0]
+                p = state[1]
+                phase = ["liq" if state[2] == 1 else "vap"][0]
+                params = {"m": m, "s": s, "e": e}
+                den = pcsaft_den(t, p, x, params, phase=phase)
+                loss += [((state[-1] - den) / state[-1]) * np.sqrt(3) + weight_decay]
 
-    if ~np.all(vp == np.zeros_like(vp)):
-        for state in vp:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
-            try:
-                vp, xl, xv = flashTQ(t, 0, x, params, p)
-                loss += [((state[-1] - vp) / state[-1]) * np.sqrt(2) + weight_decay]
-            except:
-                loss += [1.0 + weight_decay]
-            
-    loss = np.asarray(loss).flatten()
+        if ~np.all(vp == np.zeros_like(vp)):
+            for state in vp:
+                x = np.asarray([1.0])
+                t = state[0]
+                p = state[1]
+                phase = ["liq" if state[2] == 1 else "vap"][0]
+                params = {"m": m, "s": s, "e": e}
+                try:
+                    vp, xl, xv = flashTQ(t, 0, x, params, p)
+                    loss += [((state[-1] - vp) / state[-1]) * np.sqrt(2) + weight_decay]
+                except:
+                    loss += [1.0 + weight_decay]
+                
+        loss = np.asarray(loss).flatten()
 
-    return loss
+        return loss
 
-
-def parametrisation():
     run = wandb.init(
         # Set the project where this run will be logged
         project="gnn-pc-saft",
+        config = {
+            "weight decay": gamma
+        }
     )
     fitted_para = {}
 
@@ -90,6 +98,20 @@ def parametrisation():
     wandb.finish()
 
 
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_string("weight_decay", None, "L2 penalty.")
+
+def main(argv):
+    if len(argv) > 1:
+        raise app.UsageError("Too many command-line arguments.")
+
+    logging.info("Calling parametrisation")
+
+    parametrisation(FLAGS.weight_decay)
+
+
 if __name__ == "__main__":
-    print("starting parametrization")
-    parametrisation()
+    flags.mark_flags_as_required(["weight_decay"])
+    app.run(main)

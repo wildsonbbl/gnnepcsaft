@@ -23,10 +23,12 @@ import wandb
 
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
-from train.model_deg import deg
+from train.model_deg import calc_deg
 
 
-def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
+def create_model(
+    config: ml_collections.ConfigDict, deg: torch.Tensor
+) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
     platform = jax.local_devices()[0].platform
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -78,6 +80,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
       workdir: Working Directory.
     """
 
+    deg = calc_deg(dataset)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     platform = jax.local_devices()[0].platform
     # Create writer for logs.
@@ -103,7 +107,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         path = osp.join(workdir, "data/thermoml")
         train_dataset = ThermoMLpara(path)
     else:
-        ValueError(f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead")
+        ValueError(
+            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+        )
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
@@ -116,7 +122,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config).to(device, model_dtype)
+    model = create_model(config, deg).to(device, model_dtype)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
@@ -127,9 +133,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Set up checkpointing of the model.
     if dataset == "ramirez":
-        ckp_path = osp.join(workdir,  "train/checkpoints/ra_last_checkpoint.pth")
+        ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
     else:
-        ckp_path = osp.join(workdir,  "train/checkpoints/tml_last_checkpoint.pth")
+        ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
     initial_step = 1
     if osp.exists(ckp_path):
         checkpoint = torch.load(ckp_path)
