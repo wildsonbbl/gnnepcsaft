@@ -64,9 +64,9 @@ def parametrisation(weight_decay):
         s = parameters[1]
         e = parameters[2]
         loss = []
-
+        x_scale = np.array([1.0, 1.0, 100.0])
         n = rho.shape[0] + vp.shape[0]
-        l2penalty = np.sum(parameters**2) * weight_decay / n
+        l2penalty = np.sum((parameters / x_scale)**2) * weight_decay / n
 
         if ~np.all(rho == np.zeros_like(rho)):
             for state in rho:
