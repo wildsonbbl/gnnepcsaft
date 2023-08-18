@@ -125,8 +125,7 @@ def parametrisation(weight_decay):
                 "mape": mape,
             },
         )
-        if mape < 5 / 100:
-            fitted_para[graph.InChI[0]] = (fit_para, mape)
+        fitted_para[graph.InChI[0]] = (fit_para, mape)
         with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
     print(
