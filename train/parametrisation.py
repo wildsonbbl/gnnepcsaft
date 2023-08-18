@@ -76,7 +76,7 @@ def parametrisation(weight_decay):
                 phase = ["liq" if state[2] == 1 else "vap"][0]
                 params = {"m": m, "s": s, "e": e}
                 den = pcsaft_den(t, p, x, params, phase=phase)
-                loss += [((state[-1] - den) / state[-1]) * np.sqrt(3) + l2penalty]
+                loss += [((state[-1] - den) / state[-1]) * np.sqrt(2) + np.sqrt(l2penalty)]
 
         if ~np.all(vp == np.zeros_like(vp)):
             for state in vp:
@@ -87,9 +87,9 @@ def parametrisation(weight_decay):
                 params = {"m": m, "s": s, "e": e}
                 try:
                     vp, xl, xv = flashTQ(t, 0, x, params, p)
-                    loss += [((state[-1] - vp) / state[-1]) * np.sqrt(2) + l2penalty]
+                    loss += [((state[-1] - vp) / state[-1]) * np.sqrt(3) + np.sqrt(l2penalty)]
                 except:
-                    loss += [l2penalty]
+                    loss += [np.sqrt(l2penalty)]
 
         loss = np.asarray(loss).flatten()
 
