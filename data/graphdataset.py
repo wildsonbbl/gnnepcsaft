@@ -325,6 +325,8 @@ class ThermoMLpara(InMemoryDataset):
             data = pickle.load(file)
         print(f"thermoml dataset size: {len(data)}")
         for inchi in data:
+            if data[inchi][1]> 5/100:
+                continue
             para = data[inchi][0]
             graph = from_InChI(inchi)
 
