@@ -54,7 +54,7 @@ def parametrisation(gamma):
                     vp, xl, xv = flashTQ(t, 0, x, params, p)
                     loss += [((state[-1] - vp) / state[-1]) * np.sqrt(2) + weight_decay]
                 except:
-                    loss += [1.0 + weight_decay]
+                    loss += [weight_decay]
                 
         loss = np.asarray(loss).flatten()
 
@@ -70,6 +70,7 @@ def parametrisation(gamma):
     fitted_para = {}
 
     n_skipped = 0
+    x_scale = np.array([10.0, 10.0, 1000.0])
     for graph in loader:
         rho = graph.rho.view(-1, 5).numpy()
         vp = graph.vp.view(-1, 5).numpy()
@@ -78,7 +79,7 @@ def parametrisation(gamma):
             n_skipped += 1
             continue
         params = np.asarray(init_para[graph.InChI[0]][0])
-        res = least_squares(loss, params, method="lm", args=(rho, vp))
+        res = least_squares(loss, params, method="lm", x_scale = x_scale, args=(rho, vp))
         fit_para = np.abs(res.x).tolist()
         cost = res.cost
         wandb.log(
@@ -101,7 +102,7 @@ def parametrisation(gamma):
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("weight_decay", None, "L2 penalty.")
+flags.DEFINE_float("weight_decay", None, "L2 penalty.")
 
 def main(argv):
     if len(argv) > 1:
