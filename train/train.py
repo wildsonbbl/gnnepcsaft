@@ -48,7 +48,6 @@ def create_model(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
-            layer_norm=config.layer_norm,
             dtype=model_dtype,
             device=device,
         )

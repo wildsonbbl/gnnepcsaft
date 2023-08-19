@@ -13,8 +13,6 @@ import torch
 from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
-    ReduceLROnPlateau,
-    ChainedScheduler,
 )
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
@@ -22,12 +20,11 @@ from torchmetrics import MeanAbsolutePercentageError
 from epcsaft import epcsaft_cython
 import jax
 
-from data.graphdataset import ThermoMLDataset, ThermoML_padded, ramirez
-import pickle
+from data.graphdataset import ThermoMLDataset, ThermoMLpara, ramirez
 
 from ray import tune, air
 import ray
-from ray.air import Checkpoint, session
+from ray.air import session
 from ray.tune.schedulers import ASHAScheduler
 
 from train.model_deg import deg
@@ -53,7 +50,6 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
-            layer_norm=config.layer_norm,
             dtype=model_dtype,
             device=device,
         )
@@ -78,7 +74,7 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
 
 
 def train_and_evaluate(
-    config_tuner: dict, config: ml_collections.ConfigDict, workdir: str
+    config_tuner: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
 ):
     """Execute model training and evaluation loop.
 
@@ -104,18 +100,25 @@ def train_and_evaluate(
     else:
         model_dtype = torch.float32
 
-    path = osp.join(workdir, "data/ramirez2022")
-    train_dataset = ramirez(path)
+    if dataset == "ramirez":
+        path = osp.join(workdir, "data/ramirez2022")
+        train_dataset = ramirez(path)
+    elif dataset == "thermoml":
+        path = osp.join(workdir, "data/thermoml")
+        train_dataset = ThermoMLpara(path)
+    else:
+        ValueError(
+            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+        )
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-    test_dataset = ThermoML_padded(test_dataset, config.pad_size)
     test_loader = DataLoader(test_dataset)
 
-    ra_data = {}
+    para_data = {}
     for graph in train_loader:
         for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
-            ra_data[inchi] = para
+            para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -141,10 +144,10 @@ def train_and_evaluate(
         total_huber_den = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in ra_data:
+                if graphs.InChI[0] in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in ra_data:
+                if graphs.InChI[0] not in para_data:
                     continue
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
             if ~torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -210,6 +213,7 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory")
 flags.DEFINE_string("restoredir", None, "Restore Directory")
+flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads")
 flags.DEFINE_integer("num_gpus", 1, "Number of GPUs")
 config_flags.DEFINE_config_file(
@@ -232,7 +236,9 @@ def main(argv):
 
     config = FLAGS.config
 
-    ptrain = partial(train_and_evaluate, config=config, workdir=FLAGS.workdir)
+    ptrain = partial(
+        train_and_evaluate, config=config, workdir=FLAGS.workdir, dataset=FLAGS.dataset
+    )
     search_space = {
         "propagation_depth": tune.choice([3, 4, 5, 6, 7]),
         "hidden_dim": tune.choice([64, 128, 256, 512]),
@@ -281,5 +287,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["config", "workdir"])
+    flags.mark_flags_as_required(["config", "workdir", "dataset"])
     app.run(main)
