@@ -2,7 +2,6 @@ import os.path as osp
 from absl import app
 from absl import flags
 from ml_collections import config_flags
-from functools import partial
 
 from absl import logging
 import ml_collections
@@ -20,17 +19,20 @@ from torchmetrics import MeanAbsolutePercentageError
 from epcsaft import epcsaft_cython
 import jax
 
-from data.graphdataset import ThermoMLDataset, ThermoMLpara, ramirez
+import wandb
+
+from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
+
+from train.model_deg import calc_deg
 
 from ray import tune, air
 import ray
 from ray.air import session
 from ray.tune.schedulers import ASHAScheduler
+from functools import partial
 
-from train.model_deg import deg
 
-
-def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
+def create_model(config: ml_collections.ConfigDict, deg: torch.Tensor) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
     platform = jax.local_devices()[0].platform
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -82,6 +84,7 @@ def train_and_evaluate(
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
+    deg = calc_deg(dataset)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     platform = jax.local_devices()[0].platform
@@ -122,7 +125,7 @@ def train_and_evaluate(
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config).to(device, model_dtype)
+    model = create_model(config, deg).to(device, model_dtype)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
@@ -257,7 +260,7 @@ def main(argv):
         reduction_factor=2,
     )
 
-    ray.init(num_gpus=FLAGS.num_gpus)
+    ray.init(num_gpus=FLAGS.num_gpus, num_cpus = FLAGS.num_cpu)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
 
     if FLAGS.restoredir:
