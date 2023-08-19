@@ -20,6 +20,8 @@ device = torch.device("cpu")
 
 with open("./data/thermoml/processed/para3.pkl", "rb") as file:
     init_para = pickle.load(file)
+with open("./data/thermoml/raw/para3_fitted.pkl", "rb") as file:
+    fitted_para = pickle.load(file)
 
 
 def MAPE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
@@ -100,7 +102,6 @@ def parametrisation(weight_decay):
         project="gnn-pc-saft",
         config={"weight decay": weight_decay},
     )
-    fitted_para = {}
 
     n_skipped = 0
     x_scale = np.array([10.0, 10.0, 1000.0])
@@ -125,7 +126,9 @@ def parametrisation(weight_decay):
                 "mape": mape,
             },
         )
-        fitted_para[graph.InChI[0]] = (fit_para, mape)
+        saved_mape = fitted_para[graph.InChI[0]][1]
+        if (saved_mape > mape) & (np.isfinite(mape)):
+            fitted_para[graph.InChI[0]] = (fit_para, mape)
         with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
     print(
