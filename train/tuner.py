@@ -260,7 +260,7 @@ def main(argv):
         reduction_factor=2,
     )
 
-    ray.init(num_gpus=FLAGS.num_gpus, num_cpus = FLAGS.num_cpu)
+    #ray.init(num_gpus=FLAGS.num_gpus, num_cpus = FLAGS.num_cpu)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
 
     if FLAGS.restoredir:
