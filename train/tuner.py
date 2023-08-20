@@ -84,7 +84,7 @@ def train_and_evaluate(
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
-    deg = calc_deg(dataset)
+    deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     platform = jax.local_devices()[0].platform
@@ -260,7 +260,7 @@ def main(argv):
         reduction_factor=2,
     )
 
-    #ray.init(num_gpus=FLAGS.num_gpus, num_cpus = FLAGS.num_cpu)
+    ray.init(num_gpus=FLAGS.num_gpus, num_cpus = FLAGS.num_cpu)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
 
     if FLAGS.restoredir:

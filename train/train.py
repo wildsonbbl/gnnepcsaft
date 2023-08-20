@@ -79,7 +79,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
       workdir: Working Directory.
     """
 
-    deg = calc_deg(dataset)
+    deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     platform = jax.local_devices()[0].platform

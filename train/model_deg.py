@@ -1,16 +1,17 @@
 import torch
+import os.path as osp
 
 from data.graphdataset import ramirez, ThermoMLpara
 
 from torch_geometric.utils import degree
 
-def calc_deg(dataset: str) -> torch.Tensor:
+def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
 
     if dataset == "ramirez":
-        path = "./data/ramirez2022"
+        path = osp.join(workdir, "data/ramirez2022")
         train_dataset = ramirez(path)
     elif dataset == "thermoml":
-        path = "./data/thermoml"
+        path = osp.join(workdir, "data/thermoml")
         train_dataset = ThermoMLpara(path)
     else:
         ValueError(f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead")
