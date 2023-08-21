@@ -260,8 +260,8 @@ def main(argv):
         "post_layers": tune.choice([1, 2, 3]),
         "warmup_steps": tune.choice([100, 500, 1000, 2000]),
         "batch_size": tune.choice([64, 128, 256, 512]),
-        "weight_decay": tune.uniform(1e-2, 1e-5),
-        "learning_rate": tune.uniform(1e-3, 1e-8),
+        "weight_decay": tune.uniform(1e-5, 1e-2),
+        "learning_rate": tune.uniform(1e-8, 1e-3),
     }
     max_t = config.num_train_steps // config.log_every_steps
     grace_period = max_t // 3
