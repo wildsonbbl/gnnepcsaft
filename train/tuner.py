@@ -33,7 +33,9 @@ from ray.tune.search.bohb import TuneBOHB
 from functools import partial
 
 
-def create_model(config: ml_collections.ConfigDict, deg: torch.Tensor) -> torch.nn.Module:
+def create_model(
+    config: ml_collections.ConfigDict, deg: torch.Tensor
+) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
     platform = jax.local_devices()[0].platform
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -63,14 +65,18 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
     """Creates an optimizer, as specified by the config."""
     if config.optimizer == "adam":
         return torch.optim.AdamW(
-            params, lr=config.learning_rate, weight_decay=1e-2, amsgrad=True, eps=1e-5
+            params,
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay,
+            amsgrad=True,
+            eps=1e-5,
         )
     if config.optimizer == "sgd":
         return torch.optim.SGD(
             params,
             lr=config.learning_rate,
             momentum=config.momentum,
-            weight_decay=1e-2,
+            weight_decay=config.weight_decay,
             nesterov=True,
         )
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
@@ -96,6 +102,9 @@ def train_and_evaluate(
     config.pre_layers = config_tuner["pre_layers"]
     config.post_layers = config_tuner["post_layers"]
     config.warmup_steps = config_tuner["warmup_steps"]
+    config.weight_decay = config_tuner["weight_decay"]
+    config.batch_size = config_tuner["batch_size"]
+    config.learning_rate = config_tuner["learning_rate"]
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -250,6 +259,9 @@ def main(argv):
         "pre_layers": tune.choice([1, 2, 3]),
         "post_layers": tune.choice([1, 2, 3]),
         "warmup_steps": tune.choice([100, 500, 1000, 2000]),
+        "batch_size": tune.choice([64, 128, 256, 512]),
+        "weight_decay": tune.uniform(1e-2, 1e-5),
+        "learning_rate": tune.uniform(1e-3, 1e-8),
     }
     max_t = config.num_train_steps // config.log_every_steps
     grace_period = max_t // 3
@@ -260,9 +272,8 @@ def main(argv):
         max_t=max_t,
     )
 
-    ray.init(num_gpus=FLAGS.num_gpus, num_cpus = FLAGS.num_cpu)
+    ray.init(num_gpus=FLAGS.num_gpus, num_cpus=FLAGS.num_cpu)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
-
 
     if FLAGS.restoredir:
         tuner = tune.Tuner.restore(
@@ -277,9 +288,7 @@ def main(argv):
             tune.with_resources(tune.with_parameters(ptrain), resources=resources),
             param_space=search_space,
             tune_config=tune.TuneConfig(
-                search_alg=search_alg,
-                scheduler=scheduler, 
-                num_samples=100
+                search_alg=search_alg, scheduler=scheduler, num_samples=100
             ),
             run_config=air.RunConfig(storage_path="./ray", verbose=1),
         )

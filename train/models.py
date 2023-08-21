@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential
+from torch.nn import Linear, ModuleList, ReLU, Sequential, BatchNorm1d, Sigmoid
 from torch_geometric.nn import PNAConv, global_add_pool, BatchNorm
 from torch_geometric.data import Data
 
@@ -61,21 +61,21 @@ class PNAPCSAFT(torch.nn.Module):
 
         self.mlp = Sequential(
             Linear(hidden_dim, hidden_dim),
-            BatchNorm(hidden_dim),
+            BatchNorm1d(hidden_dim),
             ReLU(),
             Linear(hidden_dim, hidden_dim),
-            BatchNorm(hidden_dim),
+            BatchNorm1d(hidden_dim),
             ReLU(),
         )
         self.ouput = Sequential(
             Linear(hidden_dim, hidden_dim // 2),
-            BatchNorm(hidden_dim // 2),
+            BatchNorm1d(hidden_dim // 2),
             ReLU(),
             Linear(hidden_dim // 2, hidden_dim // 4),
-            BatchNorm(hidden_dim // 4),
+            BatchNorm1d(hidden_dim // 4),
             ReLU(),
             Linear(hidden_dim // 4, num_para),
-            ReLU(),
+            Sigmoid(),
         )
 
     def forward(

@@ -18,12 +18,10 @@ def get_config():
     config.log_every_steps = 100
     config.eval_every_steps = 2_000
     config.checkpoint_every_steps = 3_000
-    config.add_virtual_node = False
-    config.add_undirected_edges = True
-    config.add_self_loops = True
     config.half_precision = False
     config.momentum = 0.9
     config.patience = 1000
+    config.weight_decay = 1e-2
     
 
     # GNN hyperparameters.
@@ -34,7 +32,6 @@ def get_config():
     config.num_mlp_layers = 1
     config.num_para = 3
     config.skip_connections = True
-    config.layer_norm = True
     config.pre_layers = 1
     config.post_layers = 1
     return config
