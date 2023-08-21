@@ -28,7 +28,8 @@ from train.model_deg import calc_deg
 from ray import tune, air
 import ray
 from ray.air import session
-from ray.tune.schedulers import ASHAScheduler
+from ray.tune.schedulers import HyperBandForBOHB
+from ray.tune.search.bohb import TuneBOHB
 from functools import partial
 
 
@@ -252,16 +253,16 @@ def main(argv):
     }
     max_t = config.num_train_steps // config.log_every_steps
     grace_period = max_t // 3
-    scheduler = ASHAScheduler(
+    search_alg = TuneBOHB(metric="mape_den", mode="min")
+    scheduler = HyperBandForBOHB(
         metric="mape_den",
         mode="min",
         max_t=max_t,
-        grace_period=grace_period,
-        reduction_factor=2,
     )
 
     ray.init(num_gpus=FLAGS.num_gpus, num_cpus = FLAGS.num_cpu)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
+
 
     if FLAGS.restoredir:
         tuner = tune.Tuner.restore(
@@ -275,7 +276,11 @@ def main(argv):
         tuner = tune.Tuner(
             tune.with_resources(tune.with_parameters(ptrain), resources=resources),
             param_space=search_space,
-            tune_config=tune.TuneConfig(scheduler=scheduler, num_samples=100),
+            tune_config=tune.TuneConfig(
+                search_alg=search_alg,
+                scheduler=scheduler, 
+                num_samples=100
+            ),
             run_config=air.RunConfig(storage_path="./ray", verbose=1),
         )
 
