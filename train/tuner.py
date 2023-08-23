@@ -154,7 +154,6 @@ def train_and_evaluate(
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
-    
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
@@ -307,7 +306,11 @@ def main(argv):
             tune_config=tune.TuneConfig(
                 search_alg=search_alg, scheduler=scheduler, num_samples=100
             ),
-            run_config=air.RunConfig(storage_path="./ray", verbose=1),
+            run_config=air.RunConfig(
+                storage_path="./ray",
+                verbose=1,
+                checkpoint_config=air.CheckpointConfig(num_to_keep=1),
+            ),
         )
 
     result = tuner.fit()
