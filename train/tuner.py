@@ -146,6 +146,7 @@ def train_and_evaluate(
     optimizer = create_optimizer(config, model.parameters())
 
     # Set up checkpointing of the model.
+    initial_step = 1
     checkpoint = session.get_checkpoint()
     if checkpoint:
         checkpoint = checkpoint.to_dict()
@@ -153,6 +154,7 @@ def train_and_evaluate(
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
+    
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
