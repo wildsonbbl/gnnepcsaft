@@ -28,6 +28,7 @@ from train.model_deg import calc_deg
 from ray import tune, air
 import ray
 from ray.air import session
+from ray.air.checkpoint import Checkpoint
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search.bohb import TuneBOHB
 from functools import partial
@@ -145,7 +146,13 @@ def train_and_evaluate(
     optimizer = create_optimizer(config, model.parameters())
 
     # Set up checkpointing of the model.
-    initial_step = 1
+    checkpoint = session.get_checkpoint()
+    if checkpoint:
+        checkpoint = checkpoint.to_dict()
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        step = checkpoint["step"]
+        initial_step = int(step) + 1
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
@@ -204,6 +211,13 @@ def train_and_evaluate(
             # Log
             if step % config.log_every_steps == 0:
                 mape_den, huber_den = test(test="val")
+                checkpoint = Checkpoint.from_dict(
+                    {
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "step": step,
+                    }
+                )
                 session.report(
                     {
                         "train_mape": torch.tensor(total_loss_mape).mean().item(),
@@ -212,6 +226,7 @@ def train_and_evaluate(
                         "mape_den": mape_den,
                         "huber_den": huber_den,
                     },
+                    checkpoint=checkpoint,
                 )
                 total_loss_mape = []
                 total_loss_huber = []
