@@ -309,7 +309,7 @@ def main(argv):
             run_config=air.RunConfig(
                 storage_path="./ray",
                 verbose=1,
-                checkpoint_config=air.CheckpointConfig(num_to_keep=1),
+                checkpoint_config=air.CheckpointConfig(num_to_keep=1, checkpoint_at_end=False),
             ),
         )
 
