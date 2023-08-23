@@ -297,7 +297,7 @@ def main(argv):
             tune.with_resources(tune.with_parameters(ptrain), resources=resources),
             resume_unfinished=True,
             resume_errored=False,
-            restart_errored=True,
+            restart_errored=False,
         )
     else:
         tuner = tune.Tuner(
