@@ -274,13 +274,13 @@ def main(argv):
         "num_mlp_layers": tune.choice([1, 2, 3]),
         "pre_layers": tune.choice([1, 2, 3]),
         "post_layers": tune.choice([1, 2, 3]),
-        "warmup_steps": tune.choice([100, 500, 1000, 2000]),
+        "warmup_steps": tune.choice([100, 500, 1000]),
         "batch_size": tune.choice([64, 128, 256, 512]),
-        "weight_decay": tune.uniform(1e-5, 1e-2),
-        "learning_rate": tune.uniform(1e-8, 1e-3),
+        "weight_decay": tune.loguniform(1e-9, 1e-2),
+        "learning_rate": tune.loguniform(1e-9, 1e-2),
     }
     max_t = config.num_train_steps // config.log_every_steps
-    grace_period = max_t // 3
+    
     search_alg = TuneBOHB(metric="mape_den", mode="min")
     scheduler = HyperBandForBOHB(
         metric="mape_den",
@@ -310,6 +310,7 @@ def main(argv):
                 storage_path="./ray",
                 verbose=1,
                 checkpoint_config=air.CheckpointConfig(num_to_keep=1),
+                progress_reporter=tune.JupyterNotebookReporter
             ),
         )
 
