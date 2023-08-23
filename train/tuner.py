@@ -310,7 +310,6 @@ def main(argv):
                 storage_path="./ray",
                 verbose=1,
                 checkpoint_config=air.CheckpointConfig(num_to_keep=1),
-                progress_reporter=tune.JupyterNotebookReporter
             ),
         )
 
