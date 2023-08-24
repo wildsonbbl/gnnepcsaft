@@ -272,11 +272,12 @@ def main(argv):
     }
     max_t = config.num_train_steps // config.log_every_steps - 1
 
-    search_alg = TuneBOHB(metric="mape_den", mode="min")
+    search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
     scheduler = HyperBandForBOHB(
         metric="mape_den",
         mode="min",
         max_t=max_t,
+        stop_last_trials=True,
     )
 
     ray.init(num_gpus=FLAGS.num_gpus, num_cpus=FLAGS.num_cpu)
