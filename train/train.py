@@ -17,7 +17,6 @@ from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
-import jax
 
 import wandb
 
@@ -30,13 +29,10 @@ def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
-    platform = jax.local_devices()[0].platform
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if config.half_precision:
-        if platform == "tpu":
-            model_dtype = torch.bfloat16
-        else:
-            model_dtype = torch.float16
+        model_dtype = torch.float16
     else:
         model_dtype = torch.float32
     if config.model == "PNA":
@@ -86,7 +82,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    platform = jax.local_devices()[0].platform
+
     # Create writer for logs.
     wandb.login()
     run = wandb.init(
@@ -284,9 +280,6 @@ config_flags.DEFINE_config_file(
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
-
-    logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
-    logging.info("JAX local devices: %r", jax.local_devices())
 
     logging.info("Calling train and evaluate")
 

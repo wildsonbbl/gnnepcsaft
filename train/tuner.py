@@ -17,9 +17,6 @@ from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
-import jax
-
-import wandb
 
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
@@ -38,13 +35,10 @@ def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
-    platform = jax.local_devices()[0].platform
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if config.half_precision:
-        if platform == "tpu":
-            model_dtype = torch.bfloat16
-        else:
-            model_dtype = torch.float16
+        model_dtype = torch.float16
     else:
         model_dtype = torch.float32
     if config.model == "PNA":
@@ -95,7 +89,6 @@ def train_and_evaluate(
     deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    platform = jax.local_devices()[0].platform
 
     config.propagation_depth = config_tuner["propagation_depth"]
     config.hidden_dim = config_tuner["hidden_dim"]
@@ -257,8 +250,6 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
-    logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
-    logging.info("JAX local devices: %r", jax.local_devices())
     logging.info(f"config file below: \n{FLAGS.config}")
 
     logging.info("Calling tuner")
@@ -279,8 +270,8 @@ def main(argv):
         "weight_decay": tune.loguniform(1e-9, 1e-2),
         "learning_rate": tune.loguniform(1e-9, 1e-2),
     }
-    max_t = config.num_train_steps // config.log_every_steps
-    
+    max_t = config.num_train_steps // config.log_every_steps - 1
+
     search_alg = TuneBOHB(metric="mape_den", mode="min")
     scheduler = HyperBandForBOHB(
         metric="mape_den",
@@ -309,7 +300,9 @@ def main(argv):
             run_config=air.RunConfig(
                 storage_path="./ray",
                 verbose=1,
-                checkpoint_config=air.CheckpointConfig(num_to_keep=1, checkpoint_at_end=False),
+                checkpoint_config=air.CheckpointConfig(
+                    num_to_keep=1, checkpoint_at_end=False
+                ),
             ),
         )
 

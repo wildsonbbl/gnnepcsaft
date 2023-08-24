@@ -14,7 +14,6 @@ from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
-import jax
 
 import wandb
 
@@ -27,7 +26,6 @@ device = "cpu"
 
 def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
-    platform = jax.local_devices()[0].platform
     model_dtype = torch.float64
     if config.model == "PNA":
         return models.PNAPCSAFT(
@@ -90,9 +88,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
 
     # Set up checkpointing of the model.
     if dataset == "ramirez":
-        ckp_path = osp.join(workdir,  "train/checkpoints/ra_last_checkpoint.pth")
+        ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
     else:
-        ckp_path = osp.join(workdir,  "train/checkpoints/tml_last_checkpoint.pth")
+        ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
     checkpoint = torch.load(ckp_path)
     model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -218,9 +216,6 @@ config_flags.DEFINE_config_file(
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
-
-    logging.info("JAX host: %d / %d", jax.process_index(), jax.process_count())
-    logging.info("JAX local devices: %r", jax.local_devices())
 
     logging.info("Calling evaluate")
 
