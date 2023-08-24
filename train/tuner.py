@@ -303,6 +303,7 @@ def main(argv):
                 num_samples=FLAGS.num_samples,
             ),
             run_config=air.RunConfig(
+                name="gnnpcsaft",
                 storage_path="./ray",
                 verbose=1,
                 checkpoint_config=air.CheckpointConfig(
