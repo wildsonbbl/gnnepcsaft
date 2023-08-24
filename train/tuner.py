@@ -238,6 +238,7 @@ flags.DEFINE_string("restoredir", None, "Restore Directory")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads")
 flags.DEFINE_integer("num_gpus", 1, "Number of GPUs")
+flags.DEFINE_integer("num_samples", 100, "Number of trials")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -296,7 +297,9 @@ def main(argv):
             tune.with_resources(tune.with_parameters(ptrain), resources=resources),
             param_space=search_space,
             tune_config=tune.TuneConfig(
-                search_alg=search_alg, scheduler=scheduler, num_samples=100
+                search_alg=search_alg,
+                scheduler=scheduler,
+                num_samples=FLAGS.num_samples,
             ),
             run_config=air.RunConfig(
                 storage_path="./ray",
