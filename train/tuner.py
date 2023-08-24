@@ -239,6 +239,7 @@ flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads")
 flags.DEFINE_integer("num_gpus", 1, "Number of GPUs")
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
+flags.DEFINE_boolean("get_result", False, "Whether to show results or continue tuning")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -310,14 +311,20 @@ def main(argv):
             ),
         )
 
-    result = tuner.fit()
+    if FLAGS.get_result:
+        result = tuner.get_results()
+    else:
+        result = tuner.fit()
 
     best_trial = result.get_best_result(
         metric="mape_den",
         mode="min",
     )
+    best_trials = result.get_dataframe("mape_den", "min").sort_values("mape_den")
+    best_trials = best_trials[["mape_den", "train_mape", "trial_id"]]
     print(f"\nBest trial config:\n {best_trial.config}")
     print(f"\nBest trial final metrics:\n {best_trial.metrics}")
+    print(f"\nBest trials final metrics:\n {best_trials.head(10)}")
 
 
 if __name__ == "__main__":
