@@ -19,12 +19,14 @@ import wandb
 
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
-from train.model_deg import deg
+from train.model_deg import calc_deg
 
 device = "cpu"
 
 
-def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
+def create_model(
+    config: ml_collections.ConfigDict, deg: torch.Tensor
+) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
     model_dtype = torch.float64
     if config.model == "PNA":
@@ -36,7 +38,6 @@ def create_model(config: ml_collections.ConfigDict) -> torch.nn.Module:
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
-            layer_norm=config.layer_norm,
             dtype=model_dtype,
             device=device,
         )
@@ -50,17 +51,13 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
-
+    deg = calc_deg(dataset, workdir)
     # Create writer for logs.
     wandb.login()
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
     model_dtype = torch.float64
-
-    path = osp.join(workdir, "data/thermoml")
-    test_dataset = ThermoMLDataset(path)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -72,15 +69,19 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
         ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
-    train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+
+    test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+    test_loader = DataLoader(test_dataset)
 
     para_data = {}
     for graph in train_loader:
-        para_data[graph.InChI[0]] = graph.para
+        for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
+            para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config).to(device, model_dtype)
+    model = create_model(config, deg).to(device, model_dtype)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
