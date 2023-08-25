@@ -156,6 +156,8 @@ def train_and_evaluate(
         model.eval()
         total_mape_den = []
         total_huber_den = []
+        total_mape_vp = []
+        total_huber_vp = []
         for graphs in test_loader:
             if test == "test":
                 if graphs.InChI[0] in para_data:
@@ -163,10 +165,11 @@ def train_and_evaluate(
             if test == "val":
                 if graphs.InChI[0] not in para_data:
                     continue
+            graphs = graphs.to(device)
+            pred_para = model(graphs).squeeze().to("cpu", torch.float64)
+
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
             if ~torch.all(datapoints == torch.zeros_like(datapoints)):
-                graphs = graphs.to(device)
-                pred_para = model(graphs).squeeze().to("cpu", torch.float64)
                 pred = pcsaft_den(pred_para, datapoints)
                 target = datapoints[:, -1]
                 loss_mape = mape(pred, target)
