@@ -95,9 +95,7 @@ class ThermoMLDataset(InMemoryDataset):
             data_dict = pickle.load(f)
 
         for inchi in data_dict:
-            graph = from_InChI(
-                inchi,
-            )
+            graph = from_InChI(inchi, with_hydrogen=True)
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
                     torch.cat(
@@ -144,7 +142,6 @@ class ThermoMLDataset(InMemoryDataset):
 
                 datalist.append(graph)
             elif 1 in data_dict[inchi]:
-                vp = torch.zeros((1, 5))
                 rho = [
                     torch.cat(
                         [
@@ -157,7 +154,7 @@ class ThermoMLDataset(InMemoryDataset):
 
                 rho = torch.cat(rho, 0)
 
-                graph.vp = vp
+                graph.vp = torch.zeros((1, 5))
                 graph.rho = rho
                 datalist.append(graph)
 
@@ -270,7 +267,7 @@ class ramirez(InMemoryDataset):
         for row in data.iter_rows():
             inchi = row[-1]
             para = row[3:6]
-            graph = from_InChI(inchi)
+            graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
             datalist.append(graph)
@@ -325,10 +322,10 @@ class ThermoMLpara(InMemoryDataset):
             data = pickle.load(file)
         print(f"thermoml dataset size: {len(data)}")
         for inchi in data:
-            if data[inchi][1]> 5/100:
+            if data[inchi][1] > 5 / 100:
                 continue
             para = data[inchi][0]
-            graph = from_InChI(inchi)
+            graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
             datalist.append(graph)
@@ -338,7 +335,7 @@ class ThermoMLpara(InMemoryDataset):
         for row in data.iter_rows():
             inchi = row[-1]
             para = row[3:6]
-            graph = from_InChI(inchi)
+            graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
             datalist.append(graph)

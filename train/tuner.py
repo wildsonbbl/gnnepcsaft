@@ -325,7 +325,7 @@ def main(argv):
         mode="min",
     )
     best_trials = result.get_dataframe("mape_den", "min").sort_values("mape_den")
-    best_trials = best_trials[["mape_den", "train_mape", "trial_id"]]
+    best_trials = best_trials[["mape_den", "train_mape", "trial_id", "training_iteration"]]
     print(f"\nBest trial config:\n {best_trial.config}")
     print(f"\nBest trial final metrics:\n {best_trial.metrics}")
     print(f"\nBest trials final metrics:\n {best_trials.head(10)}")
