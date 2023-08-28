@@ -28,6 +28,7 @@ from ray.air import session
 from ray.air.checkpoint import Checkpoint
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search.bohb import TuneBOHB
+from ray.tune.search import ConcurrencyLimiter
 from functools import partial
 
 
@@ -95,10 +96,6 @@ def train_and_evaluate(
     config.num_mlp_layers = config_tuner["num_mlp_layers"]
     config.pre_layers = config_tuner["pre_layers"]
     config.post_layers = config_tuner["post_layers"]
-    config.warmup_steps = config_tuner["warmup_steps"]
-    config.weight_decay = config_tuner["weight_decay"]
-    config.batch_size = config_tuner["batch_size"]
-    config.learning_rate = config_tuner["learning_rate"]
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -270,19 +267,16 @@ def main(argv):
         "num_mlp_layers": tune.choice([1, 2, 3]),
         "pre_layers": tune.choice([1, 2, 3]),
         "post_layers": tune.choice([1, 2, 3]),
-        "warmup_steps": tune.choice([100, 500, 1000]),
-        "batch_size": tune.choice([64, 128, 256, 512]),
-        "weight_decay": tune.loguniform(1e-9, 1e-2),
-        "learning_rate": tune.loguniform(1e-9, 1e-2),
     }
     max_t = config.num_train_steps // config.log_every_steps - 1
 
     search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
+    search_alg = ConcurrencyLimiter(search_alg, 4)
     scheduler = HyperBandForBOHB(
         metric="mape_den",
         mode="min",
         max_t=max_t,
-        stop_last_trials=True,
+        stop_last_trials=False,
     )
 
     ray.init(num_gpus=FLAGS.num_gpus, num_cpus=FLAGS.num_cpu)
@@ -312,6 +306,7 @@ def main(argv):
                 checkpoint_config=air.CheckpointConfig(
                     num_to_keep=1, checkpoint_at_end=False
                 ),
+                stop={"training_iteration": max_t},
             ),
         )
 
@@ -325,7 +320,16 @@ def main(argv):
         mode="min",
     )
     best_trials = result.get_dataframe("mape_den", "min").sort_values("mape_den")
-    best_trials = best_trials[["mape_den", "train_mape", "trial_id", "training_iteration"]]
+    best_trials = best_trials[
+        [
+            "mape_den",
+            "huber_den",
+            "train_mape",
+            "train_huber",
+            "trial_id",
+            "training_iteration",
+        ]
+    ]
     print(f"\nBest trial config:\n {best_trial.config}")
     print(f"\nBest trial final metrics:\n {best_trial.metrics}")
     print(f"\nBest trials final metrics:\n {best_trials.head(10)}")
