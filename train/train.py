@@ -211,7 +211,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
             lr += scheduler.get_last_lr()
-            scheduler.step()
+            scheduler.step(step)
 
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)

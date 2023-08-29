@@ -200,7 +200,7 @@ def train_and_evaluate(
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
             lr += scheduler.get_last_lr()
-            scheduler.step()
+            scheduler.step(step)
 
             # Log
             if step % config.log_every_steps == 0:
