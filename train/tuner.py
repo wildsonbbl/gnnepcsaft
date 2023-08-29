@@ -323,9 +323,7 @@ def main(argv):
     best_trials = best_trials[
         [
             "mape_den",
-            "huber_den",
             "train_mape",
-            "train_huber",
             "trial_id",
             "training_iteration",
         ]
