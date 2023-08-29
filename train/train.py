@@ -142,6 +142,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
+        del checkpoint
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)

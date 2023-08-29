@@ -144,6 +144,7 @@ def train_and_evaluate(
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
+        del checkpoint
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
@@ -225,6 +226,7 @@ def train_and_evaluate(
                 total_loss_mape = []
                 total_loss_huber = []
                 lr = []
+                model.train()
 
             step += 1
             if step > config.num_train_steps:
