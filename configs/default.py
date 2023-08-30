@@ -7,11 +7,11 @@ def get_config():
 
     # Optimizer.
     config.optimizer = "adam"
-    config.learning_rate = 1.0e-5
+    config.learning_rate = 1.0e-3
 
     # Training hyperparameters.
     
-    config.batch_size = 512
+    config.batch_size = 128
     config.pad_size = 128
     config.num_train_steps = 100_000
     config.warmup_steps = 100
