@@ -8,6 +8,7 @@ def get_config():
     # Optimizer.
     config.optimizer = "adam"
     config.learning_rate = 1.0e-3
+    config.change_opt = False
 
     # Training hyperparameters.
     
