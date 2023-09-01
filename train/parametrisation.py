@@ -10,12 +10,10 @@ import numpy as np
 
 import os.path as osp, pickle, wandb
 import torch
-from torch_geometric.loader import DataLoader
 from data.graphdataset import ThermoMLDataset
 
 path = osp.join("data", "thermoml")
-dataset = ThermoMLDataset(path)
-loader = DataLoader(dataset, batch_size=1, shuffle=False)
+loader = ThermoMLDataset(path)
 device = torch.device("cpu")
 
 with open("./data/thermoml/processed/para3.pkl", "rb") as file:
@@ -124,6 +122,7 @@ def parametrisation(weight_decay):
                 "s": fit_para[1],
                 "e": fit_para[2],
                 "mape": mape,
+                "inchi": graph.InChI
             },
         )
         saved_mape = fitted_para[graph.InChI[0]][1]

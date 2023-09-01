@@ -111,8 +111,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         )
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
-    test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-    test_loader = DataLoader(test_dataset)
+    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
 
     para_data = {}
     for graph in train_loader:
@@ -158,10 +157,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         total_huber_vp = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in para_data:
+                if graphs.InChI in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in para_data:
+                if graphs.InChI not in para_data:
                     continue
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)

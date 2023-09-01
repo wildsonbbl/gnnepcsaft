@@ -61,23 +61,21 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = ramirez(path)
+        train_loader = ramirez(path)
     elif dataset == "thermoml":
         path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path)
+        train_loader = ThermoMLpara(path)
     else:
         ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
-    test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-    test_loader = DataLoader(test_dataset)
+    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
 
     para_data = {}
     for graph in train_loader:
-        for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
-            para_data[inchi] = para
+        inchi, para = graph.InChI, graph.para.view(-1, 3)
+        para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -103,10 +101,10 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
         total_loss_huber = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in para_data:
+                if graphs.InChI in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in para_data:
+                if graphs.InChI not in para_data:
                     continue
             datapoints = graphs.rho.to(device, model_dtype)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -121,6 +119,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
                 {
                     "mape_den": loss_mape.item(),
                     "huber_den": loss_huber.item(),
+                    "inchi": graphs.InChI,
                 },
             )
             total_loss_mape += [loss_mape.item()]
@@ -138,10 +137,10 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
         total_loss_huber = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in para_data:
+                if graphs.InChI in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in para_data:
+                if graphs.InChI not in para_data:
                     continue
             datapoints = graphs.vp.to(device, model_dtype)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -157,6 +156,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
                 {
                     "mape_vp": loss_mape.item(),
                     "huber_vp": loss_huber.item(),
+                    "inchi": graphs.InChI,
                 },
             )
             total_loss_mape += [loss_mape.item()]
