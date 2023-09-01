@@ -110,7 +110,7 @@ def parametrisation(weight_decay):
         if n_datapoints < 4:
             n_skipped += 1
             continue
-        params = np.asarray(init_para[graph.InChI[0]][0])
+        params = np.asarray(init_para[graph.InChI][0])
         res = least_squares(loss, params, method="lm", x_scale=x_scale, args=(rho, vp))
         fit_para = np.abs(res.x).tolist()
         cost = res.cost
@@ -125,9 +125,9 @@ def parametrisation(weight_decay):
                 "inchi": graph.InChI
             },
         )
-        saved_mape = fitted_para[graph.InChI[0]][1]
+        saved_mape = fitted_para[graph.InChI][1]
         if (saved_mape > mape) & (np.isfinite(mape)):
-            fitted_para[graph.InChI[0]] = (fit_para, mape)
+            fitted_para[graph.InChI] = (fit_para, mape)
         with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
     print(
