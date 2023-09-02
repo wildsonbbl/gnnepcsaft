@@ -325,9 +325,7 @@ class ThermoMLpara(InMemoryDataset):
         for row in data.iter_rows():
             inchi = row[-1]
             para = row[3:6]
-            graph = from_InChI(inchi, with_hydrogen=False)
-            if graph.x.shape[0] <= 2:
-                graph = from_InChI(inchi, with_hydrogen=True)
+            graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
             inchis.append(inchi)
@@ -340,9 +338,7 @@ class ThermoMLpara(InMemoryDataset):
             if (data[inchi][1] > 5 / 100) or (inchi in inchis):
                 continue
             para = data[inchi][0]
-            graph = from_InChI(inchi, with_hydrogen=False)
-            if graph.x.shape[0] <= 2:
-                graph = from_InChI(inchi, with_hydrogen=True)
+            graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
             datalist.append(graph)
