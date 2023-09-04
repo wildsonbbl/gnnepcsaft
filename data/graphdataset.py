@@ -95,7 +95,9 @@ class ThermoMLDataset(InMemoryDataset):
             data_dict = pickle.load(f)
 
         for inchi in data_dict:
-            graph = from_InChI(inchi, with_hydrogen=True)
+            graph = from_InChI(inchi, with_hydrogen=False)
+            if graph.x.shape[0] <= 2:
+                graph = from_InChI(inchi, with_hydrogen=True)
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
                     torch.cat(
@@ -267,7 +269,9 @@ class ramirez(InMemoryDataset):
         for row in data.iter_rows():
             inchi = row[-1]
             para = row[3:6]
-            graph = from_InChI(inchi, with_hydrogen=True)
+            graph = from_InChI(inchi, with_hydrogen=False)
+            if graph.x.shape[0] <= 2:
+                graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
             datalist.append(graph)
