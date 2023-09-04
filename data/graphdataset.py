@@ -324,26 +324,29 @@ class ThermoMLpara(InMemoryDataset):
         datalist = []
         inchis = []
         
-        data = pl.read_parquet(self.raw_paths[1])
-        print(f"ramirez dataset size: {data.shape[0]}")
-        for row in data.iter_rows():
-            inchi = row[-1]
-            para = row[3:6]
+        radata = pl.read_parquet(self.raw_paths[1])
+        print(f"ramirez dataset size: {radata.shape[0]}")
+        with open(self.raw_paths[0], "rb") as file:
+            fitted = pickle.load(file)
+        print(f"thermoml dataset size: {len(fitted)}")
+
+        for inchi in fitted:
+            para, mden, mvp = fitted[inchi] 
+            if (mden > 3 / 100) or (mvp > 5/100):
+                continue
             graph = from_InChI(inchi, with_hydrogen=False)
             if graph.x.shape[0] <= 2:
                 graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
-            inchis.append(inchi)
             datalist.append(graph)
+            inchis.append(inchi)
 
-        with open(self.raw_paths[0], "rb") as file:
-            data = pickle.load(file)
-        print(f"thermoml dataset size: {len(data)}")
-        for inchi in data:
-            if (data[inchi][1] > 5 / 100) or (inchi in inchis):
+        for row in radata.iter_rows():
+            inchi = row[-1]
+            if inchi in inchis:
                 continue
-            para = data[inchi][0]
+            para = row[3:6]
             graph = from_InChI(inchi, with_hydrogen=False)
             if graph.x.shape[0] <= 2:
                 graph = from_InChI(inchi, with_hydrogen=True)
