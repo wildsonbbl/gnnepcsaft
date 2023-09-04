@@ -71,7 +71,7 @@ def parametrisation(weight_decay):
         loss = []
         x_scale = np.array([1.0, 1.0, 100.0])
         n = rho.shape[0] + vp.shape[0]
-        l2penalty = np.sum((parameters / x_scale)**2) * weight_decay
+        l2penalty = np.sum((parameters / x_scale)**2) * weight_decay / n
 
         if ~np.all(rho == np.zeros_like(rho)):
             for state in rho:
@@ -129,6 +129,7 @@ def parametrisation(weight_decay):
                 "mape_den": mden,
                 "mape_vp": mvp,
                 "inchi": graph.InChI,
+                "success": int(res.success),
             },
         )
         _ , saved_mden, saved_mvp = fitted_para[graph.InChI]
