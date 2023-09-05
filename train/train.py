@@ -44,7 +44,7 @@ def create_model(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
-            dtype=model_dtype
+            dtype=model_dtype,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -108,9 +108,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
-    train_loader = DataListLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+    train_loader = DataListLoader(
+        train_dataset, batch_size=config.batch_size, shuffle=True
+    )
 
-    test_loader = DataListLoader(ThermoMLDataset(osp.join(workdir, "data/thermoml")))
+    test_loader = DataListLoader(
+        ThermoMLDataset(osp.join(workdir, "data/thermoml")),
+        batch_size=config.batch_size,
+    )
 
     para_data = {}
     for graph in train_dataset:
@@ -146,7 +151,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         model = DataParallel(model).to(device, model_dtype)
         optimizer = create_optimizer(config, model.parameters())
 
-
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
     # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
@@ -159,33 +163,34 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         total_mape_vp = []
         total_huber_vp = []
         for data_list in test_loader:
-            graphs = data_list[0]
-            if test == "test":
-                if graphs.InChI in para_data:
-                    continue
-            if test == "val":
-                if graphs.InChI not in para_data:
-                    continue
-            pred_para = model(data_list).squeeze().to("cpu", torch.float64)
+            pred = model(data_list).view(-1, 3)
+            for graphs, pred_para in zip(data_list, pred):
+                pred_para = pred_para.squeeze().to("cpu", torch.float64)
+                if test == "test":
+                    if graphs.InChI in para_data:
+                        continue
+                if test == "val":
+                    if graphs.InChI not in para_data:
+                        continue
 
-            datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
-            if ~torch.all(datapoints == torch.zeros_like(datapoints)):
-                pred = pcsaft_den(pred_para, datapoints)
-                target = datapoints[:, -1]
-                loss_mape = mape(pred, target)
-                loss_huber = HLoss(pred, target)
-                total_mape_den += [loss_mape.item()]
-                total_huber_den += [loss_huber.item()]
+                datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
+                if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+                    pred = pcsaft_den(pred_para, datapoints)
+                    target = datapoints[:, -1]
+                    loss_mape = mape(pred, target)
+                    loss_huber = HLoss(pred, target)
+                    total_mape_den += [loss_mape.item()]
+                    total_huber_den += [loss_huber.item()]
 
-            datapoints = graphs.vp.to("cpu", torch.float64).view(-1, 5)
-            if ~torch.all(datapoints == torch.zeros_like(datapoints)):
-                pred = pcsaft_vp(pred_para, datapoints)
-                target = datapoints[:, -1]
-                result_filter = ~torch.isnan(pred)
-                loss_mape = mape(pred[result_filter], target[result_filter])
-                loss_huber = HLoss(pred[result_filter], target[result_filter])
-                total_mape_vp += [loss_mape.item()]
-                total_huber_vp += [loss_huber.item()]
+                datapoints = graphs.vp.to("cpu", torch.float64).view(-1, 5)
+                if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+                    pred = pcsaft_vp(pred_para, datapoints)
+                    target = datapoints[:, -1]
+                    result_filter = ~torch.isnan(pred)
+                    loss_mape = mape(pred[result_filter], target[result_filter])
+                    loss_huber = HLoss(pred[result_filter], target[result_filter])
+                    total_mape_vp += [loss_mape.item()]
+                    total_huber_vp += [loss_huber.item()]
 
         return (
             torch.tensor(total_mape_den).nanmean().item(),
@@ -206,7 +211,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         for data_list in train_loader:
             optimizer.zero_grad()
             pred = model(data_list)
-            target = torch.cat([graph.para.view(-1, 3) for graph in data_list]).to(pred.device, model_dtype)        
+            target = torch.cat([graph.para.view(-1, 3) for graph in data_list]).to(
+                pred.device, model_dtype
+            )
             loss_mape = mape(pred, target)
             loss_huber = HLoss(pred, target)
             loss_mape.backward()
