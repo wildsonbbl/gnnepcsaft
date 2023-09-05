@@ -14,6 +14,7 @@ from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
 )
 from torch_geometric.loader import DataLoader
+from torch_geometric import compile
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
@@ -121,6 +122,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config, deg).to(device, model_dtype)
+    model = compile(model)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
