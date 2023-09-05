@@ -119,18 +119,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config, deg)
     logging.info(f"Using {torch.cuda.device_count()} GPUs!")
-    model = DataParallel(model).to(device, model_dtype)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
-    HLoss = HuberLoss("mean").to(device)
-    mape = MeanAbsolutePercentageError().to(device)
+    HLoss = HuberLoss("mean")
+    mape = MeanAbsolutePercentageError()
 
-    # Create the optimizer.
-    optimizer = create_optimizer(config, model.parameters())
-
-    # Set up checkpointing of the model.
     if dataset == "ramirez":
         ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
     else:
@@ -138,19 +132,28 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     initial_step = 1
     if osp.exists(ckp_path):
         checkpoint = torch.load(ckp_path)
+        model = create_model(config, deg)
         model.load_state_dict(checkpoint["model_state_dict"])
+        model = DataParallel(model).to(device, model_dtype)
+        optimizer = create_optimizer(config, model.parameters())
         if not config.change_opt:
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
+    else:
+        model = create_model(config, deg)
+        model = DataParallel(model).to(device, model_dtype)
+        optimizer = create_optimizer(config, model.parameters())
+
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
     # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
 
     @torch.no_grad()
-    def test(test="test"):
+    def test(test: str, model: DataParallel):
+        model = model.module.to('cpu')
         model.eval()
         total_mape_den = []
         total_huber_den = []
@@ -163,7 +166,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             if test == "val":
                 if graphs.InChI not in para_data:
                     continue
-            graphs = graphs.to(device)
+            graphs = graphs.to("cpu")
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
@@ -238,7 +241,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             # Evaluate on validation.
             if step % config.eval_every_steps == 0 or (is_last_step):
-                mape_den, huber_den, mape_vp, huber_vp = test(test="val")
+                mape_den, huber_den, mape_vp, huber_vp = test(test="val", model=model)
                 wandb.log(
                     {
                         "mape_den": mape_den,
@@ -259,7 +262,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 def savemodel(model, optimizer, path, step):
     torch.save(
         {
-            "model_state_dict": model.state_dict(),
+            "model_state_dict": model.module.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "step": step,
         },
