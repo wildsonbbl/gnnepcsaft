@@ -275,7 +275,7 @@ def run(
             if (
                 step % config.checkpoint_every_steps == 0 or is_last_step
             ) and rank == 0:
-                savemodel(model, optimizer, ckp_path, step)
+                savemodel(model, optimizer, scaler, ckp_path, step)
 
             # Evaluate on validation.
             if (step % config.eval_every_steps == 0 or (is_last_step)) and rank == 0:
