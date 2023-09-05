@@ -14,7 +14,6 @@ from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
 )
 from torch_geometric.loader import DataLoader
-from torch_geometric import compile
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
@@ -144,7 +143,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
-    model = compile(model)
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
