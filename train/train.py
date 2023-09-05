@@ -13,7 +13,8 @@ from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
 )
-from torch_geometric.loader import DataLoader
+from torch_geometric.loader import DataListLoader
+from torch_geometric.nn import DataParallel
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
@@ -107,7 +108,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+    train_loader = DataListLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
     test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
 
@@ -118,7 +119,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config, deg).to(device, model_dtype)
+    model = create_model(config, deg)
+    logging.info(f"Using {torch.cuda.device_count()} GPUs!")
+    model = DataParallel(model).to(device, model_dtype)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
@@ -198,11 +201,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     model.train()
     while step < config.num_train_steps + 1:
-        for graphs in train_loader:
-            target = graphs.para.to(device, model_dtype).view(-1, 3)
-            graphs = graphs.to(device)
+        for data_list in train_loader:
             optimizer.zero_grad()
-            pred = model(graphs)
+            pred = model(data_list)
+            target = torch.cat([graph.para.view(-1, 3) for graph in data_list]).to(pred.device, model_dtype)        
             loss_mape = mape(pred, target)
             loss_huber = HLoss(pred, target)
             loss_mape.backward()
