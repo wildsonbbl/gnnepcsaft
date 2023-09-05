@@ -99,7 +99,8 @@ def run(
         )
 
     # Get datasets, organized by split.
-    logging.info("Obtaining datasets.")
+    if rank == 0:
+        logging.info("Obtaining datasets.")
     if config.half_precision:
         model_dtype = torch.float16
     else:
@@ -132,7 +133,8 @@ def run(
             para_data[inchi] = para
 
     # Create and initialize the network.
-    logging.info("Initializing network.")
+    if rank == 0:
+        logging.info("Initializing network.")
     model = create_model(config, deg).to(rank, model_dtype)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
@@ -149,7 +151,7 @@ def run(
         ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
     initial_step = 1
     if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path, map_location=rank)
+        checkpoint = torch.load(ckp_path)
         model.load_state_dict(checkpoint["model_state_dict"])
         if not config.change_opt:
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -157,7 +159,6 @@ def run(
         initial_step = int(step) + 1
         del checkpoint
     model = DistributedDataParallel(model, device_ids=[rank])
-
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
@@ -209,7 +210,8 @@ def run(
             )
 
     # Begin training loop.
-    logging.info("Starting training.")
+    if rank == 0:
+        logging.info("Starting training.")
     step = initial_step
     total_loss_mape = torch.zeros(2).to(rank)
     total_loss_huber = torch.zeros(2).to(rank)
@@ -236,7 +238,10 @@ def run(
             scheduler.step(step)
 
             # Quick indication that training is happening.
-            logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
+            if rank == 0:
+                logging.log_first_n(
+                    logging.INFO, "Finished training step %d.", 10, step
+                )
 
             # Log, if required.
             is_last_step = step == config.num_train_steps - 1
@@ -253,7 +258,7 @@ def run(
                             "train_huber": float(
                                 total_loss_huber[0] / total_loss_huber[1]
                             ),
-                            "train_lr": float(lr[0 / lr[1]]),
+                            "train_lr": float(lr[0] / lr[1]),
                         },
                         step=step,
                     )
@@ -293,7 +298,7 @@ def run(
 def savemodel(model, optimizer, path, step):
     torch.save(
         {
-            "model_state_dict": model.state_dict(),
+            "model_state_dict": model.module.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "step": step,
         },
