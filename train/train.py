@@ -113,9 +113,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
 
     para_data = {}
-    for graph in train_loader:
-        for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
-            para_data[inchi] = para
+    for graph in train_dataset:
+        inchi, para = graph.InChI, graph.para.view(-1, 3)
+        para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
