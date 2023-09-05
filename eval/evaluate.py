@@ -39,7 +39,6 @@ def create_model(
             num_para=config.num_para,
             deg=deg,
             dtype=model_dtype,
-            device=device,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 

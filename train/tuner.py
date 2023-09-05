@@ -37,7 +37,6 @@ def create_model(
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if config.half_precision:
         model_dtype = torch.float16
     else:
@@ -52,7 +51,6 @@ def create_model(
             num_para=config.num_para,
             deg=deg,
             dtype=model_dtype,
-            device=device,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
