@@ -14,7 +14,6 @@ from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
 )
 from torch_geometric.loader import DataLoader
-from torch_geometric import compile
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
@@ -25,17 +24,19 @@ from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import calc_deg
 
+import torch_xla
+import torch_xla.core.xla_model as xm
+
+device = xm.xla_device()
+torch.set_default_tensor_type('torch.FloatTensor')
+
 
 def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
+    model_dtype = torch.float32
     if config.model == "PNA":
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
@@ -82,8 +83,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     deg = calc_deg(dataset, workdir)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # Create writer for logs.
     wandb.login()
     run = wandb.init(
@@ -95,10 +94,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
+    model_dtype = torch.float32
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -122,7 +118,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config, deg).to(device, model_dtype)
-    model = compile(model)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
@@ -210,7 +205,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             loss_mape = mape(pred, target)
             loss_huber = HLoss(pred, target)
             loss_mape.backward()
-            optimizer.step()
+            xm.optimizer_step(optimizer, barrier=True)
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
             lr += scheduler.get_last_lr()
