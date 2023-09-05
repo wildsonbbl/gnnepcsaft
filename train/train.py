@@ -110,7 +110,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         )
     train_loader = DataListLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
-    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+    test_loader = DataListLoader(ThermoMLDataset(osp.join(workdir, "data/thermoml")))
 
     para_data = {}
     for graph in train_dataset:
@@ -152,22 +152,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
 
     @torch.no_grad()
-    def test(test: str, model: DataParallel):
-        model = model.module
+    def test(test: str):
         model.eval()
         total_mape_den = []
         total_huber_den = []
         total_mape_vp = []
         total_huber_vp = []
-        for graphs in test_loader:
+        for data_list in test_loader:
+            graphs = data_list[0]
             if test == "test":
                 if graphs.InChI in para_data:
                     continue
             if test == "val":
                 if graphs.InChI not in para_data:
                     continue
-            graphs = graphs.to(device)
-            pred_para = model(graphs).squeeze().to("cpu", torch.float64)
+            pred_para = model(data_list).squeeze().to("cpu", torch.float64)
 
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
             if ~torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -241,7 +240,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             # Evaluate on validation.
             if step % config.eval_every_steps == 0 or (is_last_step):
-                mape_den, huber_den, mape_vp, huber_vp = test(test="val", model=model)
+                mape_den, huber_den, mape_vp, huber_vp = test(test="val")
                 wandb.log(
                     {
                         "mape_den": mape_den,
