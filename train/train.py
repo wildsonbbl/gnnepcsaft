@@ -211,7 +211,7 @@ def run(
 
     # Begin training loop.
     if rank == 0:
-        logging.info("Starting training.")
+        print("Starting training.")
     step = initial_step
     total_loss_mape = torch.zeros(2).to(rank)
     total_loss_huber = torch.zeros(2).to(rank)
@@ -244,7 +244,7 @@ def run(
                 )
 
             # Log, if required.
-            is_last_step = step == config.num_train_steps - 1
+            is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0 or is_last_step:
                 dist.all_reduce(total_loss_mape, op=dist.ReduceOp.SUM)
                 dist.all_reduce(total_loss_huber, op=dist.ReduceOp.SUM)
@@ -289,10 +289,9 @@ def run(
 
             step += 1
             dist.barrier()
-            if step > config.num_train_steps:
+            if step >= config.num_train_steps + 1:
+                dist.destroy_process_group()
                 break
-
-    dist.destroy_process_group()
 
 
 def savemodel(model, optimizer, path, step):
