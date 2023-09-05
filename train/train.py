@@ -122,8 +122,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     logging.info(f"Using {torch.cuda.device_count()} GPUs!")
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
-    HLoss = HuberLoss("mean")
-    mape = MeanAbsolutePercentageError()
+    HLoss = HuberLoss("mean").to(device)
+    mape = MeanAbsolutePercentageError().to(device)
 
     if dataset == "ramirez":
         ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
