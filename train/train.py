@@ -122,7 +122,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config, deg).to(device, model_dtype)
-    model = compile(model)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
@@ -145,6 +144,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
+    model = compile(model)
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
