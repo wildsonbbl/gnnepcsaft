@@ -34,10 +34,6 @@ def create_model(
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
     if config.model == "PNA":
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
@@ -47,7 +43,6 @@ def create_model(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
-            dtype=model_dtype,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -87,6 +82,7 @@ def run(
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
     deg = calc_deg(dataset, workdir)
+    use_amp = config.amp
 
     # Create writer for logs.
     if rank == 0:
@@ -101,10 +97,6 @@ def run(
     # Get datasets, organized by split.
     if rank == 0:
         logging.info("Obtaining datasets.")
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -135,7 +127,7 @@ def run(
     # Create and initialize the network.
     if rank == 0:
         logging.info("Initializing network.")
-    model = create_model(config, deg).to(rank, model_dtype)
+    model = create_model(config, deg).to(rank)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(rank)
@@ -143,6 +135,7 @@ def run(
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # Set up checkpointing of the model.
     if dataset == "ramirez":
@@ -155,6 +148,7 @@ def run(
         model.load_state_dict(checkpoint["model_state_dict"])
         if not config.change_opt:
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scaler.load_state_dict(checkpoint["scaler_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
@@ -180,6 +174,9 @@ def run(
                 if test == "val":
                     if graphs.InChI not in para_data:
                         continue
+                graphs.x = graphs.x.to(torch.float)
+                graphs.edge_attr = graphs.edge_attr.to(torch.float)
+                graphs.edge_index = graphs.edge_index.to(torch.int64)
                 graphs = graphs.to(rank)
                 pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
@@ -220,14 +217,21 @@ def run(
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = graphs.para.to(rank, model_dtype).view(-1, 3)
+            target = graphs.para.to(rank).view(-1, 3)
+            graphs.x = graphs.x.to(torch.float)
+            graphs.edge_attr = graphs.edge_attr.to(torch.float)
+            graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(rank)
             optimizer.zero_grad()
-            pred = model(graphs)
-            loss_mape = mape(pred, target)
-            loss_huber = HLoss(pred, target)
-            loss_mape.backward()
-            optimizer.step()
+            with torch.autocast(
+                device_type="cuda", dtype=torch.float16, enabled=use_amp
+            ):
+                pred = model(graphs)
+                loss_mape = mape(pred, target)
+                loss_huber = HLoss(pred, target)
+            scaler.scale(loss_mape).backward()
+            scaler.step(optimizer)
+            scaler.update()
             total_loss_mape[0] += loss_mape.item()
             total_loss_huber[0] += loss_huber.item()
             lr[0] += scheduler.get_last_lr()[0]
@@ -294,11 +298,12 @@ def run(
                 break
 
 
-def savemodel(model, optimizer, path, step):
+def savemodel(model, optimizer, scaler, path, step):
     torch.save(
         {
             "model_state_dict": model.module.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
+            "scaler_state_dict": scaler.state_dict(),
             "step": step,
         },
         path,
