@@ -1,4 +1,4 @@
-import os.path as osp
+import os.path as osp, os
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -9,12 +9,15 @@ import ml_collections
 from train import models
 
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel
+from torch.utils.data.distributed import DistributedSampler
 from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
 )
-from torch_geometric.loader import DataListLoader
-from torch_geometric.nn import DataParallel
+from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
@@ -70,26 +73,30 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
     raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
+def run(
+    rank, world_size: int, config: ml_collections.ConfigDict, workdir: str, dataset: str
+):
     """Execute model training and evaluation loop.
 
     Args:
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
     deg = calc_deg(dataset, workdir)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     # Create writer for logs.
-    wandb.login()
-    run = wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-    )
+    if rank == 0:
+        wandb.login()
+        run = wandb.init(
+            # Set the project where this run will be logged
+            project="gnn-pc-saft",
+            # Track hyperparameters and run metadata
+            config=config.to_dict(),
+        )
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -108,70 +115,72 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
-    train_loader = DataListLoader(
-        train_dataset, batch_size=config.batch_size, shuffle=True
+
+    train_sampler = DistributedSampler(
+        train_dataset, num_replicas=world_size, rank=rank
     )
 
-    test_loader = DataListLoader(
-        ThermoMLDataset(osp.join(workdir, "data/thermoml")),
-        batch_size=config.batch_size,
+    train_loader = DataLoader(
+        train_dataset, batch_size=config.batch_size, sampler=train_sampler
     )
 
-    para_data = {}
-    for graph in train_dataset:
-        inchi, para = graph.InChI, graph.para.view(-1, 3)
-        para_data[inchi] = para
+    if rank == 0:
+        test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+        para_data = {}
+        for graph in train_dataset:
+            inchi, para = graph.InChI, graph.para.view(-1, 3)
+            para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    logging.info(f"Using {torch.cuda.device_count()} GPUs!")
+    model = create_model(config, deg).to(rank, model_dtype)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
-    HLoss = HuberLoss("mean").to(device)
-    mape = MeanAbsolutePercentageError().to(device)
+    HLoss = HuberLoss("mean").to(rank)
+    mape = MeanAbsolutePercentageError().to(rank)
 
+    # Create the optimizer.
+    optimizer = create_optimizer(config, model.parameters())
+
+    # Set up checkpointing of the model.
     if dataset == "ramirez":
         ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
     else:
         ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
     initial_step = 1
     if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path)
-        model = create_model(config, deg)
+        checkpoint = torch.load(ckp_path, map_location=rank)
         model.load_state_dict(checkpoint["model_state_dict"])
-        model = DataParallel(model).to(device, model_dtype)
-        optimizer = create_optimizer(config, model.parameters())
         if not config.change_opt:
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
-    else:
-        model = create_model(config, deg)
-        model = DataParallel(model).to(device, model_dtype)
-        optimizer = create_optimizer(config, model.parameters())
+    model = DistributedDataParallel(model, device_ids=[rank])
+
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
     # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
 
-    @torch.no_grad()
-    def test(test: str):
-        model.eval()
-        total_mape_den = []
-        total_huber_den = []
-        total_mape_vp = []
-        total_huber_vp = []
-        for data_list in test_loader:
-            pred = model(data_list).view(-1, 3)
-            for graphs, pred_para in zip(data_list, pred):
-                pred_para = pred_para.squeeze().to("cpu", torch.float64)
+    if rank == 0:
+
+        @torch.no_grad()
+        def test(test="test"):
+            model.eval()
+            total_mape_den = []
+            total_huber_den = []
+            total_mape_vp = []
+            total_huber_vp = []
+            for graphs in test_loader:
                 if test == "test":
                     if graphs.InChI in para_data:
                         continue
                 if test == "val":
                     if graphs.InChI not in para_data:
                         continue
+                graphs = graphs.to(rank)
+                pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
                 datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
                 if ~torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -192,35 +201,38 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                     total_mape_vp += [loss_mape.item()]
                     total_huber_vp += [loss_huber.item()]
 
-        return (
-            torch.tensor(total_mape_den).nanmean().item(),
-            torch.tensor(total_huber_den).nanmean().item(),
-            torch.tensor(total_mape_vp).nanmean().item(),
-            torch.tensor(total_huber_vp).nanmean().item(),
-        )
+            return (
+                torch.tensor(total_mape_den).nanmean().item(),
+                torch.tensor(total_huber_den).nanmean().item(),
+                torch.tensor(total_mape_vp).nanmean().item(),
+                torch.tensor(total_huber_vp).nanmean().item(),
+            )
 
     # Begin training loop.
     logging.info("Starting training.")
     step = initial_step
-    total_loss_mape = []
-    total_loss_huber = []
-    lr = []
+    total_loss_mape = torch.zeros(2).to(rank)
+    total_loss_huber = torch.zeros(2).to(rank)
+    lr = torch.zeros(2).to(rank)
 
     model.train()
     while step < config.num_train_steps + 1:
-        for data_list in train_loader:
+        for graphs in train_loader:
+            target = graphs.para.to(rank, model_dtype).view(-1, 3)
+            graphs = graphs.to(rank)
             optimizer.zero_grad()
-            pred = model(data_list)
-            target = torch.cat([graph.para.view(-1, 3) for graph in data_list]).to(
-                pred.device, model_dtype
-            )
+            pred = model(graphs)
             loss_mape = mape(pred, target)
             loss_huber = HLoss(pred, target)
             loss_mape.backward()
             optimizer.step()
-            total_loss_mape += [loss_mape.item()]
-            total_loss_huber += [loss_huber.item()]
-            lr += scheduler.get_last_lr()
+            total_loss_mape[0] += loss_mape.item()
+            total_loss_huber[0] += loss_huber.item()
+            lr[0] += scheduler.get_last_lr()[0]
+            total_loss_mape[1] += 1
+            total_loss_huber[1] += 1
+            lr[1] += 1
+
             scheduler.step(step)
 
             # Quick indication that training is happening.
@@ -229,24 +241,35 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             # Log, if required.
             is_last_step = step == config.num_train_steps - 1
             if step % config.log_every_steps == 0 or is_last_step:
-                wandb.log(
-                    {
-                        "train_mape": torch.tensor(total_loss_mape).mean().item(),
-                        "train_huber": torch.tensor(total_loss_huber).mean().item(),
-                        "train_lr": torch.tensor(lr).mean().item(),
-                    },
-                    step=step,
-                )
-                total_loss_mape = []
-                total_loss_huber = []
-                lr = []
+                dist.all_reduce(total_loss_mape, op=dist.ReduceOp.SUM)
+                dist.all_reduce(total_loss_huber, op=dist.ReduceOp.SUM)
+                dist.all_reduce(lr, op=dist.ReduceOp.SUM)
+                if rank == 0:
+                    wandb.log(
+                        {
+                            "train_mape": float(
+                                total_loss_mape[0] / total_loss_mape[1]
+                            ),
+                            "train_huber": float(
+                                total_loss_huber[0] / total_loss_huber[1]
+                            ),
+                            "train_lr": float(lr[0 / lr[1]]),
+                        },
+                        step=step,
+                    )
+
+                total_loss_mape = torch.zeros(2).to(rank)
+                total_loss_huber = torch.zeros(2).to(rank)
+                lr = torch.zeros(2).to(rank)
 
             # Checkpoint model, if required.
-            if step % config.checkpoint_every_steps == 0 or is_last_step:
+            if (
+                step % config.checkpoint_every_steps == 0 or is_last_step
+            ) and rank == 0:
                 savemodel(model, optimizer, ckp_path, step)
 
             # Evaluate on validation.
-            if step % config.eval_every_steps == 0 or (is_last_step):
+            if (step % config.eval_every_steps == 0 or (is_last_step)) and rank == 0:
                 mape_den, huber_den, mape_vp, huber_vp = test(test="val")
                 wandb.log(
                     {
@@ -260,15 +283,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 model.train()
 
             step += 1
+            dist.barrier()
             if step > config.num_train_steps:
                 break
-    wandb.finish()
+
+    dist.destroy_process_group()
 
 
 def savemodel(model, optimizer, path, step):
     torch.save(
         {
-            "model_state_dict": model.module.state_dict(),
+            "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "step": step,
         },
@@ -293,8 +318,11 @@ def main(argv):
         raise app.UsageError("Too many command-line arguments.")
 
     logging.info("Calling train and evaluate")
+    world_size = torch.cuda.device_count()
+    logging.info(f"Using {world_size} GPUs!")
 
-    train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+    args = (world_size, FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+    mp.spawn(run, args=args, nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":
