@@ -153,7 +153,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     @torch.no_grad()
     def test(test: str, model: DataParallel):
-        model = model.module.to('cpu')
+        model = model.module
         model.eval()
         total_mape_den = []
         total_huber_den = []
@@ -166,7 +166,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             if test == "val":
                 if graphs.InChI not in para_data:
                     continue
-            graphs = graphs.to("cpu")
+            graphs = graphs.to(device)
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
