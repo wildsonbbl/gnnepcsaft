@@ -87,10 +87,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
