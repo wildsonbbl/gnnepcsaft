@@ -158,6 +158,7 @@ def run(
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
     # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
 
+    # test fn
     if rank == 0:
 
         @torch.no_grad()
@@ -178,7 +179,7 @@ def run(
                 graphs.edge_attr = graphs.edge_attr.to(torch.float)
                 graphs.edge_index = graphs.edge_index.to(torch.int64)
                 graphs = graphs.to(rank)
-                pred_para = model(graphs).squeeze().to("cpu", torch.float64)
+                pred_para = model.module(graphs).squeeze().to("cpu", torch.float64)
 
                 datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
                 if ~torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -250,6 +251,7 @@ def run(
             # Log, if required.
             is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0 or is_last_step:
+                dist.barrier()
                 dist.all_reduce(total_loss_mape, op=dist.ReduceOp.SUM)
                 dist.all_reduce(total_loss_huber, op=dist.ReduceOp.SUM)
                 dist.all_reduce(lr, op=dist.ReduceOp.SUM)
@@ -272,30 +274,34 @@ def run(
                 lr = torch.zeros(2).to(rank)
 
             # Checkpoint model, if required.
-            if (
-                step % config.checkpoint_every_steps == 0 or is_last_step
-            ) and rank == 0:
-                savemodel(model, optimizer, scaler, ckp_path, step)
+            if step % config.checkpoint_every_steps == 0 or is_last_step:
+                if rank == 0:
+                    savemodel(model, optimizer, scaler, ckp_path, step)
+                dist.barrier()
 
             # Evaluate on validation.
-            if (step % config.eval_every_steps == 0 or (is_last_step)) and rank == 0:
-                mape_den, huber_den, mape_vp, huber_vp = test(test="val")
-                wandb.log(
-                    {
-                        "mape_den": mape_den,
-                        "huber_den": huber_den,
-                        "mape_vp": mape_vp,
-                        "huber_vp": huber_vp,
-                    },
-                    step=step,
-                )
+            if step % config.eval_every_steps == 0 or is_last_step:
+                if rank == 0:
+                    mape_den, huber_den, mape_vp, huber_vp = test(test="val")
+                    wandb.log(
+                        {
+                            "mape_den": mape_den,
+                            "huber_den": huber_den,
+                            "mape_vp": mape_vp,
+                            "huber_vp": huber_vp,
+                        },
+                        step=step,
+                    )
+                dist.barrier()
                 model.train()
 
             step += 1
-            dist.barrier()
             if step >= config.num_train_steps + 1:
-                dist.destroy_process_group()
+                if rank == 0:
+                    wandb.finish()
+                dist.barrier()
                 break
+    dist.destroy_process_group()
 
 
 def savemodel(model, optimizer, scaler, path, step):
