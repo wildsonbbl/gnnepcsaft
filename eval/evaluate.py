@@ -28,7 +28,6 @@ def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
-    model_dtype = torch.float64
     if config.model == "PNA":
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
@@ -38,7 +37,6 @@ def create_model(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
-            dtype=model_dtype,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -108,6 +106,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
             datapoints = graphs.rho.to(device, model_dtype)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
                 continue
+            graphs.x = graphs.x.to(model_dtype)
+            graphs.edge_attr = graphs.edge_attr.to(model_dtype)
+            graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze()
             pred = pcsaft_den(pred_para, datapoints)
@@ -144,6 +145,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
             datapoints = graphs.vp.to(device, model_dtype)
             if torch.all(datapoints == torch.zeros_like(datapoints)):
                 continue
+            graphs.x = graphs.x.to(model_dtype)
+            graphs.edge_attr = graphs.edge_attr.to(model_dtype)
+            graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze()
             pred = pcsaft_vp(pred_para, datapoints)

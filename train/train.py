@@ -1,4 +1,4 @@
-import os.path as osp
+import os.path as osp, os
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -30,10 +30,6 @@ def create_model(
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
     if config.model == "PNA":
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
@@ -43,7 +39,6 @@ def create_model(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
-            dtype=model_dtype
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -80,7 +75,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    use_amp = config.amp
     # Create writer for logs.
     wandb.login()
     run = wandb.init(
@@ -112,13 +107,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
 
     para_data = {}
-    for graph in train_loader:
-        for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
-            para_data[inchi] = para
+    for graph in train_dataset:
+        inchi, para = graph.InChI, graph.para.view(-1, 3)
+        para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config, deg).to(device, model_dtype)
+    model = create_model(config, deg).to(device)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
@@ -126,6 +121,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # Set up checkpointing of the model.
     if dataset == "ramirez":
@@ -138,6 +134,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         model.load_state_dict(checkpoint["model_state_dict"])
         if not config.change_opt:
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scaler.load_state_dict(checkpoint["scaler_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
@@ -160,6 +157,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             if test == "val":
                 if graphs.InChI not in para_data:
                     continue
+            graphs.x = graphs.x.to(torch.float)
+            graphs.edge_attr = graphs.edge_attr.to(torch.float)
+            graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
@@ -199,14 +199,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = graphs.para.to(device, model_dtype).view(-1, 3)
+            target = graphs.para.to(device).view(-1, 3)
+            graphs.x = graphs.x.to(torch.float)
+            graphs.edge_attr = graphs.edge_attr.to(torch.float)
+            graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
             optimizer.zero_grad()
-            pred = model(graphs)
-            loss_mape = mape(pred, target)
-            loss_huber = HLoss(pred, target)
-            loss_mape.backward()
-            optimizer.step()
+            with torch.autocast(
+                device_type="cuda", dtype=torch.float16, enabled=use_amp
+            ):
+                pred = model(graphs)
+                loss_mape = mape(pred, target)
+                loss_huber = HLoss(pred, target)
+            scaler.scale(loss_mape).backward()
+            scaler.step(optimizer)
+            scaler.update()
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
             lr += scheduler.get_last_lr()
@@ -216,7 +223,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
 
             # Log, if required.
-            is_last_step = step == config.num_train_steps - 1
+            is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0 or is_last_step:
                 wandb.log(
                     {
@@ -232,10 +239,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             # Checkpoint model, if required.
             if step % config.checkpoint_every_steps == 0 or is_last_step:
-                savemodel(model, optimizer, ckp_path, step)
+                savemodel(model, optimizer, scaler, ckp_path, step)
 
             # Evaluate on validation.
-            if step % config.eval_every_steps == 0 or (is_last_step):
+            if step % config.eval_every_steps == 0 or is_last_step:
                 mape_den, huber_den, mape_vp, huber_vp = test(test="val")
                 wandb.log(
                     {
@@ -249,16 +256,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 model.train()
 
             step += 1
-            if step > config.num_train_steps:
+            if step >= config.num_train_steps + 1:
+                wandb.finish()
                 break
-    wandb.finish()
 
 
-def savemodel(model, optimizer, path, step):
+def savemodel(model, optimizer, scaler, path, step):
     torch.save(
         {
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
+            "scaler_state_dict": scaler.state_dict(),
             "step": step,
         },
         path,

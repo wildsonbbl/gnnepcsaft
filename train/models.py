@@ -15,14 +15,12 @@ class PNAPCSAFT(torch.nn.Module):
         num_mlp_layers: int,
         num_para: int,
         deg: torch.Tensor,
-        dtype: torch.FloatType,
     ):
         super().__init__()
 
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
         self.num_mlp_layers = num_mlp_layers
-        self.dtype = dtype
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
 
@@ -80,12 +78,12 @@ class PNAPCSAFT(torch.nn.Module):
         data: Data,
     ):
         x, edge_index, edge_attr, batch = (
-            data.x.to(self.dtype),
-            data.edge_index.to(torch.int64),
-            data.edge_attr.to(self.dtype),
+            data.x,
+            data.edge_index,
+            data.edge_attr,
             data.batch,
         )
-        x_scale = torch.tensor([10.0, 10.0, 1000.0]).to(x.device, self.dtype)
+        x_scale = torch.tensor([10.0, 10.0, 1000.0]).to(x.device)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
