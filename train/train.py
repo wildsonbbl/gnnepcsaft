@@ -1,4 +1,4 @@
-import os.path as osp, os
+import os.path as osp, os, time
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -214,6 +214,8 @@ def run(
     total_loss_mape = torch.zeros(2).to(rank)
     total_loss_huber = torch.zeros(2).to(rank)
     lr = torch.zeros(2).to(rank)
+    start_time = time.time()
+
 
     model.train()
     while step < config.num_train_steps + 1:
@@ -256,6 +258,10 @@ def run(
                 dist.all_reduce(total_loss_huber, op=dist.ReduceOp.SUM)
                 dist.all_reduce(lr, op=dist.ReduceOp.SUM)
                 if rank == 0:
+                    end_time = time.time()
+                    elapsed_time = end_time - start_time
+                    start_time = time.time()
+                    logging.log_first_n(logging.INFO,"Elapsed time %.4f min.", 20, elapsed_time)
                     wandb.log(
                         {
                             "train_mape": float(
