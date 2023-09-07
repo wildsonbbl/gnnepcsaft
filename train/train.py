@@ -225,7 +225,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 end_time = time.time()
                 elapsed_time = end_time - start_time
                 start_time = time.time()
-                logging.log_first_n(logging.INFO,"Elapsed time %d.", 20, elapsed_time)
+                logging.log_first_n(logging.INFO,"Elapsed time %.4f.", 20, elapsed_time)
                 wandb.log(
                     {
                         "train_mape": torch.tensor(total_loss_mape).mean().item(),

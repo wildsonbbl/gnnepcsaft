@@ -128,7 +128,6 @@ def parametrisation(weight_decay):
                 "e": fit_para[2],
                 "mape_den": mden,
                 "mape_vp": mvp,
-                "inchi": graph.InChI,
                 "success": int(res.success),
             },
         )

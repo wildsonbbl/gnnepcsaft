@@ -119,7 +119,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
                 {
                     "mape_den": loss_mape.item(),
                     "huber_den": loss_huber.item(),
-                    "inchi": graphs.InChI,
+                    
                 },
             )
             total_loss_mape += [loss_mape.item()]
@@ -159,7 +159,7 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
                 {
                     "mape_vp": loss_mape.item(),
                     "huber_vp": loss_huber.item(),
-                    "inchi": graphs.InChI,
+                    
                 },
             )
             total_loss_mape += [loss_mape.item()]
