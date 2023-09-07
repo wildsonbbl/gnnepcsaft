@@ -261,7 +261,7 @@ def run(
                     end_time = time.time()
                     elapsed_time = end_time - start_time
                     start_time = time.time()
-                    logging.log_first_n(logging.INFO,"Elapsed time %.4f min.", 20, elapsed_time)
+                    logging.log_first_n(logging.INFO,"Elapsed time %.4f min.", 20, elapsed_time / 60)
                     wandb.log(
                         {
                             "train_mape": float(
