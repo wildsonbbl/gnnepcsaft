@@ -1,4 +1,4 @@
-import os.path as osp, os
+import os.path as osp, os, time
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -191,6 +191,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     total_loss_mape = []
     total_loss_huber = []
     lr = []
+    start_time = time.time()
 
     model.train()
     while step < config.num_train_steps + 1:
@@ -221,6 +222,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             # Log, if required.
             is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0 or is_last_step:
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+                start_time = time.time()
+                logging.log_first_n(logging.INFO,"Elapsed time %d.", 20, elapsed_time)
                 wandb.log(
                     {
                         "train_mape": torch.tensor(total_loss_mape).mean().item(),
