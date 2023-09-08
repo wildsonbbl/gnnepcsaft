@@ -71,8 +71,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     """
     class Noop(object):
         def step(*args, **kwargs): pass 
-        def __getattr__(self, _): return self.step 
-        def get_last_lr(*args, **kwargs): [config.learning_rate]
+        def __getattr__(self, _): return self.step
 
     deg = calc_deg(dataset, workdir)
 
@@ -140,7 +139,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     # Scheduler
     if config.change_sch:
         scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience)
+        scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience, verbose=True)
     else:
         scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
         scheduler2 = Noop()
@@ -219,7 +218,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             scaler.update()
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
-            lr += scheduler.get_last_lr()
+            if config.chang_sch:
+                lr += [config.learning_rate]
+            else:
+                lr += scheduler.get_last_lr()
             scheduler.step(step)
 
             # Quick indication that training is happening.
