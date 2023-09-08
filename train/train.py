@@ -21,10 +21,7 @@ import wandb
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import calc_deg
-
-class Noop(object):
-    def step(*args, **kwargs): pass 
-    def __getattr__(self, _): return self.step  
+ 
 
 def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
@@ -72,6 +69,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
+    class Noop(object):
+        def step(*args, **kwargs): pass 
+        def __getattr__(self, _): return self.step 
+        def get_last_lr(): [config.learning_rate]
 
     deg = calc_deg(dataset, workdir)
 
