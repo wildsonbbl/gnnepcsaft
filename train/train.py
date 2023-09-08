@@ -10,9 +10,7 @@ from train import models
 
 import torch
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import (
-    CosineAnnealingWarmRestarts,
-)
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
@@ -137,7 +135,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Scheduler
     scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-    # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
+    scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience)
 
     @torch.no_grad()
     def test(test="test"):
@@ -225,7 +223,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 end_time = time.time()
                 elapsed_time = end_time - start_time
                 start_time = time.time()
-                logging.log_first_n(logging.INFO,"Elapsed time %.4f min.", 20, elapsed_time / 60)
+                logging.log_first_n(
+                    logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
+                )
                 wandb.log(
                     {
                         "train_mape": torch.tensor(total_loss_mape).mean().item(),
@@ -245,6 +245,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             # Evaluate on validation.
             if step % config.eval_every_steps == 0 or is_last_step:
                 mape_den, huber_den, mape_vp, huber_vp = test(test="val")
+                scheduler2.step(mape_den)
                 wandb.log(
                     {
                         "mape_den": mape_den,
