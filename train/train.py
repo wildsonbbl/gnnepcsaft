@@ -72,7 +72,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     class Noop(object):
         def step(*args, **kwargs): pass 
         def __getattr__(self, _): return self.step 
-        def get_last_lr(): [config.learning_rate]
+        def get_last_lr(*args, **kwargs): [config.learning_rate]
 
     deg = calc_deg(dataset, workdir)
 
