@@ -22,6 +22,9 @@ from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import calc_deg
 
+class Noop(object):
+    def step(*args, **kwargs): pass 
+    def __getattr__(self, _): return self.step  
 
 def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
@@ -134,8 +137,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         del checkpoint
 
     # Scheduler
-    scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-    scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience)
+    if config.change_sch:
+        scheduler = Noop()
+        scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience)
+    else:
+        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
+        scheduler2 = Noop()
 
     @torch.no_grad()
     def test(test="test"):
