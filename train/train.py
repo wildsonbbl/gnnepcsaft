@@ -79,11 +79,13 @@ def run(
     os.environ["MASTER_PORT"] = "12355"
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
-    logger = logging.get_absl_logger()
+    logger = logging.ABSLLogger("absl")
     logger.setLevel(level=logging.INFO)
-    stream_handler = logging.PythonHandler(sys.stdout)
+    stream_handler = logging.ABSLHandler(logging.PythonFormatter())
     stream_handler.setLevel(level=logging.INFO)
     logger.addHandler(stream_handler)
+    logging._absl_logger = logger
+    logging._absl_handler = stream_handler
 
     class Noop(object):
         def step(*args, **kwargs):
@@ -225,7 +227,7 @@ def run(
 
     # Begin training loop.
     if rank == 0:
-        print("Starting training.")
+        logging.info("Starting training.")
     step = initial_step
     total_loss_mape = torch.zeros(2).to(rank)
     total_loss_huber = torch.zeros(2).to(rank)
