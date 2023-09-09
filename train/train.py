@@ -297,19 +297,21 @@ def run(
                         },
                         step=step,
                     )
-
+                dist.barrier()
                 total_loss_mape = torch.zeros(2).to(rank)
                 total_loss_huber = torch.zeros(2).to(rank)
                 lr = torch.zeros(2).to(rank)
 
             # Checkpoint model, if required.
             if step % config.checkpoint_every_steps == 0 or is_last_step:
+                dist.barrier()
                 if rank == 0:
                     savemodel(model, optimizer, scaler, ckp_path, step)
                 dist.barrier()
 
             # Evaluate on validation.
             if step % config.eval_every_steps == 0 or is_last_step:
+                dist.barrier()
                 if rank == 0:
                     mape_den, huber_den, mape_vp, huber_vp = test(test="val")
                     mape_den_dist += mape_den
@@ -330,6 +332,7 @@ def run(
 
             step += 1
             if step >= config.num_train_steps + 1:
+                dist.barrier()
                 if rank == 0:
                     wandb.finish()
                 dist.barrier()
