@@ -219,7 +219,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
             if config.change_sch:
-                lr += [config.learning_rate]
+                lr += [optimizer.param_groups[0]['lr']]
             else:
                 lr += scheduler.get_last_lr()
             scheduler.step(step)
