@@ -78,6 +78,7 @@ def run(
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    torch.cuda.set_device(rank)
 
     logger = logging.ABSLLogger("absl")
     logger.setLevel(level=logging.INFO)
@@ -126,7 +127,7 @@ def run(
     )
 
     train_loader = DataLoader(
-        train_dataset, batch_size=config.batch_size, sampler=train_sampler
+        train_dataset, batch_size=config.batch_size // world_size, sampler=train_sampler
     )
 
     if rank == 0:
@@ -164,6 +165,7 @@ def run(
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
+    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model = DistributedDataParallel(model, device_ids=[rank])
 
     # Scheduler
@@ -234,9 +236,12 @@ def run(
     lr = torch.zeros(2).to(rank)
     mape_den_dist = torch.zeros(1).to(rank)
     start_time = time.time()
+    epoch = 0
 
     model.train()
     while step < config.num_train_steps + 1:
+        epoch += 1
+        train_loader.sampler.set_epoch(epoch)
         for graphs in train_loader:
             target = graphs.para.to(rank).view(-1, 3)
             graphs.x = graphs.x.to(torch.float)
