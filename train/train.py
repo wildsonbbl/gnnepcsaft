@@ -14,9 +14,7 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import (
-    CosineAnnealingWarmRestarts,
-)
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
@@ -27,7 +25,7 @@ import wandb
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import calc_deg
-
+ 
 
 def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
@@ -81,9 +79,12 @@ def run(
     os.environ["MASTER_PORT"] = "12355"
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
+    class Noop(object):
+        def step(*args, **kwargs): pass 
+        def __getattr__(self, _): return self.step
+
     deg = calc_deg(dataset, workdir)
     use_amp = config.amp
-
     # Create writer for logs.
     if rank == 0:
         wandb.login()
@@ -155,8 +156,12 @@ def run(
     model = DistributedDataParallel(model, device_ids=[rank])
 
     # Scheduler
-    scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-    # scheduler = ReduceLROnPlateau(optimizer, patience = config.patience)
+    if config.change_sch:
+        scheduler = Noop()
+        scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience, verbose=True)
+    else:
+        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
+        scheduler2 = Noop()
 
     # test fn
     if rank == 0:
@@ -214,6 +219,7 @@ def run(
     total_loss_mape = torch.zeros(2).to(rank)
     total_loss_huber = torch.zeros(2).to(rank)
     lr = torch.zeros(2).to(rank)
+    mape_den_dist = torch.zeros(1).to(rank)
     start_time = time.time()
 
 
@@ -237,7 +243,10 @@ def run(
             scaler.update()
             total_loss_mape[0] += loss_mape.item()
             total_loss_huber[0] += loss_huber.item()
-            lr[0] += scheduler.get_last_lr()[0]
+            if config.change_sch:
+                lr[0] += optimizer.param_groups[0]['lr']
+            else:
+                lr[0] += scheduler.get_last_lr()[0]
             total_loss_mape[1] += 1
             total_loss_huber[1] += 1
             lr[1] += 1
@@ -261,7 +270,9 @@ def run(
                     end_time = time.time()
                     elapsed_time = end_time - start_time
                     start_time = time.time()
-                    logging.log_first_n(logging.INFO,"Elapsed time %.4f min.", 20, elapsed_time / 60)
+                    print(
+                    logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
+                    )
                     wandb.log(
                         {
                             "train_mape": float(
@@ -289,6 +300,7 @@ def run(
             if step % config.eval_every_steps == 0 or is_last_step:
                 if rank == 0:
                     mape_den, huber_den, mape_vp, huber_vp = test(test="val")
+                    mape_den_dist += mape_den
                     wandb.log(
                         {
                             "mape_den": mape_den,
@@ -299,6 +311,9 @@ def run(
                         step=step,
                     )
                 dist.barrier()
+                dist.all_reduce(mape_den_dist, op=dist.ReduceOp.SUM)
+                scheduler2.step(mape_den_dist)
+                mape_den_dist = torch.zeros(1).to(rank)
                 model.train()
 
             step += 1
