@@ -122,12 +122,13 @@ def run(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
 
-    train_sampler = DistributedSampler(
-        train_dataset, num_replicas=world_size, rank=rank
-    )
+    train_sampler = DistributedSampler(train_dataset)
 
     train_loader = DataLoader(
-        train_dataset, batch_size=config.batch_size // world_size, sampler=train_sampler
+        train_dataset,
+        batch_size=config.batch_size // world_size,
+        pin_memory=True,
+        sampler=train_sampler,
     )
 
     if rank == 0:
