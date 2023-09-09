@@ -1,4 +1,4 @@
-import os.path as osp, os, time
+import os.path as osp, os, time, sys
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -25,7 +25,7 @@ import wandb
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import calc_deg
- 
+
 
 def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
@@ -79,9 +79,18 @@ def run(
     os.environ["MASTER_PORT"] = "12355"
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
+    logger = logging.get_absl_logger()
+    logger.setLevel(level=logging.INFO)
+    stream_handler = logging.PythonHandler(sys.stdout)
+    stream_handler.setLevel(level=logging.INFO)
+    logger.addHandler(stream_handler)
+
     class Noop(object):
-        def step(*args, **kwargs): pass 
-        def __getattr__(self, _): return self.step
+        def step(*args, **kwargs):
+            pass
+
+        def __getattr__(self, _):
+            return self.step
 
     deg = calc_deg(dataset, workdir)
     use_amp = config.amp
@@ -158,7 +167,9 @@ def run(
     # Scheduler
     if config.change_sch:
         scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience, verbose=True)
+        scheduler2 = ReduceLROnPlateau(
+            optimizer, mode="min", patience=config.patience, verbose=True
+        )
     else:
         scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
         scheduler2 = Noop()
@@ -222,7 +233,6 @@ def run(
     mape_den_dist = torch.zeros(1).to(rank)
     start_time = time.time()
 
-
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
@@ -244,7 +254,7 @@ def run(
             total_loss_mape[0] += loss_mape.item()
             total_loss_huber[0] += loss_huber.item()
             if config.change_sch:
-                lr[0] += optimizer.param_groups[0]['lr']
+                lr[0] += optimizer.param_groups[0]["lr"]
             else:
                 lr[0] += scheduler.get_last_lr()[0]
             total_loss_mape[1] += 1
@@ -270,8 +280,8 @@ def run(
                     end_time = time.time()
                     elapsed_time = end_time - start_time
                     start_time = time.time()
-                    print(
-                    logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
+                    logging.log_first_n(
+                        logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
                     )
                     wandb.log(
                         {
