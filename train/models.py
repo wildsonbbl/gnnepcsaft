@@ -83,7 +83,8 @@ class PNAPCSAFT(torch.nn.Module):
             data.edge_attr,
             data.batch,
         )
-        x_scale = torch.tensor([10.0, 10.0, 1000.0]).to(x.device)
+        x_scale = torch.tensor([[10.0, 10.0, 1000.0]], device=x.device)
+        ground = torch.tensor([[1.0, 0.0, 0.0]], device=x.device)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
@@ -91,5 +92,5 @@ class PNAPCSAFT(torch.nn.Module):
         x = global_add_pool(x, batch)
         for _ in range(self.num_mlp_layers - 1):
             x = self.mlp(x)
-        x = self.ouput(x) * x_scale
+        x = self.ouput(x) * x_scale + ground
         return x
