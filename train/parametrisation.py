@@ -61,6 +61,45 @@ def MAPE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
 
     return den, vp
 
+def APE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
+    parameters = np.abs(parameters)
+    m = parameters[0]
+    s = parameters[1]
+    e = parameters[2]
+    mape = 0.0
+
+    if ~np.all(rho == np.zeros_like(rho)):
+        mape = []
+        for state in rho:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = ["liq" if state[2] == 1 else "vap"][0]
+            params = {"m": m, "s": s, "e": e}
+            den = pcsaft_den(t, p, x, params, phase=phase)
+            mape += [np.abs((state[-1] - den) / state[-1])]
+
+    den = np.asarray(mape)
+
+    mape = 0.0
+    if ~np.all(vp == np.zeros_like(vp)):
+        mape = []
+        for state in vp:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = ["liq" if state[2] == 1 else "vap"][0]
+            params = {"m": m, "s": s, "e": e}
+            try:
+                vp, xl, xv = flashTQ(t, 0, x, params, p)
+                mape += [np.abs((state[-1] - vp) / state[-1])]
+            except:
+                mape += [1e6]
+
+    vp = np.asarray(mape)
+
+    return den, vp
+
 
 def parametrisation(weight_decay):
     def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):

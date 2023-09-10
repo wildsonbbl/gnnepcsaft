@@ -274,6 +274,7 @@ class ramirez(InMemoryDataset):
                 graph = from_InChI(inchi, with_hydrogen=True)
 
             graph.para = torch.tensor(para)
+            graph.critic = torch.tensor(row[1:3])
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])

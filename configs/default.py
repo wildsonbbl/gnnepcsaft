@@ -22,7 +22,7 @@ def get_config():
     config.checkpoint_every_steps = 10_000
     config.amp = True
     config.momentum = 0.9
-    config.patience = 3
+    config.patience = 5
     config.weight_decay = 1e-10
     
 

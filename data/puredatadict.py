@@ -17,12 +17,25 @@ def pureTMLDataset(root: str) -> dict:
     """
 
     pure = pl.read_parquet(root)
+    ramirez = pl.read_parquet("./data/ramirez2022/raw/data.parquet")
 
+    critic = {}
+    for row in ramirez.iter_rows():
+        inchi = row[-1]
+        tc = row[1]
+        pc = row[2] * 100000
+        critic[inchi] = (tc, pc)
+        
     puredatadict = {}
     for row in pure.iter_rows():
         inchi = row[1]
         if check_if_elementary(inchi):
             continue
+        if inchi in critic:
+            tc, pc = critic[inchi]
+            tk, ppa = row[2:4]
+            if (tk > tc * 0.9) or (ppa > pc * 0.9):
+                continue
         tp = row[-2]
         ids = row[:2]
         state = row[2:-1]

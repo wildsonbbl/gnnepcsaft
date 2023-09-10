@@ -244,6 +244,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                     },
                     step=step,
                 )
+                scheduler2.step(torch.tensor(total_loss_huber).mean())
                 total_loss_mape = []
                 total_loss_huber = []
                 lr = []
@@ -255,7 +256,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             # Evaluate on validation.
             if step % config.eval_every_steps == 0 or is_last_step:
                 mape_den, huber_den, mape_vp, huber_vp = test(test="val")
-                scheduler2.step(mape_den)
                 wandb.log(
                     {
                         "mape_den": mape_den,
