@@ -22,46 +22,7 @@ with open("./data/thermoml/raw/para3_fitted.pkl", "rb") as file:
     fitted_para = pickle.load(file)
 
 
-def MAPE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
-    parameters = np.abs(parameters)
-    m = parameters[0]
-    s = parameters[1]
-    e = parameters[2]
-    mape = 0.0
-
-    if ~np.all(rho == np.zeros_like(rho)):
-        mape = []
-        for state in rho:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
-            den = pcsaft_den(t, p, x, params, phase=phase)
-            mape += [np.abs((state[-1] - den) / state[-1])]
-
-    den = np.asarray(mape).mean()
-
-    mape = 0.0
-    if ~np.all(vp == np.zeros_like(vp)):
-        mape = []
-        for state in vp:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
-            try:
-                vp, xl, xv = flashTQ(t, 0, x, params, p)
-                mape += [np.abs((state[-1] - vp) / state[-1])]
-            except:
-                mape += [1e6]
-
-    vp = np.asarray(mape).mean()
-
-    return den, vp
-
-def APE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
+def MAPE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = True):
     parameters = np.abs(parameters)
     m = parameters[0]
     s = parameters[1]
@@ -80,6 +41,8 @@ def APE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
             mape += [np.abs((state[-1] - den) / state[-1])]
 
     den = np.asarray(mape)
+    if mean:
+        den = den.mean()
 
     mape = 0.0
     if ~np.all(vp == np.zeros_like(vp)):
@@ -97,6 +60,45 @@ def APE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
                 mape += [1e6]
 
     vp = np.asarray(mape)
+    if mean:
+        vp = vp.mean()
+
+    return den, vp
+
+
+def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
+    parameters = np.abs(parameters)
+    m = parameters[0]
+    s = parameters[1]
+    e = parameters[2]
+    den = []
+
+    if ~np.all(rho == np.zeros_like(rho)):
+        for state in rho:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = ["liq" if state[2] == 1 else "vap"][0]
+            params = {"m": m, "s": s, "e": e}
+            den += [pcsaft_den(t, p, x, params, phase=phase)]
+
+    den = np.asarray(den)
+
+    vpl = []
+    if ~np.all(vp == np.zeros_like(vp)):
+        for state in vp:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = ["liq" if state[2] == 1 else "vap"][0]
+            params = {"m": m, "s": s, "e": e}
+            try:
+                vp, xl, xv = flashTQ(t, 0, x, params, p)
+                vpl += [vp]
+            except:
+                vpl += [0.0]
+
+    vp = np.asarray(vpl)
 
     return den, vp
 
@@ -110,7 +112,7 @@ def parametrisation(weight_decay):
         loss = []
         x_scale = np.array([1.0, 1.0, 100.0])
         n = rho.shape[0] + vp.shape[0]
-        l2penalty = np.sum((parameters / x_scale)**2) * weight_decay / n
+        l2penalty = np.sum((parameters / x_scale) ** 2) * weight_decay / n
 
         if ~np.all(rho == np.zeros_like(rho)):
             for state in rho:
@@ -170,8 +172,13 @@ def parametrisation(weight_decay):
                 "success": int(res.success),
             },
         )
-        _ , saved_mden, saved_mvp = fitted_para[graph.InChI]
-        if (saved_mden >= mden) & (saved_mvp >= mvp) & (np.isfinite(mden)) & (np.isfinite(mvp)):
+        _, saved_mden, saved_mvp = fitted_para[graph.InChI]
+        if (
+            (saved_mden >= mden)
+            & (saved_mvp >= mvp)
+            & (np.isfinite(mden))
+            & (np.isfinite(mvp))
+        ):
             fitted_para[graph.InChI] = (fit_para, mden, mvp)
         with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
             pickle.dump(fitted_para, file)
