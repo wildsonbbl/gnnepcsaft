@@ -21,7 +21,7 @@ import wandb
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.model_deg import calc_deg
- 
+
 
 def create_model(
     config: ml_collections.ConfigDict, deg: torch.Tensor
@@ -69,9 +69,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
+
     class Noop(object):
-        def step(*args, **kwargs): pass 
-        def __getattr__(self, _): return self.step
+        def step(*args, **kwargs):
+            pass
+
+        def __getattr__(self, _):
+            return self.step
 
     deg = calc_deg(dataset, workdir)
 
@@ -139,7 +143,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     # Scheduler
     if config.change_sch:
         scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(optimizer, mode='min', patience = config.patience, verbose=True)
+        scheduler2 = ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            patience=config.patience,
+            verbose=True,
+            cooldown=config.patience,
+            min_lr=1e-14,
+        )
     else:
         scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
         scheduler2 = Noop()
@@ -219,7 +230,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
             if config.change_sch:
-                lr += [optimizer.param_groups[0]['lr']]
+                lr += [optimizer.param_groups[0]["lr"]]
             else:
                 lr += scheduler.get_last_lr()
             scheduler.step(step)
