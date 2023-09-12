@@ -9,3 +9,5 @@ pcsaft
 .devcontainer
 .dockerignore
 ray
+images
+*.csv
