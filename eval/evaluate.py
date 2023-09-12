@@ -41,7 +41,9 @@ def create_model(
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
-def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
+def evaluate(
+    config: ml_collections.ConfigDict, workdir: str, dataset: str, modelname: str
+):
     """Execute model training and evaluation loop.
 
     Args:
@@ -83,7 +85,9 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
     mape = MeanAbsolutePercentageError().to(device)
 
     # Set up checkpointing of the model.
-    if dataset == "ramirez":
+    if modelname:
+        ckp_path = osp.join(workdir, "train/checkpoints", f"{modelname}.pth")
+    elif dataset == "ramirez":
         ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
     else:
         ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
@@ -119,7 +123,6 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
                 {
                     "mape_den": loss_mape.item(),
                     "huber_den": loss_huber.item(),
-                    
                 },
             )
             total_loss_mape += [loss_mape.item()]
@@ -159,7 +162,6 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
                 {
                     "mape_vp": loss_mape.item(),
                     "huber_vp": loss_huber.item(),
-                    
                 },
             )
             total_loss_mape += [loss_mape.item()]
@@ -208,7 +210,8 @@ def evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
-flags.DEFINE_string("dataset", None, "Dataset to train model on")
+flags.DEFINE_string("dataset", None, "Dataset to test model on")
+flags.DEFINE_string("modelname", None, "Model name to test on on")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -223,7 +226,7 @@ def main(argv):
 
     logging.info("Calling evaluate")
 
-    evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+    evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset, FLAGS.modelname)
 
 
 if __name__ == "__main__":
