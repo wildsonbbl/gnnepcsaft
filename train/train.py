@@ -149,7 +149,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             patience=config.patience,
             verbose=True,
             cooldown=config.patience,
-            min_lr=1e-14,
+            min_lr=1e-15,
+            eps=1e-15,
         )
     else:
         scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
