@@ -13,6 +13,7 @@ from torch.nn import HuberLoss
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
+from torch_geometric.nn import summary
 
 from epcsaft import epcsaft_cython
 
@@ -119,6 +120,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
+    dummy = test_loader[0]
+    dummy.x = dummy.x.to(torch.float)
+    dummy.edge_attr = dummy.edge_attr.to(torch.float)
+    dummy.edge_index = dummy.edge_index.to(torch.int64)
+    logging.info("Model summary.")
+    print(summary(model, dummy))
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
