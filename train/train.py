@@ -120,7 +120,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
-    dummy = test_loader[0]
+    dummy = test_loader[0].to(device)
     dummy.x = dummy.x.to(torch.float)
     dummy.edge_attr = dummy.edge_attr.to(torch.float)
     dummy.edge_index = dummy.edge_index.to(torch.int64)
