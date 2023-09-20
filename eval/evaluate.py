@@ -10,7 +10,6 @@ from train import models
 
 import torch
 from torch.nn import HuberLoss
-from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
 from epcsaft import epcsaft_cython
@@ -177,6 +176,9 @@ def evaluate(
         project="gnn-pc-saft",
         # Track hyperparameters and run metadata
         config=config.to_dict(),
+        name=modelname,
+        group=dataset,
+        tags=[dataset]
     )
     # Evaluate on validation or test, if required.
     val_mape_den, val_huber_den = test_den("val")
@@ -211,7 +213,7 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to test model on")
-flags.DEFINE_string("modelname", None, "Model name to test on on")
+flags.DEFINE_string("modelname", None, "Model name to test on")
 config_flags.DEFINE_config_file(
     "config",
     None,

@@ -89,6 +89,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         project="gnn-pc-saft",
         # Track hyperparameters and run metadata
         config=config.to_dict(),
+        group=dataset,
+        tags=[dataset]
     )
 
     # Get datasets, organized by split.
