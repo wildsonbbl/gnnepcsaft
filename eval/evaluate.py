@@ -178,7 +178,7 @@ def evaluate(
         config=config.to_dict(),
         name=modelname,
         group=dataset,
-        tags=[dataset]
+        tags=[dataset, "eval"],
     )
     # Evaluate on validation or test, if required.
     val_mape_den, val_huber_den = test_den("val")
