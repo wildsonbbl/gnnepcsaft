@@ -50,6 +50,8 @@ def evaluate(
       workdir: Working Directory.
     """
     deg = calc_deg(dataset, workdir)
+    modelnames = modelname.split(".")
+    logging.info(f"evaluating models {modelnames}")
     # Create writer for logs.
     wandb.login()
 
@@ -77,26 +79,27 @@ def evaluate(
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config, deg).to(device, model_dtype)
+    model_dict = dict(
+        [
+            (name, create_model(config, deg).to(device, model_dtype))
+            for name in modelnames
+        ]
+    )
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
 
     # Set up checkpointing of the model.
-    if modelname:
-        ckp_path = osp.join(workdir, "train/checkpoints", f"{modelname}.pth")
-    elif dataset == "ramirez":
-        ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
-    else:
-        ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
-    checkpoint = torch.load(ckp_path)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    for name in model_dict:
+        ckp_path = osp.join(workdir, "train/checkpoints", f"{name}.pth")
+        checkpoint = torch.load(ckp_path)
+        model_dict[name].load_state_dict(checkpoint["model_state_dict"])
+        model_dict[name].eval()
 
     # test fn
     @torch.no_grad()
     def test_den(test="test"):
-        model.eval()
         total_loss_mape = []
         total_loss_huber = []
         for graphs in test_loader:
@@ -113,7 +116,11 @@ def evaluate(
             graphs.edge_attr = graphs.edge_attr.to(model_dtype)
             graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
-            pred_para = model(graphs).squeeze()
+            pred_para = []
+            for name in model_dict:
+                pred_params = model_dict[name](graphs)
+                pred_para += [pred_params]
+            pred_para = torch.concat(pred_para, dim=0).mean(0).to(model_dtype)
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1]
             loss_mape = mape(pred, target)
@@ -134,7 +141,6 @@ def evaluate(
 
     @torch.no_grad()
     def test_vp(test="test"):
-        model.eval()
         total_loss_mape = []
         total_loss_huber = []
         for graphs in test_loader:
@@ -151,7 +157,11 @@ def evaluate(
             graphs.edge_attr = graphs.edge_attr.to(model_dtype)
             graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
-            pred_para = model(graphs).squeeze()
+            pred_para = []
+            for name in model_dict:
+                pred_params = model_dict[name](graphs)
+                pred_para += [pred_params]
+            pred_para = torch.concat(pred_para, dim=0).mean(0).to(model_dtype)
             pred = pcsaft_vp(pred_para, datapoints)
             target = datapoints[:, -1]
             result_filter = ~torch.isnan(pred)

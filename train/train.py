@@ -126,8 +126,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     dummy.x = dummy.x.to(torch.float)
     dummy.edge_attr = dummy.edge_attr.to(torch.float)
     dummy.edge_index = dummy.edge_index.to(torch.int64)
-    logging.info("Model summary.")
-    print(summary(model, dummy))
+    logging.info(f"Model summary: \n {summary(model, dummy)}")
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
