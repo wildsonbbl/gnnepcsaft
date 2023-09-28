@@ -77,7 +77,7 @@ def plotdata(inchi: str, model_name: str, molecule_name: str, model: PNAPCSAFT, 
         plterr(x, y * 1.01, mvp_ra)
 
         # Customize the plot appearance
-        pltcustom(model_name, mvp_model, mvp_ra, "linear", "Pressão de vapor (Bar)")
+        pltcustom(model_name, mvp_model, mvp_ra, "linear", "Pressão de vapor (bar)")
 
         # Save the plot as a high-quality image file
         path = osp.join(

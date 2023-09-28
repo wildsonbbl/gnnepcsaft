@@ -174,8 +174,8 @@ def parametrisation(weight_decay):
         )
         _, saved_mden, saved_mvp = fitted_para[graph.InChI]
         if (
-            (saved_mden >= mden)
-            & (saved_mvp >= mvp)
+            ((saved_mden >= mden)
+            or (saved_mvp >= mvp))
             & (np.isfinite(mden))
             & (np.isfinite(mvp))
         ):
