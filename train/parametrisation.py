@@ -145,6 +145,7 @@ def parametrisation(weight_decay):
         # Set the project where this run will be logged
         project="gnn-pc-saft",
         config={"weight decay": weight_decay},
+        tags=["para"]
     )
 
     n_skipped = 0
@@ -174,8 +175,8 @@ def parametrisation(weight_decay):
         )
         _, saved_mden, saved_mvp = fitted_para[graph.InChI]
         if (
-            ((saved_mden >= mden)
-            or (saved_mvp >= mvp))
+            ((saved_mden > mden)
+            or (saved_mvp > mvp))
             & (np.isfinite(mden))
             & (np.isfinite(mvp))
         ):
