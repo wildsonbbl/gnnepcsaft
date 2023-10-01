@@ -35,7 +35,7 @@ def MAPE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
             x = np.asarray([1.0])
             t = state[0]
             p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
+            phase = "liq" if state[2] == 1 else "vap"
             params = {"m": m, "s": s, "e": e}
             den = pcsaft_den(t, p, x, params, phase=phase)
             mape += [np.abs((state[-1] - den) / state[-1])]
@@ -51,7 +51,7 @@ def MAPE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
             x = np.asarray([1.0])
             t = state[0]
             p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
+            phase = "liq" if state[2] == 1 else "vap"
             params = {"m": m, "s": s, "e": e}
             try:
                 vp, xl, xv = flashTQ(t, 0, x, params, p)
@@ -119,7 +119,7 @@ def parametrisation(weight_decay):
                 x = np.asarray([1.0])
                 t = state[0]
                 p = state[1]
-                phase = ["liq" if state[2] == 1 else "vap"][0]
+                phase = "liq" if state[2] == 1 else "vap"
                 params = {"m": m, "s": s, "e": e}
                 den = pcsaft_den(t, p, x, params, phase=phase)
                 loss += [((state[-1] - den) / state[-1]) * np.sqrt(2)]
@@ -129,7 +129,7 @@ def parametrisation(weight_decay):
                 x = np.asarray([1.0])
                 t = state[0]
                 p = state[1]
-                phase = ["liq" if state[2] == 1 else "vap"][0]
+                phase = "liq" if state[2] == 1 else "vap"
                 params = {"m": m, "s": s, "e": e}
                 try:
                     vp, xl, xv = flashTQ(t, 0, x, params, p)
@@ -145,7 +145,7 @@ def parametrisation(weight_decay):
         # Set the project where this run will be logged
         project="gnn-pc-saft",
         config={"weight decay": weight_decay},
-        tags=["para"]
+        tags=["para"],
     )
 
     n_skipped = 0
@@ -175,17 +175,13 @@ def parametrisation(weight_decay):
         )
         _, saved_mden, saved_mvp = fitted_para[graph.InChI]
         if (
-            ((saved_mden > mden)
-            or (saved_mvp > mvp))
+            ((saved_mden > mden) or (saved_mvp > mvp))
             & (np.isfinite(mden))
             & (np.isfinite(mvp))
         ):
             fitted_para[graph.InChI] = (fit_para, mden, mvp)
-        with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
-            pickle.dump(fitted_para, file)
-    print(
-        f"number of skipped molecules for having lower than 4 datapoints = {n_skipped}"
-    )
+    with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
+        pickle.dump(fitted_para, file)
     wandb.finish()
 
 
