@@ -57,7 +57,7 @@ def MAPE(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
                 vp, xl, xv = flashTQ(t, 0, x, params, p)
                 mape += [np.abs((state[-1] - vp) / state[-1])]
             except:
-                mape += [1e6]
+                pass
 
     vp = np.asarray(mape)
     if mean:
@@ -148,15 +148,12 @@ def parametrisation(weight_decay):
         tags=["para"],
     )
 
-    n_skipped = 0
     x_scale = np.array([10.0, 10.0, 1000.0])
     for graph in loader:
+        if graph.InChI not in init_para:
+            continue
         rho = graph.rho.view(-1, 5).numpy()
         vp = graph.vp.view(-1, 5).numpy()
-        n_datapoints = rho.shape[0] + vp.shape[0]
-        if n_datapoints < 4:
-            n_skipped += 1
-            continue
         params = np.asarray(init_para[graph.InChI][0])
         res = least_squares(loss, params, method="lm", x_scale=x_scale, args=(rho, vp))
         fit_para = np.abs(res.x).tolist()
