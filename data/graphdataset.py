@@ -333,7 +333,7 @@ class ThermoMLpara(InMemoryDataset):
 
         for inchi in fitted:
             para, mden, mvp = fitted[inchi] 
-            if (mden > 3 / 100) or (mvp > 5/100):
+            if (mden > 3 / 100) or (mvp > 10/100):
                 continue
             graph = from_InChI(inchi, with_hydrogen=False)
             if graph.x.shape[0] <= 2:
