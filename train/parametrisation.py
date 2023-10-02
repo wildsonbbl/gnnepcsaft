@@ -172,11 +172,24 @@ def parametrisation(weight_decay):
         )
         _, saved_mden, saved_mvp = fitted_para[graph.InChI]
         if (
-            ((saved_mden > mden) or (saved_mvp > mvp))
+            ((saved_mden == 0) & (saved_mvp > mvp))
             & (np.isfinite(mden))
             & (np.isfinite(mvp))
         ):
             fitted_para[graph.InChI] = (fit_para, mden, mvp)
+        elif (
+            ((saved_mden > mden) & (saved_mvp > mvp))
+            & (np.isfinite(mden))
+            & (np.isfinite(mvp))
+        ):
+            fitted_para[graph.InChI] = (fit_para, mden, mvp)
+        elif (
+            ((saved_mden > mden) & (saved_mvp == 0))
+            & (np.isfinite(mden))
+            & (np.isfinite(mvp))
+        ):
+            fitted_para[graph.InChI] = (fit_para, mden, mvp)
+
     with open("./data/thermoml/raw/para3_fitted.pkl", "wb") as file:
         pickle.dump(fitted_para, file)
     wandb.finish()
