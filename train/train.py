@@ -38,6 +38,7 @@ def create_model(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             deg=deg,
+            dropout=config.dropout_rate,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
