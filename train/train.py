@@ -201,6 +201,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 result_filter = ~torch.isnan(pred)
                 loss_mape = mape(pred[result_filter], target[result_filter])
                 loss_huber = HLoss(pred[result_filter], target[result_filter])
+                if loss_mape.item() >= 0.9:
+                    continue
                 total_mape_vp += [loss_mape.item()]
                 total_huber_vp += [loss_huber.item()]
 

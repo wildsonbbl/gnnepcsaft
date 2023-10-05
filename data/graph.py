@@ -95,11 +95,13 @@ def from_InChI(InChI: str, with_hydrogen: bool = False,
     from torch_geometric.data import Data
 
     RDLogger.DisableLog('rdApp.*')
-
-    mol = Chem.MolFromInchi(InChI, sanitize=False)
+    try:
+        mol = Chem.MolFromInchi(InChI, sanitize=True, treatWarningAsError=True)
+    except:
+        mol = Chem.MolFromInchi(InChI, sanitize=False)
 
     if mol is None:
-        mol = Chem.MolFromInchi('')
+        mol = Chem.MolFromInchi(InChI, sanitize=False)
     if with_hydrogen:
         mol = Chem.AddHs(mol)
     if kekulize:
