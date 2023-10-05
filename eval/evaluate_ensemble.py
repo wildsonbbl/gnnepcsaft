@@ -93,7 +93,7 @@ def evaluate(
     # Set up checkpointing of the model.
     for name in model_dict:
         ckp_path = osp.join(workdir, "train/checkpoints", f"{name}.pth")
-        checkpoint = torch.load(ckp_path)
+        checkpoint = torch.load(ckp_path, map_location=torch.device('cpu'))
         model_dict[name].load_state_dict(checkpoint["model_state_dict"])
         model_dict[name].eval()
 

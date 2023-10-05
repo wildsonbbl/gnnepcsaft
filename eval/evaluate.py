@@ -90,7 +90,7 @@ def evaluate(
         ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
     else:
         ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
-    checkpoint = torch.load(ckp_path)
+    checkpoint = torch.load(ckp_path, map_location=torch.device('cpu'))
     model.load_state_dict(checkpoint["model_state_dict"])
 
     # test fn
