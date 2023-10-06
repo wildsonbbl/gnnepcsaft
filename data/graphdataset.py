@@ -96,7 +96,7 @@ class ThermoMLDataset(InMemoryDataset):
 
         for inchi in data_dict:
             try:
-                graph = from_InChI(inchi, with_hydrogen=False)
+                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
             except:
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
@@ -271,7 +271,7 @@ class ramirez(InMemoryDataset):
             inchi = row[-1]
             para = row[3:6]
             try:
-                graph = from_InChI(inchi, with_hydrogen=False)
+                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
             except:
                 continue
 
@@ -326,7 +326,7 @@ class ThermoMLpara(InMemoryDataset):
     def process(self):
         datalist = []
         inchis = []
-        
+
         radata = pl.read_parquet(self.raw_paths[1])
         print(f"ramirez dataset size: {radata.shape[0]}")
         with open(self.raw_paths[0], "rb") as file:
@@ -334,11 +334,11 @@ class ThermoMLpara(InMemoryDataset):
         print(f"thermoml dataset size: {len(fitted)}")
 
         for inchi in fitted:
-            para, mden, mvp = fitted[inchi] 
-            if (mden > 3 / 100) or (mvp > 10/100):
+            para, mden, mvp = fitted[inchi]
+            if (mden > 3 / 100) or (mvp > 10 / 100):
                 continue
             try:
-                graph = from_InChI(inchi, with_hydrogen=False)
+                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
             except:
                 continue
 
@@ -352,7 +352,7 @@ class ThermoMLpara(InMemoryDataset):
                 continue
             para = row[3:6]
             try:
-                graph = from_InChI(inchi, with_hydrogen=False)
+                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
             except:
                 continue
 
