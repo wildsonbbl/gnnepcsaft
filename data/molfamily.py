@@ -47,10 +47,8 @@ def complexity(ids: str) -> str:
 
 
 def get_family_groups(InChI: str) -> set[str]:
-    try:
-        mol = Chem.MolFromInchi(InChI, sanitize=True, treatWarningAsError=True)
-    except:
-        mol = Chem.MolFromInchi(InChI, sanitize=False)
+    
+    mol = Chem.MolFromInchi(InChI, sanitize=True)
 
     if mol is None:
         mol = Chem.MolFromInchi(InChI, sanitize=False)
@@ -115,4 +113,4 @@ def get_family_groups(InChI: str) -> set[str]:
     if len(frs_str_match) == 0:
         frs_str_match.append("other")
 
-    return set(frs_str_match)
+    return list(set(frs_str_match))

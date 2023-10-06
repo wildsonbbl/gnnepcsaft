@@ -95,9 +95,10 @@ class ThermoMLDataset(InMemoryDataset):
             data_dict = pickle.load(f)
 
         for inchi in data_dict:
-            graph = from_InChI(inchi, with_hydrogen=False)
-            if graph.x.shape[0] <= 2:
-                graph = from_InChI(inchi, with_hydrogen=True)
+            try:
+                graph = from_InChI(inchi, with_hydrogen=False)
+            except:
+                continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
                     torch.cat(
@@ -269,9 +270,10 @@ class ramirez(InMemoryDataset):
         for row in data.iter_rows():
             inchi = row[-1]
             para = row[3:6]
-            graph = from_InChI(inchi, with_hydrogen=False)
-            if graph.x.shape[0] <= 2:
-                graph = from_InChI(inchi, with_hydrogen=True)
+            try:
+                graph = from_InChI(inchi, with_hydrogen=False)
+            except:
+                continue
 
             graph.para = torch.tensor(para)
             graph.critic = torch.tensor(row[1:3])
@@ -335,9 +337,10 @@ class ThermoMLpara(InMemoryDataset):
             para, mden, mvp = fitted[inchi] 
             if (mden > 3 / 100) or (mvp > 10/100):
                 continue
-            graph = from_InChI(inchi, with_hydrogen=False)
-            if graph.x.shape[0] <= 2:
-                graph = from_InChI(inchi, with_hydrogen=True)
+            try:
+                graph = from_InChI(inchi, with_hydrogen=False)
+            except:
+                continue
 
             graph.para = torch.tensor(para)
             datalist.append(graph)
@@ -348,9 +351,10 @@ class ThermoMLpara(InMemoryDataset):
             if inchi in inchis:
                 continue
             para = row[3:6]
-            graph = from_InChI(inchi, with_hydrogen=False)
-            if graph.x.shape[0] <= 2:
-                graph = from_InChI(inchi, with_hydrogen=True)
+            try:
+                graph = from_InChI(inchi, with_hydrogen=False)
+            except:
+                continue
 
             graph.para = torch.tensor(para)
             datalist.append(graph)
