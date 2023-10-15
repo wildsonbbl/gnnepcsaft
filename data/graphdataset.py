@@ -97,6 +97,8 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in data_dict:
             try:
                 graph = from_InChI(inchi, with_hydrogen=False)
+                if graph.x.shape[0] <= 2:
+                    graph = from_InChI(inchi, with_hydrogen=True)
             except:
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
@@ -272,6 +274,8 @@ class ramirez(InMemoryDataset):
             para = row[3:6]
             try:
                 graph = from_InChI(inchi, with_hydrogen=False)
+                if graph.x.shape[0] <= 2:
+                    graph = from_InChI(inchi, with_hydrogen=True)
             except:
                 continue
 
@@ -339,6 +343,8 @@ class ThermoMLpara(InMemoryDataset):
                 continue
             try:
                 graph = from_InChI(inchi, with_hydrogen=False)
+                if graph.x.shape[0] <= 2:
+                    graph = from_InChI(inchi, with_hydrogen=True)
             except:
                 continue
 
@@ -353,6 +359,8 @@ class ThermoMLpara(InMemoryDataset):
             para = row[3:6]
             try:
                 graph = from_InChI(inchi, with_hydrogen=False)
+                if graph.x.shape[0] <= 2:
+                    graph = from_InChI(inchi, with_hydrogen=True)
             except:
                 continue
 

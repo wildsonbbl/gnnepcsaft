@@ -96,7 +96,7 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
                 vp, xl, xv = flashTQ(t, 0, x, params, p)
                 vpl += [vp]
             except:
-                vpl += [0.0]
+                vpl += [np.nan]
 
     vp = np.asarray(vpl)
 
