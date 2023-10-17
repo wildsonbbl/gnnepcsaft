@@ -30,7 +30,7 @@ def get_config():
     config.model = "PNA"
     config.propagation_depth = 4
     config.hidden_dim = 128
-    config.dropout_rate = 0.1
+    config.dropout_rate = 0.0
     config.num_mlp_layers = 2
     config.num_para = 3
     config.skip_connections = True

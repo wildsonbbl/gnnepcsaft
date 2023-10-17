@@ -89,8 +89,8 @@ class PNAPCSAFT(torch.nn.Module):
         ground = torch.tensor([[1.0, 0.0, 0.0]], device=x.device)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.dropout(x, p=self.dropout, training=self.training)
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
+            x = F.dropout(x, p=self.dropout, training=self.training)
 
         x = global_add_pool(x, batch)
         for _ in range(self.num_mlp_layers - 1):
