@@ -3,6 +3,7 @@ import os.path as osp, os
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import torch, numpy as np
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
+from data.graph import from_smiles
 from train.models import PNAPCSAFT
 from train.model_deg import calc_deg
 from train.parametrisation import rhovp_data
@@ -56,6 +57,17 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
             if (mape > 1) & (ta - tb > 2):
                 tb = ta
                 plt.text(x[i], y[i], f"{mape} %", ha="center", va="center", fontsize=8)
+
+    def pltcustom(ra, scale="linear", ylabel=""):
+        plt.xlabel("T (K)")
+        plt.ylabel(ylabel)
+        plt.title("")
+        legend = ["Pontos experimentais", "Modelo 1", "Modelo 2"]
+        if ra:
+            legend += [f"Ramírez-Vélez et al. (2022)"]
+        plt.legend(legend, loc=(1.01, 0.75))
+        plt.grid(False)
+        plt.yscale(scale)
 
     with torch.no_grad():
         for graphs in testloader:
@@ -149,18 +161,6 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
     img.save(path, dpi=(300, 300), format="png", bitmap_format="png")
 
 
-def pltcustom(ra, scale="linear", ylabel=""):
-    plt.xlabel("T (K)")
-    plt.ylabel(ylabel)
-    plt.title("")
-    legend = ["Pontos experimentais", "Modelo 1", "Modelo 2"]
-    if ra:
-        legend += [f"Ramírez-Vélez et al. (2022)"]
-    plt.legend(legend, loc=(1.01, 0.75))
-    plt.grid(False)
-    plt.yscale(scale)
-
-
 def model_para_fn(model: PNAPCSAFT):
     model_para = {}
     model_array = {}
@@ -191,3 +191,57 @@ def datacsv(model_para):
         data["mden"].append(model_para[inchi][1])
         data["mvp"].append(model_para[inchi][2])
     return data
+
+
+def plotparams(smiles: list[str], model: PNAPCSAFT, xlabel: str = "CnHn+2"):
+    def pltline(x, y):
+        return plt.plot(x, y, linewidth=0.5)
+
+    def pltscatter(x, y):
+        return plt.scatter(x, y, marker="x", c="black", s=10)
+
+    def pltcustom(scale="linear", ylabel=""):
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title("")
+        plt.grid(False)
+        plt.yscale(scale)
+
+    model.eval()
+    with torch.no_grad():
+        list_params = []
+        for smile in smiles:
+            graphs = from_smiles(smile, sanitize=True)
+            graphs.x = graphs.x.to(model_dtype)
+            graphs.edge_attr = graphs.edge_attr.to(model_dtype)
+            graphs.edge_index = graphs.edge_index.to(torch.int64)
+            graphs = graphs.to(device)
+
+            parameters = model(graphs)
+            params = parameters.squeeze().to(torch.float64).numpy()
+            list_params.append(params)
+    array_params = np.asarray(list_params)
+    chain_array = np.arange(1, array_params.shape[0] + 1)
+
+    pltscatter(chain_array, array_params[:, 0])
+    pltcustom(ylabel="m")
+    path = osp.join("images", "m_" + xlabel + ".png")
+    plt.savefig(
+        path, dpi=300, format="png", bbox_inches="tight", transparent=True
+    )
+
+    plt.show()
+    pltscatter(chain_array, array_params[:,0] * array_params[:, 1])
+    pltcustom(ylabel="m * sigma (Å)")
+    path = osp.join("images", "sigma_" + xlabel + ".png")
+    plt.savefig(
+        path, dpi=300, format="png", bbox_inches="tight", transparent=True
+    )
+    plt.show()
+    pltscatter(chain_array, array_params[:,0] * array_params[:, 2])
+    pltcustom(ylabel="m * e (K)")
+    path = osp.join("images", "e_" + xlabel + ".png")
+    plt.savefig(
+        path, dpi=300, format="png", bbox_inches="tight", transparent=True
+    )
+    plt.show()
