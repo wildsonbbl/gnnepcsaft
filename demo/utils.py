@@ -58,11 +58,13 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
                 tb = ta
                 plt.text(x[i], y[i], f"{mape} %", ha="center", va="center", fontsize=8)
 
-    def pltcustom(ra, scale="linear", ylabel=""):
+    def pltcustom(ra, scale="linear", ylabel="", n=2):
         plt.xlabel("T (K)")
         plt.ylabel(ylabel)
         plt.title("")
-        legend = ["Pontos experimentais", "Modelo 1", "Modelo 2"]
+        legend = ["Pontos experimentais"]
+        for i in range(1, n + 1):
+            legend += [f"Modelo {i}"]
         if ra:
             legend += [f"Ramírez-Vélez et al. (2022)"]
         plt.legend(legend, loc=(1.01, 0.75))
@@ -117,7 +119,7 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
             # plterr(x, y * 1.01, mvp_ra)
 
         # Customize the plot appearance
-        pltcustom(inchi in ra_para, "log", "Pressão de vapor (bar)")
+        pltcustom(inchi in ra_para, "log", "Pressão de vapor (bar)", len(models))
 
         # Save the plot as a high-quality image file
         path = osp.join("images", "vp_" + molecule_name + ".png")
@@ -148,7 +150,7 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
                 # plterr(x, y, mden_ra)
 
             # Customize the plot appearance
-            pltcustom(inchi in ra_para, "linear", "Densidade (mol / m³)")
+            pltcustom(inchi in ra_para, "linear", "Densidade (mol / m³)", len(models))
             path = osp.join("images", "den_" + molecule_name + ".png")
             plt.savefig(
                 path, dpi=300, format="png", bbox_inches="tight", transparent=True
@@ -193,55 +195,59 @@ def datacsv(model_para):
     return data
 
 
-def plotparams(smiles: list[str], model: PNAPCSAFT, xlabel: str = "CnHn+2"):
+def plotparams(smiles: list[str], models: list[PNAPCSAFT], xlabel: str = "CnHn+2"):
     def pltline(x, y):
         return plt.plot(x, y, linewidth=0.5)
 
     def pltscatter(x, y):
-        return plt.scatter(x, y, marker="x", c="black", s=10)
+        return plt.scatter(x, y, marker="x", s=10)
 
-    def pltcustom(scale="linear", ylabel=""):
+    def pltcustom(scale="linear", ylabel="", n=2):
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
         plt.title("")
         plt.grid(False)
         plt.yscale(scale)
+        legend = []
+        for i in range(1, n + 1):
+            legend += [f"Modelo {i}"]
+        plt.legend(legend, loc=(1.01, 0.75))
 
-    model.eval()
-    with torch.no_grad():
-        list_params = []
-        for smile in smiles:
-            graphs = from_smiles(smile, sanitize=True)
-            graphs.x = graphs.x.to(model_dtype)
-            graphs.edge_attr = graphs.edge_attr.to(model_dtype)
-            graphs.edge_index = graphs.edge_index.to(torch.int64)
-            graphs = graphs.to(device)
+    list_array_params = []
+    list_chain_array = []
+    for model in models:
+        model.eval()
+        with torch.no_grad():
+            list_params = []
+            for smile in smiles:
+                graphs = from_smiles(smile, sanitize=True)
+                graphs.x = graphs.x.to(model_dtype)
+                graphs.edge_attr = graphs.edge_attr.to(model_dtype)
+                graphs.edge_index = graphs.edge_index.to(torch.int64)
+                graphs = graphs.to(device)
 
-            parameters = model(graphs)
-            params = parameters.squeeze().to(torch.float64).numpy()
-            list_params.append(params)
-    array_params = np.asarray(list_params)
-    chain_array = np.arange(1, array_params.shape[0] + 1)
-
-    pltscatter(chain_array, array_params[:, 0])
-    pltcustom(ylabel="m")
+                parameters = model(graphs)
+                params = parameters.squeeze().to(torch.float64).numpy()
+                list_params.append(params)
+        array_params = np.asarray(list_params)
+        chain_array = np.arange(1, array_params.shape[0] + 1)
+        list_array_params.append(array_params)
+        list_chain_array.append(chain_array)
+    for array_params, chain_array in zip(list_array_params, list_chain_array):
+        pltscatter(chain_array, array_params[:, 0])
+    pltcustom(ylabel="m", n=len(models))
     path = osp.join("images", "m_" + xlabel + ".png")
-    plt.savefig(
-        path, dpi=300, format="png", bbox_inches="tight", transparent=True
-    )
-
+    plt.savefig(path, dpi=300, format="png", bbox_inches="tight", transparent=True)
     plt.show()
-    pltscatter(chain_array, array_params[:,0] * array_params[:, 1])
-    pltcustom(ylabel="m * sigma (Å)")
+    for array_params, chain_array in zip(list_array_params, list_chain_array):
+        pltscatter(chain_array, array_params[:, 0] * array_params[:, 1])
+    pltcustom(ylabel="m * sigma (Å)", n=len(models))
     path = osp.join("images", "sigma_" + xlabel + ".png")
-    plt.savefig(
-        path, dpi=300, format="png", bbox_inches="tight", transparent=True
-    )
+    plt.savefig(path, dpi=300, format="png", bbox_inches="tight", transparent=True)
     plt.show()
-    pltscatter(chain_array, array_params[:,0] * array_params[:, 2])
-    pltcustom(ylabel="m * e (K)")
+    for array_params, chain_array in zip(list_array_params, list_chain_array):
+        pltscatter(chain_array, array_params[:, 0] * array_params[:, 2])
+    pltcustom(ylabel="m * e (K)", n=len(models))
     path = osp.join("images", "e_" + xlabel + ".png")
-    plt.savefig(
-        path, dpi=300, format="png", bbox_inches="tight", transparent=True
-    )
+    plt.savefig(path, dpi=300, format="png", bbox_inches="tight", transparent=True)
     plt.show()
