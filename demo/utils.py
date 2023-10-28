@@ -3,7 +3,7 @@ import os.path as osp, os
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import torch, numpy as np
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
-from data.graph import from_smiles
+from data.graph import from_smiles, from_InChI
 from train.models import PNAPCSAFT
 from train.model_deg import calc_deg
 from train.parametrisation import rhovp_data
@@ -220,7 +220,9 @@ def plotparams(smiles: list[str], models: list[PNAPCSAFT], xlabel: str = "CnHn+2
         with torch.no_grad():
             list_params = []
             for smile in smiles:
-                graphs = from_smiles(smile, sanitize=True)
+                mol = Chem.MolFromSmiles(smile)
+                inchi = Chem.MolToInchi(mol)
+                graphs = from_InChI(inchi, sanitize=False)
                 graphs.x = graphs.x.to(model_dtype)
                 graphs.edge_attr = graphs.edge_attr.to(model_dtype)
                 graphs.edge_index = graphs.edge_index.to(torch.int64)
