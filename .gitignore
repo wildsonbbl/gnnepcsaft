@@ -11,3 +11,7 @@ pcsaft
 ray
 images
 *.csv
+*/checkpoints
+.kaggle
+kaggle*
+toy*
