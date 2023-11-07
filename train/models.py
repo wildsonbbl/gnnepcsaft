@@ -152,7 +152,7 @@ class PNAPCSAFT2(torch.nn.Module):
                 scalers=scalers,
                 deg=deg,
                 edge_dim=hidden_dim // 2,
-                towers=4,
+                towers=1,
                 pre_layers=pre_layers,
                 post_layers=post_layers,
                 divide_input=False,
