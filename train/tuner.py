@@ -6,13 +6,11 @@ from ml_collections import config_flags
 from absl import logging
 import ml_collections
 
-from train import models
+from train.train import create_model, create_optimizer
 
 import torch
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import (
-    CosineAnnealingWarmRestarts,
-)
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
@@ -26,54 +24,11 @@ from ray import tune, air
 import ray
 from ray.air import session
 from ray.air.checkpoint import Checkpoint
+from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search.bohb import TuneBOHB
 from ray.tune.search import ConcurrencyLimiter
 from functools import partial
-
-
-def create_model(
-    config: ml_collections.ConfigDict, deg: torch.Tensor
-) -> torch.nn.Module:
-    """Creates a model, as specified by the config."""
-
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
-    if config.model == "PNA":
-        return models.PNAPCSAFT(
-            hidden_dim=config.hidden_dim,
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-            deg=deg,
-            dtype=model_dtype,
-        )
-    raise ValueError(f"Unsupported model: {config.model}.")
-
-
-def create_optimizer(config: ml_collections.ConfigDict, params):
-    """Creates an optimizer, as specified by the config."""
-    if config.optimizer == "adam":
-        return torch.optim.AdamW(
-            params,
-            lr=config.learning_rate,
-            weight_decay=config.weight_decay,
-            amsgrad=True,
-            eps=1e-5,
-        )
-    if config.optimizer == "sgd":
-        return torch.optim.SGD(
-            params,
-            lr=config.learning_rate,
-            momentum=config.momentum,
-            weight_decay=config.weight_decay,
-            nesterov=True,
-        )
-    raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
 
 
 def train_and_evaluate(
@@ -85,22 +40,29 @@ def train_and_evaluate(
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
+
+    class Noop(object):
+        def step(*args, **kwargs):
+            pass
+
+        def __getattr__(self, _):
+            return self.step
+
     deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    use_amp = config.amp
 
     config.propagation_depth = config_tuner["propagation_depth"]
     config.hidden_dim = config_tuner["hidden_dim"]
     config.num_mlp_layers = config_tuner["num_mlp_layers"]
     config.pre_layers = config_tuner["pre_layers"]
     config.post_layers = config_tuner["post_layers"]
+    config.skip_connections = config_tuner["skip_connections"]
+    config.add_self_loops = config_tuner["add_self_loops"]
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-    if config.half_precision:
-        model_dtype = torch.float16
-    else:
-        model_dtype = torch.float32
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -114,17 +76,16 @@ def train_and_evaluate(
         )
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
-    test_dataset = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-    test_loader = DataLoader(test_dataset)
+    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
 
     para_data = {}
-    for graph in train_loader:
-        for inchi, para in zip(graph.InChI, graph.para.view(-1, 3)):
-            para_data[inchi] = para
+    for graph in train_dataset:
+        inchi, para = graph.InChI, graph.para.view(-1, 3)
+        para_data[inchi] = para
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config, deg).to(device, model_dtype)
+    model = create_model(config, deg).to(device)
     pcsaft_den = epcsaft_cython.PCSAFT_den.apply
     pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
     HLoss = HuberLoss("mean").to(device)
@@ -132,6 +93,7 @@ def train_and_evaluate(
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # Set up checkpointing of the model.
     initial_step = 1
@@ -139,13 +101,28 @@ def train_and_evaluate(
     if checkpoint:
         checkpoint = checkpoint.to_dict()
         model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        if not config.change_opt:
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scaler.load_state_dict(checkpoint["scaler_state_dict"])
         step = checkpoint["step"]
         initial_step = int(step) + 1
         del checkpoint
 
     # Scheduler
-    scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
+    if config.change_sch:
+        scheduler = Noop()
+        scheduler2 = ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            patience=config.patience,
+            verbose=True,
+            cooldown=config.patience,
+            min_lr=1e-15,
+            eps=1e-15,
+        )
+    else:
+        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
+        scheduler2 = Noop()
 
     @torch.no_grad()
     def test(test="test"):
@@ -156,10 +133,10 @@ def train_and_evaluate(
         total_huber_vp = []
         for graphs in test_loader:
             if test == "test":
-                if graphs.InChI[0] in para_data:
+                if graphs.InChI in para_data:
                     continue
             if test == "val":
-                if graphs.InChI[0] not in para_data:
+                if graphs.InChI not in para_data:
                     continue
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)
@@ -188,26 +165,38 @@ def train_and_evaluate(
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = graphs.para.to(device, model_dtype).view(-1, 3)
+            target = graphs.para.to(device).view(-1, 3)
             graphs = graphs.to(device)
             optimizer.zero_grad()
-            pred = model(graphs)
-            loss_mape = mape(pred, target)
-            loss_huber = HLoss(pred, target)
-            loss_mape.backward()
-            optimizer.step()
+            with torch.autocast(
+                device_type="cuda", dtype=torch.float16, enabled=use_amp
+            ):
+                pred = model(graphs)
+                loss_mape = mape(pred, target)
+                loss_huber = HLoss(pred, target)
+            scaler.scale(loss_mape).backward()
+            scaler.step(optimizer)
+            scaler.update()
             total_loss_mape += [loss_mape.item()]
             total_loss_huber += [loss_huber.item()]
-            lr += scheduler.get_last_lr()
+            if config.change_sch:
+                lr += [optimizer.param_groups[0]["lr"]]
+            else:
+                lr += scheduler.get_last_lr()
             scheduler.step(step)
 
-            # Log
+            # Quick indication that training is happening.
+            logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
+
+            # Log, if required.
+            is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0:
                 mape_den, huber_den = test(test="val")
                 checkpoint = Checkpoint.from_dict(
                     {
                         "model_state_dict": model.state_dict(),
                         "optimizer_state_dict": optimizer.state_dict(),
+                        "scaler_state_dict": scaler.state_dict(),
                         "step": step,
                     }
                 )
@@ -221,25 +210,31 @@ def train_and_evaluate(
                     },
                     checkpoint=checkpoint,
                 )
+                scheduler2.step(torch.tensor(total_loss_huber).mean())
                 total_loss_mape = []
                 total_loss_huber = []
                 lr = []
                 model.train()
 
             step += 1
-            if step > config.num_train_steps:
+            if step >= config.num_train_steps + 1:
                 break
 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("workdir", None, "Working Directory")
-flags.DEFINE_string("restoredir", None, "Restore Directory")
+flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
+flags.DEFINE_string("restoredir", None, "Restore Directory")
 flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads")
 flags.DEFINE_integer("num_gpus", 1, "Number of GPUs")
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
 flags.DEFINE_boolean("get_result", False, "Whether to show results or continue tuning")
+flags.DEFINE_float(
+    "time_budget_s",
+    3600,
+    "Global time budget in seconds after which all trials are stopped",
+)
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -252,21 +247,25 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
-    logging.info(f"config file below: \n{FLAGS.config}")
-
     logging.info("Calling tuner")
+
+    ptrain = partial(
+        train_and_evaluate,
+        config=FLAGS.config,
+        workdir=FLAGS.workdir,
+        dataset=FLAGS.dataset,
+    )
 
     config = FLAGS.config
 
-    ptrain = partial(
-        train_and_evaluate, config=config, workdir=FLAGS.workdir, dataset=FLAGS.dataset
-    )
     search_space = {
-        "propagation_depth": tune.choice([3, 4, 5, 6, 7]),
-        "hidden_dim": tune.choice([64, 128, 256, 512]),
+        "propagation_depth": tune.choice([2, 3, 4, 5, 6, 7]),
+        "hidden_dim": tune.choice([32, 64, 128, 256, 512]),
         "num_mlp_layers": tune.choice([1, 2, 3]),
         "pre_layers": tune.choice([1, 2, 3]),
         "post_layers": tune.choice([1, 2, 3]),
+        "skip_connections": tune.choice([True, False]),
+        "add_self_loops": tune.choice([True, False]),
     }
     max_t = config.num_train_steps // config.log_every_steps - 1
 
@@ -279,30 +278,32 @@ def main(argv):
         stop_last_trials=False,
     )
 
-    ray.init(num_gpus=FLAGS.num_gpus, num_cpus=FLAGS.num_cpu)
+    ray.init()
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
 
     if FLAGS.restoredir:
         tuner = tune.Tuner.restore(
             FLAGS.restoredir,
-            tune.with_resources(tune.with_parameters(ptrain), resources=resources),
+            tune.with_resources(ptrain, resources=resources),
             resume_unfinished=True,
             resume_errored=False,
             restart_errored=False,
         )
     else:
         tuner = tune.Tuner(
-            tune.with_resources(tune.with_parameters(ptrain), resources=resources),
+            tune.with_resources(ptrain, resources=resources),
             param_space=search_space,
             tune_config=tune.TuneConfig(
                 search_alg=search_alg,
                 scheduler=scheduler,
                 num_samples=FLAGS.num_samples,
+                time_budget_s=FLAGS.time_budget_s,
             ),
             run_config=air.RunConfig(
                 name="gnnpcsaft",
                 storage_path="./ray",
-                verbose=1,
+                callbacks=[WandbLoggerCallback("gnn-pc-saft", FLAGS.dataset)],
+                verbose=0,
                 checkpoint_config=air.CheckpointConfig(
                     num_to_keep=1, checkpoint_at_end=False
                 ),

@@ -192,9 +192,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             if test == "val":
                 if graphs.InChI not in para_data:
                     continue
-            graphs.x = graphs.x.to(torch.float)
-            graphs.edge_attr = graphs.edge_attr.to(torch.float)
-            graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
@@ -238,9 +235,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
             target = graphs.para.to(device).view(-1, 3)
-            graphs.x = graphs.x.to(torch.float)
-            graphs.edge_attr = graphs.edge_attr.to(torch.float)
-            graphs.edge_index = graphs.edge_index.to(torch.int64)
             graphs = graphs.to(device)
             optimizer.zero_grad()
             with torch.autocast(
