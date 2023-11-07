@@ -139,10 +139,10 @@ class PNAPCSAFT2(torch.nn.Module):
 
         node_embeds_size = hidden_dim // 9
         hidden_dim = node_embeds_size * 9 
-        edge_embeds_size = hidden_dim // 2 // 3
+        edge_embeds_size = hidden_dim // 3
 
-        self.node_embeds = [Embedding(len(feature), node_embeds_size) for feature in x_map.values()]
-        self.edge_embeds = [Embedding(len(feature), edge_embeds_size) for feature in e_map.values()]
+        self.node_embeds = ModuleList([Embedding(len(feature), node_embeds_size) for feature in x_map.values()])
+        self.edge_embeds = ModuleList([Embedding(len(feature), edge_embeds_size) for feature in e_map.values()])
 
         for _ in range(propagation_depth):
             conv = PNAConv(
@@ -151,7 +151,7 @@ class PNAPCSAFT2(torch.nn.Module):
                 aggregators=aggregators,
                 scalers=scalers,
                 deg=deg,
-                edge_dim=hidden_dim // 2,
+                edge_dim=hidden_dim,
                 towers=1,
                 pre_layers=pre_layers,
                 post_layers=post_layers,
