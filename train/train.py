@@ -40,6 +40,19 @@ def create_model(
             deg=deg,
             dropout=config.dropout_rate,
         )
+    elif config.model == "PNA2":
+        return models.PNAPCSAFT2(
+            hidden_dim=config.hidden_dim,
+            propagation_depth=config.propagation_depth,
+            pre_layers=config.pre_layers,
+            post_layers=config.post_layers,
+            num_mlp_layers=config.num_mlp_layers,
+            num_para=config.num_para,
+            deg=deg,
+            dropout=config.dropout_rate,
+            skip_connections=config.skip_connections,
+            add_self_loops=config.add_self_loops,
+        )
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
