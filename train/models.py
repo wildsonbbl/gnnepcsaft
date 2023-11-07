@@ -205,7 +205,7 @@ class PNAPCSAFT2(torch.nn.Module):
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
             x = F.dropout(x, p=self.dropout, training=self.training)
             if self.skip_connections:
-                x += x_previous
+                x = x + x_previous
 
         x = global_add_pool(x, batch)
         for _ in range(self.num_mlp_layers - 1):
