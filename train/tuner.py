@@ -18,7 +18,7 @@ from epcsaft import epcsaft_cython
 
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
-from train.model_deg import calc_deg
+from train.utils import calc_deg, create_optimizer, create_model
 
 from ray import tune, air
 import ray

@@ -18,26 +18,9 @@ import wandb
 
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
-from train.model_deg import calc_deg
+from train.utils import calc_deg, create_model
 
 device = "cpu"
-
-
-def create_model(
-    config: ml_collections.ConfigDict, deg: torch.Tensor
-) -> torch.nn.Module:
-    """Creates a model, as specified by the config."""
-    if config.model == "PNA":
-        return models.PNAPCSAFT(
-            hidden_dim=config.hidden_dim,
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-            deg=deg,
-        )
-    raise ValueError(f"Unsupported model: {config.model}.")
 
 
 def evaluate(

@@ -5,7 +5,7 @@ import torch, numpy as np
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 from data.graph import from_smiles
 from train.models import PNAPCSAFT
-from train.model_deg import calc_deg
+from train.utils import calc_deg
 from train.parametrisation import rhovp_data
 import matplotlib.pyplot as plt
 from rdkit import Chem

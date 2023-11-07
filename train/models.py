@@ -138,11 +138,15 @@ class PNAPCSAFT2(torch.nn.Module):
         self.add_self_loops = add_self_loops
 
         node_embeds_size = hidden_dim // 9
-        hidden_dim = node_embeds_size * 9 
+        hidden_dim = node_embeds_size * 9
         edge_embeds_size = hidden_dim // 3
 
-        self.node_embeds = ModuleList([Embedding(len(feature), node_embeds_size) for feature in x_map.values()])
-        self.edge_embeds = ModuleList([Embedding(len(feature), edge_embeds_size) for feature in e_map.values()])
+        self.node_embeds = ModuleList(
+            [Embedding(len(feature), node_embeds_size) for feature in x_map.values()]
+        )
+        self.edge_embeds = ModuleList(
+            [Embedding(len(feature), edge_embeds_size) for feature in e_map.values()]
+        )
 
         for _ in range(propagation_depth):
             conv = PNAConv(
