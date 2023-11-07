@@ -137,9 +137,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     HLoss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
     dummy = test_loader[0].to(device)
-    dummy.x = dummy.x.to(torch.float)
-    dummy.edge_attr = dummy.edge_attr.to(torch.float)
-    dummy.edge_index = dummy.edge_index.to(torch.int64)
     logging.info(f"Model summary: \n {summary(model, dummy)}")
 
     # Create the optimizer.

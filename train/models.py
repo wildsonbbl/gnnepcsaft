@@ -87,7 +87,7 @@ class PNAPCSAFT(torch.nn.Module):
     ):
         x, edge_index, edge_attr, batch = (
             data.x.to(torch.float),
-            data.edge_index.to(torch.int64),
+            data.edge_index,
             data.edge_attr.to(torch.float),
             data.batch,
         )
