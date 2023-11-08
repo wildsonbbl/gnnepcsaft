@@ -277,7 +277,7 @@ def main(argv):
         stop_last_trials=False,
     )
 
-    ray.init()
+    ray.init(num_gpus=1)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
 
     if FLAGS.restoredir:
@@ -300,9 +300,9 @@ def main(argv):
             ),
             run_config=train.RunConfig(
                 name="gnnpcsaft",
-                storage_path=osp.join(FLAGS.workdir, "ray"),
-                callbacks=[WandbLoggerCallback("gnn-pc-saft", FLAGS.dataset)],
-                verbose=0,
+                storage_path=None,
+                callbacks=[WandbLoggerCallback("gnn-pc-saft", FLAGS.dataset, tags=['tuning', FLAGS.dataset])],
+                verbose=1,
                 checkpoint_config=train.CheckpointConfig(
                     num_to_keep=1, checkpoint_at_end=False
                 ),
