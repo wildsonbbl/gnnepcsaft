@@ -1,4 +1,5 @@
-import os.path as osp, tempfile
+import os.path as osp, tempfile, os
+os.environ["WANDB_SILENT"]="true"
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -299,6 +300,7 @@ def main(argv):
                 scheduler=scheduler,
                 num_samples=FLAGS.num_samples,
                 time_budget_s=FLAGS.time_budget_s,
+                reuse_actors=True,
             ),
             run_config=train.RunConfig(
                 name="gnnpcsaft",
