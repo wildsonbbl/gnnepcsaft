@@ -1,4 +1,4 @@
-import os.path as osp
+import os.path as osp, tempfile
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -16,12 +16,11 @@ from epcsaft import epcsaft_cython
 
 from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
-from train.utils import calc_deg, create_optimizer, create_model
+from train.utils import calc_deg, create_optimizer, create_model, savemodel
 
-from ray import tune, air
+from ray import tune, train
 import ray
-from ray.air import session
-from ray.air.checkpoint import Checkpoint
+from ray.train import Checkpoint
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search.bohb import TuneBOHB
@@ -95,16 +94,17 @@ def train_and_evaluate(
 
     # Set up checkpointing of the model.
     initial_step = 1
-    checkpoint = session.get_checkpoint()
+    checkpoint = train.get_checkpoint()
     if checkpoint:
-        checkpoint = checkpoint.to_dict()
-        model.load_state_dict(checkpoint["model_state_dict"])
-        if not config.change_opt:
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scaler.load_state_dict(checkpoint["scaler_state_dict"])
-        step = checkpoint["step"]
-        initial_step = int(step) + 1
-        del checkpoint
+        with checkpoint.as_directory() as checkpoint_dir:
+            checkpoint = torch.load(osp.join(checkpoint_dir, "checkpoint.pt"))
+            model.load_state_dict(checkpoint["model_state_dict"])
+            if not config.change_opt:
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            scaler.load_state_dict(checkpoint["scaler_state_dict"])
+            step = checkpoint["step"]
+            initial_step = int(step) + 1
+            del checkpoint
 
     # Scheduler
     if config.change_sch:
@@ -190,24 +190,25 @@ def train_and_evaluate(
             is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0:
                 mape_den, huber_den = test(test="val")
-                checkpoint = Checkpoint.from_dict(
-                    {
-                        "model_state_dict": model.state_dict(),
-                        "optimizer_state_dict": optimizer.state_dict(),
-                        "scaler_state_dict": scaler.state_dict(),
-                        "step": step,
-                    }
-                )
-                session.report(
-                    {
-                        "train_mape": torch.tensor(total_loss_mape).mean().item(),
-                        "train_huber": torch.tensor(total_loss_huber).mean().item(),
-                        "train_lr": torch.tensor(lr).mean().item(),
-                        "mape_den": mape_den,
-                        "huber_den": huber_den,
-                    },
-                    checkpoint=checkpoint,
-                )
+                with tempfile.TemporaryDirectory() as tempdir:
+                    savemodel(
+                        model,
+                        optimizer,
+                        scaler,
+                        osp.join(tempdir, "checkpoint.pt"),
+                        step,
+                    )
+
+                    train.report(
+                        {
+                            "train_mape": torch.tensor(total_loss_mape).mean().item(),
+                            "train_huber": torch.tensor(total_loss_huber).mean().item(),
+                            "train_lr": torch.tensor(lr).mean().item(),
+                            "mape_den": mape_den,
+                            "huber_den": huber_den,
+                        },
+                        checkpoint=Checkpoint.from_directory(tempdir),
+                    )
                 scheduler2.step(torch.tensor(total_loss_huber).mean())
                 total_loss_mape = []
                 total_loss_huber = []
@@ -297,12 +298,12 @@ def main(argv):
                 num_samples=FLAGS.num_samples,
                 time_budget_s=FLAGS.time_budget_s,
             ),
-            run_config=air.RunConfig(
+            run_config=train.RunConfig(
                 name="gnnpcsaft",
-                storage_path="./ray",
+                storage_path=osp.join(FLAGS.workdir, "ray"),
                 callbacks=[WandbLoggerCallback("gnn-pc-saft", FLAGS.dataset)],
                 verbose=0,
-                checkpoint_config=air.CheckpointConfig(
+                checkpoint_config=train.CheckpointConfig(
                     num_to_keep=1, checkpoint_at_end=False
                 ),
                 stop={"training_iteration": max_t},
