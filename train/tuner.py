@@ -225,8 +225,10 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_string("restoredir", None, "Restore Directory")
-flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads")
-flags.DEFINE_integer("num_gpus", 1, "Number of GPUs")
+flags.DEFINE_integer("verbose", 0, "Ray tune verbose")
+flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads for trial")
+flags.DEFINE_integer("num_gpus", 1, "Number of GPUs for trial")
+flags.DEFINE_integer("num_init_gpus", 1, "Number of GPUs to be initialized")
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
 flags.DEFINE_boolean("get_result", False, "Whether to show results or continue tuning")
 flags.DEFINE_float(
@@ -274,10 +276,10 @@ def main(argv):
         metric="mape_den",
         mode="min",
         max_t=max_t,
-        stop_last_trials=False,
+        stop_last_trials=True,
     )
 
-    ray.init(num_gpus=1)
+    ray.init(num_gpus=FLAGS.num_init_gpus)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
 
     if FLAGS.restoredir:
@@ -301,8 +303,12 @@ def main(argv):
             run_config=train.RunConfig(
                 name="gnnpcsaft",
                 storage_path=None,
-                callbacks=[WandbLoggerCallback("gnn-pc-saft", FLAGS.dataset, tags=['tuning', FLAGS.dataset])],
-                verbose=1,
+                callbacks=[
+                    WandbLoggerCallback(
+                        "gnn-pc-saft", FLAGS.dataset, tags=["tuning", FLAGS.dataset]
+                    )
+                ],
+                verbose=FLAGS.verbose,
                 checkpoint_config=train.CheckpointConfig(
                     num_to_keep=1, checkpoint_at_end=False
                 ),
