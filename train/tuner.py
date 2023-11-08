@@ -1,5 +1,6 @@
 import os.path as osp, tempfile, os
-os.environ["WANDB_SILENT"]="true"
+
+os.environ["WANDB_SILENT"] = "true"
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -26,7 +27,35 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search.bohb import TuneBOHB
 from ray.tune.search import ConcurrencyLimiter
+from ray.tune import JupyterNotebookReporter
+from ray.tune.experiment.trial import Trial
 from functools import partial
+
+
+class TrialTerminationReporter(JupyterNotebookReporter):
+    def __init__(self):
+        super(TrialTerminationReporter, self).__init__()
+        self.num_terminated = 0
+
+    def should_report(self, trials, done=False):
+        """Reports only on trial termination events."""
+        old_num_terminated = self.num_terminated
+        self.num_terminated = len([t for t in trials if t.status == Trial.TERMINATED])
+        return self.num_terminated > old_num_terminated
+
+
+class CustomStopper(tune.Stopper):
+    def __init__(self, max_iter: int):
+        self.should_stop = False
+        self.max_iter = max_iter
+
+    def __call__(self, trial_id, result):
+        if not self.should_stop and result["train_mape"] != result["train_mape"]:
+            self.should_stop = True
+        return self.should_stop or result["training_iteration"] >= self.max_iter
+
+    def stop_all(self):
+        return False
 
 
 def train_and_evaluate(
@@ -279,21 +308,24 @@ def main(argv):
         max_t=max_t,
         stop_last_trials=True,
     )
+    reporter = TrialTerminationReporter()
+    stopper = CustomStopper(max_t)
 
     ray.init(num_gpus=FLAGS.num_init_gpus)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
+    trainable = tune.with_resources(tune.with_parameters(ptrain), resources=resources)
 
     if FLAGS.restoredir:
         tuner = tune.Tuner.restore(
             FLAGS.restoredir,
-            tune.with_resources(ptrain, resources=resources),
+            trainable,
             resume_unfinished=True,
             resume_errored=False,
             restart_errored=False,
         )
     else:
         tuner = tune.Tuner(
-            tune.with_resources(ptrain, resources=resources),
+            trainable,
             param_space=search_space,
             tune_config=tune.TuneConfig(
                 search_alg=search_alg,
@@ -314,7 +346,9 @@ def main(argv):
                 checkpoint_config=train.CheckpointConfig(
                     num_to_keep=1, checkpoint_at_end=False
                 ),
-                stop={"training_iteration": max_t},
+                progress_reporter=reporter,
+                log_to_file=True,
+                stop=stopper,
             ),
         )
 
