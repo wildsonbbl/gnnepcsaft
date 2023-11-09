@@ -4,6 +4,7 @@ from torch.nn import Linear, ModuleList, ReLU, Sequential, BatchNorm1d
 from torch_geometric.nn import PNAConv, global_add_pool, BatchNorm
 from torch_geometric.data import Data
 from torch_geometric.utils import add_self_loops
+from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 
 
 class PNAPCSAFT(torch.nn.Module):
@@ -136,9 +137,8 @@ class PNAPCSAFT2(torch.nn.Module):
         self.skip_connections = skip_connections
         self.add_self_loops = add_self_loops
 
-        self.node_embed = Linear(32, hidden_dim)
-
-        self.edge_embed = Linear(11, hidden_dim)
+        self.node_embed = AtomEncoder(hidden_dim)
+        self.edge_embed = BondEncoder(hidden_dim)
 
         for _ in range(propagation_depth):
             conv = PNAConv(
@@ -148,7 +148,7 @@ class PNAPCSAFT2(torch.nn.Module):
                 scalers=scalers,
                 deg=deg,
                 edge_dim=hidden_dim,
-                towers=1,
+                towers=2,
                 pre_layers=pre_layers,
                 post_layers=post_layers,
                 divide_input=False,
@@ -182,10 +182,10 @@ class PNAPCSAFT2(torch.nn.Module):
 
         if self.add_self_loops:
             edge_index, edge_attr = add_self_loops(
-                edge_index, edge_attr, num_nodes=x.size(0)
+                edge_index, edge_attr, 0, num_nodes=x.size(0)
             )
-        x = F.leaky_relu(self.node_embed(x))
-        edge_attr = F.leaky_relu(self.edge_embed(edge_attr))
+        x = self.node_embed(x)
+        edge_attr = self.edge_embed(edge_attr)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             if self.skip_connections:
