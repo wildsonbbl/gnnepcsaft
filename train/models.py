@@ -1,10 +1,9 @@
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential, BatchNorm1d, Embedding
+from torch.nn import Linear, ModuleList, ReLU, Sequential, BatchNorm1d
 from torch_geometric.nn import PNAConv, global_add_pool, BatchNorm
 from torch_geometric.data import Data
 from torch_geometric.utils import add_self_loops
-from data.graph import x_map, e_map
 
 
 class PNAPCSAFT(torch.nn.Module):
