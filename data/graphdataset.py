@@ -6,36 +6,6 @@ from data.graph import from_InChI
 import pickle
 import polars as pl
 
-
-def BinaryGraph(InChI1: str, InChI2: str):
-    """
-    Make one graph out of 2 InChI keys for a binary system
-
-    Parameters
-    ------------
-    InChI1: str
-        InChI value of molecule
-    InChI2: str
-        InChI value of molecule
-
-    Return
-    ------------
-    Graph: deepchem.feat.GraphData
-        Graph of binary system
-    """
-
-    graph1 = from_InChI(InChI1)
-    graph2 = from_InChI(InChI2)
-
-    x = torch.cat((graph1.x, graph2.x))
-    edge_attr = torch.cat((graph1.edge_attr, graph2.edge_attr))
-    edge_index = torch.cat(
-        (graph1.edge_index, graph2.edge_index + graph1.num_nodes), dim=1
-    )
-
-    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
-
-
 class ThermoMLDataset(InMemoryDataset):
 
     """
@@ -96,7 +66,7 @@ class ThermoMLDataset(InMemoryDataset):
 
         for inchi in data_dict:
             try:
-                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
+                graph = from_InChI(inchi)
             except:
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
@@ -271,7 +241,7 @@ class ramirez(InMemoryDataset):
             inchi = row[-1]
             para = row[3:6]
             try:
-                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
+                graph = from_InChI(inchi)
             except:
                 continue
 
@@ -338,7 +308,7 @@ class ThermoMLpara(InMemoryDataset):
             if (mden > 3 / 100) or (mvp > 10 / 100):
                 continue
             try:
-                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
+                graph = from_InChI(inchi)
             except:
                 continue
 
@@ -352,7 +322,7 @@ class ThermoMLpara(InMemoryDataset):
                 continue
             para = row[3:6]
             try:
-                graph = from_InChI(inchi, sanitize=True, with_hydrogen=False)
+                graph = from_InChI(inchi)
             except:
                 continue
 

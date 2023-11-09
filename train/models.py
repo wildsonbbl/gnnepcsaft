@@ -137,16 +137,9 @@ class PNAPCSAFT2(torch.nn.Module):
         self.skip_connections = skip_connections
         self.add_self_loops = add_self_loops
 
-        node_embeds_size = hidden_dim // 9
-        hidden_dim = node_embeds_size * 9
-        edge_embeds_size = hidden_dim // 3
+        self.node_embed = Linear(32, hidden_dim)
 
-        self.node_embeds = ModuleList(
-            [Embedding(len(feature), node_embeds_size) for feature in x_map.values()]
-        )
-        self.edge_embeds = ModuleList(
-            [Embedding(len(feature), edge_embeds_size) for feature in e_map.values()]
-        )
+        self.edge_embed = Linear(11, hidden_dim)
 
         for _ in range(propagation_depth):
             conv = PNAConv(
@@ -165,12 +158,7 @@ class PNAPCSAFT2(torch.nn.Module):
             self.batch_norms.append(BatchNorm(hidden_dim))
 
         self.mlp = Sequential(
-            Linear(hidden_dim, hidden_dim),
-            BatchNorm1d(hidden_dim),
-            ReLU(),
-            Linear(hidden_dim, hidden_dim),
-            BatchNorm1d(hidden_dim),
-            ReLU(),
+            Linear(hidden_dim, hidden_dim), BatchNorm1d(hidden_dim), ReLU()
         )
         self.ouput = Sequential(
             Linear(hidden_dim, hidden_dim // 2),
@@ -197,11 +185,8 @@ class PNAPCSAFT2(torch.nn.Module):
             edge_index, edge_attr = add_self_loops(
                 edge_index, edge_attr, num_nodes=x.size(0)
             )
-
-        x = [self.node_embeds[i](x[:, i]) for i in range(9)]
-        x = torch.cat(x, 1)
-        edge_attr = [self.edge_embeds[i](edge_attr[:, i]) for i in range(3)]
-        edge_attr = torch.cat(edge_attr, 1)
+        x = F.leaky_relu(self.node_embed(x))
+        edge_attr = F.leaky_relu(self.edge_embed(edge_attr))
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             if self.skip_connections:
@@ -212,8 +197,8 @@ class PNAPCSAFT2(torch.nn.Module):
                 x = x + x_previous
 
         x = global_add_pool(x, batch)
-        for _ in range(self.num_mlp_layers - 1):
-            x = F.dropout(x, p=self.dropout, training=self.training)
+        for _ in range(self.num_mlp_layers):
             x = self.mlp(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.ouput(x)
         return x
