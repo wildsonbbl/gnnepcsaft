@@ -305,6 +305,7 @@ def main(argv):
     search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
+        search_space = None
     search_alg = ConcurrencyLimiter(search_alg, 4)
     scheduler = HyperBandForBOHB(
         metric="mape_den",
