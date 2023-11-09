@@ -244,10 +244,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 model.train()
 
             step += 1
-            if step > config.num_train_steps or (~torch.any(torch.isnan(pred))):
+            if step > config.num_train_steps or (torch.any(torch.isnan(pred))):
                 wandb.finish()
                 break
-        if ~torch.any(torch.isnan(pred)):
+        if torch.any(torch.isnan(pred)):
             break
 
 
