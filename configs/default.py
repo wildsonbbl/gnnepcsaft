@@ -12,7 +12,7 @@ def get_config():
     config.change_sch = False
 
     # Training hyperparameters.
-    
+
     config.batch_size = 128
     config.pad_size = 128
     config.num_train_steps = 1_000_000
@@ -20,11 +20,10 @@ def get_config():
     config.log_every_steps = 5_000
     config.eval_every_steps = 10_000
     config.checkpoint_every_steps = 10_000
-    config.amp = True
+    config.amp = False
     config.momentum = 0.9
     config.patience = 5
     config.weight_decay = 1e-10
-    
 
     # GNN hyperparameters.
     config.model = "PNA"

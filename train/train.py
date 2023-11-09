@@ -23,6 +23,7 @@ from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
 
 from train.utils import calc_deg, create_model, create_optimizer, savemodel
 
+
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
     """Execute model training and evaluation loop.
 
@@ -223,7 +224,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 lr = []
 
             # Checkpoint model, if required.
-            if step % config.checkpoint_every_steps == 0 or is_last_step:
+            if (step % config.checkpoint_every_steps == 0 or is_last_step) and (
+                ~torch.any(torch.isnan(pred))
+            ):
                 savemodel(model, optimizer, scaler, ckp_path, step)
 
             # Evaluate on validation.
@@ -241,9 +244,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 model.train()
 
             step += 1
-            if step >= config.num_train_steps + 1:
+            if step > config.num_train_steps or (~torch.any(torch.isnan(pred))):
                 wandb.finish()
                 break
+        if ~torch.any(torch.isnan(pred)):
+            break
 
 
 FLAGS = flags.FLAGS
