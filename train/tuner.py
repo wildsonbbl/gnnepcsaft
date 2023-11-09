@@ -1,7 +1,7 @@
 import os.path as osp, tempfile, os
 
 os.environ["WANDB_SILENT"] = "true"
-os.environ["RAY_AIR_NEW_OUTPUT"]="0"
+os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 from absl import app
 from absl import flags
 from ml_collections import config_flags
@@ -255,7 +255,10 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
-flags.DEFINE_string("restoredir", None, "Directory path to restore previous tuning results")
+flags.DEFINE_list("tags", [], "Dataset to train model on")
+flags.DEFINE_string(
+    "restoredir", None, "Directory path to restore previous tuning results"
+)
 flags.DEFINE_string("resumedir", None, "Directory path to resume unfinished tuning")
 flags.DEFINE_integer("verbose", 0, "Ray tune verbose")
 flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads for trial")
@@ -344,7 +347,9 @@ def main(argv):
                 storage_path=None,
                 callbacks=[
                     WandbLoggerCallback(
-                        "gnn-pc-saft", FLAGS.dataset, tags=["tuning", FLAGS.dataset]
+                        "gnn-pc-saft",
+                        FLAGS.dataset,
+                        tags=["tuning", FLAGS.dataset] + FLAGS.tags,
                     )
                 ],
                 verbose=FLAGS.verbose,
