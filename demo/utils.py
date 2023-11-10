@@ -1,18 +1,19 @@
-import os.path as osp, os
+import os
+import os.path as osp
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-import torch, numpy as np
-from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
-from data.graph import from_smiles
-from train.models import PNAPCSAFT
-from train.utils import calc_deg
-from train.parametrisation import rhovp_data
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from rdkit import Chem
 from rdkit.Chem import Draw
-from configs.default import get_config
-from train.parametrisation import MAPE, rhovp_data
 
+from configs.default import get_config
+from data.graph import from_smiles
+from data.graphdataset import ThermoMLDataset, ThermoMLpara, ramirez
+from train.models import PNAPCSAFT
+from train.parametrisation import MAPE, rhovp_data
+from train.utils import calc_deg
 
 config = get_config()
 device = torch.device("cpu")

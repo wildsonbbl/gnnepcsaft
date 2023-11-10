@@ -1,6 +1,6 @@
 import torch
-from torch_geometric.data import Data
 from ogb.utils.mol import smiles2graph
+from torch_geometric.data import Data
 
 
 def from_InChI(

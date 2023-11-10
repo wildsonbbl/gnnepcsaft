@@ -1,31 +1,15 @@
-import rdkit.Chem as Chem
-from rdkit.Chem.Fragments import (
-    fr_COO,
-    fr_Al_OH,
-    fr_Ar_OH,
-    fr_ketone,
-    fr_NH0,
-    fr_NH1,
-    fr_NH2,
-    fr_ester,
-    fr_ether,
-    fr_halogen,
-    fr_amide,
-    fr_unbrch_alkane,
-    fr_aldehyde,
-    fr_benzene,
-    fr_epoxide,
-    fr_sulfide,
-    fr_SH,
-    fr_nitrile,
-    fr_phenol,
-    fr_phos_acid,
-)
-
-from urllib.request import urlopen
-from urllib.parse import quote
 from time import sleep
+from urllib.parse import quote
+from urllib.request import urlopen
+
 import numpy as np
+import rdkit.Chem as Chem
+from rdkit.Chem.Fragments import (fr_Al_OH, fr_aldehyde, fr_amide, fr_Ar_OH,
+                                  fr_benzene, fr_COO, fr_epoxide, fr_ester,
+                                  fr_ether, fr_halogen, fr_ketone, fr_NH0,
+                                  fr_NH1, fr_NH2, fr_nitrile, fr_phenol,
+                                  fr_phos_acid, fr_SH, fr_sulfide,
+                                  fr_unbrch_alkane)
 
 
 def complexity(ids: str) -> str:

@@ -3,8 +3,8 @@
 # @author: Wildson Lima
 
 
-import jax.numpy as np
 import jax
+import jax.numpy as np
 
 platform = jax.local_devices()[0].platform
 if platform != "tpu":

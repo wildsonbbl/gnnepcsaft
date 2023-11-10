@@ -1,9 +1,10 @@
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+import torch
 from jax import dlpack as jdlpack
 from torch.utils import dlpack as tdlpack
-from epcsaft.epcsaft_complete import pcsaft_den, pcsaft_VP, pcsaft_fugcoef
-import torch
+
+from epcsaft.epcsaft_complete import pcsaft_den, pcsaft_fugcoef, pcsaft_VP
 
 
 def gamma(

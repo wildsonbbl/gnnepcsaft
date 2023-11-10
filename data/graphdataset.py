@@ -1,10 +1,12 @@
-from torch_geometric.data import Data
-from torch.utils.data import Dataset as ds
-import torch
-from torch_geometric.data import InMemoryDataset
-from data.graph import from_InChI
 import pickle
+
 import polars as pl
+import torch
+from torch.utils.data import Dataset as ds
+from torch_geometric.data import Data, InMemoryDataset
+
+from data.graph import from_InChI
+
 
 class ThermoMLDataset(InMemoryDataset):
 

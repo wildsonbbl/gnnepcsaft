@@ -1,9 +1,9 @@
 import numpy as np
-from pcsaft import pcsaft_den, pcsaft_hres, pcsaft_gres, pcsaft_sres
-from pcsaft import flashTQ, flashPQ, pcsaft_Hvap
-from pcsaft import dielc_water, pcsaft_osmoticC, pcsaft_fugcoef
-from pcsaft import pcsaft_cp, pcsaft_ares, pcsaft_dadt, pcsaft_p
 import torch
+from pcsaft import (dielc_water, flashPQ, flashTQ, pcsaft_ares, pcsaft_cp,
+                    pcsaft_dadt, pcsaft_den, pcsaft_fugcoef, pcsaft_gres,
+                    pcsaft_hres, pcsaft_Hvap, pcsaft_osmoticC, pcsaft_p,
+                    pcsaft_sres)
 
 
 def gamma(

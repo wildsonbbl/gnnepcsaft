@@ -1,10 +1,10 @@
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear, ModuleList, ReLU, Sequential, BatchNorm1d
-from torch_geometric.nn import PNAConv, global_add_pool, BatchNorm
-from torch_geometric.data import Data
-from torch_geometric.utils import add_self_loops
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
+from torch.nn import BatchNorm1d, Linear, ModuleList, ReLU, Sequential
+from torch_geometric.data import Data
+from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
+from torch_geometric.utils import add_self_loops
 
 
 class PNAPCSAFT(torch.nn.Module):
