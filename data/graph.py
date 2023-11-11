@@ -1,8 +1,11 @@
+"""Module for molecular graph design."""
 import torch
 from ogb.utils.mol import smiles2graph
+from rdkit import Chem, RDLogger
 from torch_geometric.data import Data
 
 
+# pylint: disable = invalid-name
 def from_InChI(
     InChI: str,
     with_hydrogen: bool = False,
@@ -18,13 +21,12 @@ def from_InChI(
         kekulize (bool, optional): If set to :obj:`True`, converts aromatic
             bonds to single/double bonds. (default: :obj:`False`)
     """
-    from rdkit import Chem, RDLogger
-    from torch_geometric.data import Data
 
     RDLogger.DisableLog("rdApp.*")
 
     mol = Chem.MolFromInchi(InChI)
 
+    # pylint: disable = no-member
     if with_hydrogen:
         mol = Chem.AddHs(mol)
     if kekulize:
@@ -53,8 +55,6 @@ def from_smiles(smiles: str) -> Data:
     Args:
         smile (str): The smile string.
     """
-    from rdkit import RDLogger
-    from torch_geometric.data import Data
 
     RDLogger.DisableLog("rdApp.*")
 

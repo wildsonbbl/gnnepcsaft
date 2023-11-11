@@ -1,3 +1,4 @@
+"""Module for molecular graph dataset building."""
 import pickle
 
 import polars as pl
@@ -5,14 +6,13 @@ import torch
 from torch.utils.data import Dataset as ds
 from torch_geometric.data import Data, InMemoryDataset
 
-from data.graph import from_InChI
+from .graph import from_InChI
 
 
 class ThermoMLDataset(InMemoryDataset):
 
     """
-    Molecular Graph dataset creator/manipulator.
-
+    Molecular Graph dataset creator/manipulator with `ThermoML Archive` experimental data.
     PARAMETERS
     ----------
     root (str, optional) – Root directory where the dataset should be saved. (optional: None).
@@ -40,11 +40,8 @@ class ThermoMLDataset(InMemoryDataset):
         transform=None,
         pre_transform=None,
         pre_filter=None,
-        dtype=torch.float64,
-        graph_dtype=torch.long,
     ):
-        self.dtype = dtype
-        self.graph_dtype = graph_dtype
+        self.dtype = torch.float64
 
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
@@ -69,7 +66,7 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in data_dict:
             try:
                 graph = from_InChI(inchi)
-            except:
+            except (TypeError, ValueError):
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
@@ -136,7 +133,9 @@ class ThermoMLDataset(InMemoryDataset):
         torch.save(self.collate(datalist), self.processed_paths[0])
 
 
-class ThermoML_padded(ds):
+class ThermoMLPadded(ds):
+    """Class used to make `ThermoMLDataset` suitable for `jax.jit`"""
+
     def __init__(self, dataset: ThermoMLDataset, pad_size: int = 32):
         """Initializes the data reader by loading in data."""
         self.dataset = dataset
@@ -172,14 +171,9 @@ class ThermoML_padded(ds):
         )
         return data
 
-    def len(self):
-        return self.__len__(self)
-
-    def get(self, idx):
-        return self.__getitem__(self, idx)
-
 
 def get_padded_array(states: torch.Tensor, pad_size: int = 2**10) -> torch.Tensor:
+    """Padding to make array suitable for jax.jit"""
     indexes = torch.randperm(states.shape[0])
     states = states[indexes]
     states = states.repeat(pad_size // states.shape[0] + 1, 1)
@@ -194,10 +188,11 @@ def _nearest_bigger_power_of_two(x: int) -> int:
     return y
 
 
-class ramirez(InMemoryDataset):
+class Ramirez(InMemoryDataset):
 
     """
-    Molecular Graph dataset creator/manipulator.
+    Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
+    `Ramírez-Vélez et al. (2022, doi: 10.1002/aic.17722)` experimental data.
 
     PARAMETERS
     ----------
@@ -244,7 +239,7 @@ class ramirez(InMemoryDataset):
             para = row[3:6]
             try:
                 graph = from_InChI(inchi)
-            except:
+            except (TypeError, ValueError):
                 continue
 
             graph.para = torch.tensor(para)
@@ -257,7 +252,8 @@ class ramirez(InMemoryDataset):
 class ThermoMLpara(InMemoryDataset):
 
     """
-    Molecular Graph dataset creator/manipulator.
+    Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
+    parametrisation with `ThermoML Archive` experimental data.
 
     PARAMETERS
     ----------
@@ -311,7 +307,7 @@ class ThermoMLpara(InMemoryDataset):
                 continue
             try:
                 graph = from_InChI(inchi)
-            except:
+            except (TypeError, ValueError):
                 continue
 
             graph.para = torch.tensor(para)
@@ -325,7 +321,7 @@ class ThermoMLpara(InMemoryDataset):
             para = row[3:6]
             try:
                 graph = from_InChI(inchi)
-            except:
+            except (TypeError, ValueError):
                 continue
 
             graph.para = torch.tensor(para)

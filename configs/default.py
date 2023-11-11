@@ -1,3 +1,4 @@
+"""Module to config traning and model parameters"""
 import ml_collections
 
 

@@ -1,28 +1,49 @@
-from time import sleep
-from urllib.parse import quote
-from urllib.request import urlopen
+"""Module for calculating molecule complexity and family group."""
 
-import numpy as np
-import rdkit.Chem as Chem
-from rdkit.Chem.Fragments import (fr_Al_OH, fr_aldehyde, fr_amide, fr_Ar_OH,
-                                  fr_benzene, fr_COO, fr_epoxide, fr_ester,
-                                  fr_ether, fr_halogen, fr_ketone, fr_NH0,
-                                  fr_NH1, fr_NH2, fr_nitrile, fr_phenol,
-                                  fr_phos_acid, fr_SH, fr_sulfide,
-                                  fr_unbrch_alkane)
+from urllib.parse import quote
+from urllib.request import HTTPError, urlopen
+
+from rdkit import Chem
+
+# pylint: disable = no-name-in-module
+from rdkit.Chem.Fragments import (
+    fr_Al_OH,
+    fr_aldehyde,
+    fr_amide,
+    fr_Ar_OH,
+    fr_benzene,
+    fr_COO,
+    fr_epoxide,
+    fr_ester,
+    fr_ether,
+    fr_halogen,
+    fr_ketone,
+    fr_NH0,
+    fr_NH1,
+    fr_NH2,
+    fr_nitrile,
+    fr_phenol,
+    fr_phos_acid,
+    fr_SH,
+    fr_sulfide,
+    fr_unbrch_alkane,
+)
 
 
 def complexity(ids: str) -> str:
+    """Complexity as implemented by `PubChem`."""
     try:
         url = (
-            "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/inchi/property/complexity/TXT?inchi="
+            "https://pubchem.ncbi.nlm.nih.gov/"
+            + "rest/pug/compound/inchi/property/complexity/TXT?inchi="
             + quote(ids)
         )
-        ans = urlopen(url).read().decode("utf8").rstrip()
-        ans = ans.split("\n")[0]
-        if ans:
-            ans = float(ans)
-    except:
+        with urlopen(url) as ans:
+            ans = ans.read().decode("utf8").rstrip()
+            ans = ans.split("\n")[0]
+            if ans:
+                ans = float(ans)
+    except (TypeError, ValueError, HTTPError):
         print("not ok:", url)
         ans = None
 
@@ -30,12 +51,12 @@ def complexity(ids: str) -> str:
     return ans
 
 
-def get_family_groups(InChI: str) -> set[str]:
-    
-    mol = Chem.MolFromInchi(InChI, sanitize=True)
+def get_family_groups(inchi: str) -> set[str]:
+    """Find a family groups for a molecule."""
+    mol = Chem.MolFromInchi(inchi, sanitize=True)
 
     if mol is None:
-        mol = Chem.MolFromInchi(InChI, sanitize=False)
+        mol = Chem.MolFromInchi(inchi, sanitize=False)
 
     frs_1 = [
         fr_COO,

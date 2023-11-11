@@ -1,9 +1,7 @@
+"""Module to be called for hyperparameter tuning"""
 import os
 import os.path as osp
 import tempfile
-
-os.environ["WANDB_SILENT"] = "true"
-os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 from functools import partial
 
 import ml_collections
@@ -20,19 +18,23 @@ from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import (CosineAnnealingWarmRestarts,
-                                      ReduceLROnPlateau)
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
-from data.graphdataset import ThermoMLDataset, ThermoMLpara, ramirez
-from epcsaft import epcsaft_cython
-from train.utils import calc_deg, create_model, create_optimizer, savemodel
+from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
+from ..epcsaft import epcsaft_cython
+from .utils import calc_deg, create_model, create_optimizer, savemodel
+
+os.environ["WANDB_SILENT"] = "true"
+os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 
 
 class TrialTerminationReporter(JupyterNotebookReporter):
+    """Reporter for ray to report only when trial is terminated"""
+
     def __init__(self):
-        super(TrialTerminationReporter, self).__init__()
+        super().__init__()
         self.num_terminated = 0
 
     def should_report(self, trials, done=False):
@@ -43,6 +45,8 @@ class TrialTerminationReporter(JupyterNotebookReporter):
 
 
 class CustomStopper(tune.Stopper):
+    """Custom experiment/trial stopper"""
+
     def __init__(self, max_iter: int):
         self.should_stop = False
         self.max_iter = max_iter
@@ -66,9 +70,11 @@ def train_and_evaluate(
       workdir: Working Directory.
     """
 
-    class Noop(object):
-        def step(*args, **kwargs):
-            pass
+    class Noop:
+        """Dummy noop scheduler"""
+
+        def step(self, *args, **kwargs):
+            """Scheduler step"""
 
         def __getattr__(self, _):
             return self.step
@@ -91,12 +97,12 @@ def train_and_evaluate(
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = ramirez(path)
+        train_dataset = Ramirez(path)
     elif dataset == "thermoml":
         path = osp.join(workdir, "data/thermoml")
         train_dataset = ThermoMLpara(path)
     else:
-        ValueError(
+        raise ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
@@ -111,9 +117,9 @@ def train_and_evaluate(
     # Create and initialize the network.
     logging.info("Initializing network.")
     model = create_model(config, deg).to(device)
-    pcsaft_den = epcsaft_cython.PCSAFT_den.apply
-    pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
-    HLoss = HuberLoss("mean").to(device)
+    # pylint: disable=no-member
+    pcsaft_den = epcsaft_cython.DenFromTensor.apply
+    hloss = HuberLoss("mean").to(device)
     mape = MeanAbsolutePercentageError().to(device)
 
     # Create the optimizer.
@@ -155,8 +161,6 @@ def train_and_evaluate(
         model.eval()
         total_mape_den = []
         total_huber_den = []
-        total_mape_vp = []
-        total_huber_vp = []
         for graphs in test_loader:
             if test == "test":
                 if graphs.InChI in para_data:
@@ -165,14 +169,16 @@ def train_and_evaluate(
                 if graphs.InChI not in para_data:
                     continue
             graphs = graphs.to(device)
+            # pylint: disable = not-callable
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
             if ~torch.all(datapoints == torch.zeros_like(datapoints)):
                 pred = pcsaft_den(pred_para, datapoints)
                 target = datapoints[:, -1]
+                # pylint: disable = not-callable
                 loss_mape = mape(pred, target)
-                loss_huber = HLoss(pred, target)
+                loss_huber = hloss(pred, target)
                 total_mape_den += [loss_mape.item()]
                 total_huber_den += [loss_huber.item()]
 
@@ -195,11 +201,12 @@ def train_and_evaluate(
             graphs = graphs.to(device)
             optimizer.zero_grad()
             with torch.autocast(
-                device_type="cuda", dtype=torch.float16, enabled=use_amp
+                device_type=device, dtype=torch.float16, enabled=use_amp
             ):
+                # pylint: disable = not-callable
                 pred = model(graphs)
                 loss_mape = mape(pred, target)
-                loss_huber = HLoss(pred, target)
+                loss_huber = hloss(pred, target)
             scaler.scale(loss_mape).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -215,7 +222,6 @@ def train_and_evaluate(
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
 
             # Log, if required.
-            is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0:
                 mape_den, huber_den = test(test="val")
                 with tempfile.TemporaryDirectory() as tempdir:
@@ -277,6 +283,7 @@ config_flags.DEFINE_config_file(
 
 
 def main(argv):
+    """Execution from command line"""
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 

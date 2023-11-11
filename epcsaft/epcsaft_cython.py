@@ -1,102 +1,31 @@
+"""Module for ePC-SAFT calculations. """
 import numpy as np
 import torch
-from pcsaft import (dielc_water, flashPQ, flashTQ, pcsaft_ares, pcsaft_cp,
-                    pcsaft_dadt, pcsaft_den, pcsaft_fugcoef, pcsaft_gres,
-                    pcsaft_hres, pcsaft_Hvap, pcsaft_osmoticC, pcsaft_p,
-                    pcsaft_sres)
+
+# pylint: disable = no-name-in-module
+from pcsaft import flashTQ, pcsaft_den, pcsaft_fugcoef
 
 
-def gamma(
-    x, m, s, e, t, p, k_ij, l_ij, khb_ij, e_assoc, vol_a, dipm, dip_num, z, dielc, phase
-):
+def gamma(x, t, p, params):
+    """Calculates infinity activity coefficients"""
+
     x1 = (x < 0.5) * 1.0
 
-    rho = pcsaft_den(
-        x,
-        m,
-        s,
-        e,
-        t,
-        p,
-        k_ij,
-        l_ij,
-        khb_ij,
-        e_assoc,
-        vol_a,
-        dipm,
-        dip_num,
-        z,
-        dielc,
-        1.0,
-    )
+    rho = pcsaft_den(t, p, x, params, phase="liq")
 
-    fungcoef = (
-        pcsaft_fugcoef(
-            x,
-            m,
-            s,
-            e,
-            t,
-            rho,
-            k_ij,
-            l_ij,
-            khb_ij,
-            e_assoc,
-            vol_a,
-            dipm,
-            dip_num,
-            z,
-            dielc,
-        ).T
-        @ x1
-    )
+    fungcoef = pcsaft_fugcoef(t, rho, x, params).T @ x1
 
-    rho = pcsaft_den(
-        x1,
-        m,
-        s,
-        e,
-        t,
-        p,
-        k_ij,
-        l_ij,
-        khb_ij,
-        e_assoc,
-        vol_a,
-        dipm,
-        dip_num,
-        z,
-        dielc,
-        1.0,
-    )
+    rho = pcsaft_den(t, p, x1, params, phase="liq")
 
-    fungcoefpure = (
-        pcsaft_fugcoef(
-            x1,
-            m,
-            s,
-            e,
-            t,
-            rho,
-            k_ij,
-            l_ij,
-            khb_ij,
-            e_assoc,
-            vol_a,
-            dipm,
-            dip_num,
-            z,
-            dielc,
-        ).T
-        @ x1
-    )
+    fungcoefpure = pcsaft_fugcoef(t, rho, x1, params).T @ x1
 
     gamma1 = fungcoef / fungcoefpure
 
     return gamma1.squeeze()
 
 
-def epcsaft_pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+def pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+    """Calcules pure component density with ePC-SAFT."""
     x = np.asarray([1.0])
     t = state[0]
     p = state[1]
@@ -113,26 +42,29 @@ def epcsaft_pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     return den
 
 
-def epcsaft_pure_VP(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+def pure_vp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+    """Calculates pure component vapor pressure with ePC-SAFT."""
     x = np.asarray([1.0])
     t = state[0]
-    p = state[1]
-    phase = ["liq" if state[2] == 1 else "vap"][0]
 
     m = parameters[0]
     s = parameters[1]
     e = parameters[2]
 
     params = {"m": m, "s": s, "e": e}
-    vp, xl, xv = flashTQ(t, 0, x, params)
+    vp, _, _ = flashTQ(t, 0, x, params)
 
     return vp
 
 
-class PCSAFT_den(torch.autograd.Function):
+# pylint: disable = abstract-method
+class DenFromTensor(torch.autograd.Function):
+    """Custom `torch` function to calculate pure component density with ePC-SAFT."""
+
+    # pylint: disable = arguments-differ
     @staticmethod
-    def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        parameters = input.numpy()
+    def forward(ctx, para: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        parameters = para.numpy()
         state = state.numpy()
 
         ctx.parameters = parameters
@@ -142,8 +74,9 @@ class PCSAFT_den(torch.autograd.Function):
 
         for i, row in enumerate(state):
             try:
-                den = epcsaft_pure_den(parameters, row)
-            except:
+                den = pure_den(parameters, row)
+            # pylint: disable = broad-exception-caught
+            except Exception:
                 den = np.nan
             result[i] = den
         return torch.tensor(result)
@@ -154,10 +87,13 @@ class PCSAFT_den(torch.autograd.Function):
         return grad_result, None
 
 
-class PCSAFT_vp(torch.autograd.Function):
+class VpFromTensor(torch.autograd.Function):
+    """Custom `torch` function to calculate pure component vapor pressure with ePC-SAFT."""
+
+    # pylint: disable = arguments-differ
     @staticmethod
-    def forward(ctx, input: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        parameters = input.numpy()
+    def forward(ctx, para: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
+        parameters = para.numpy()
         state = state.numpy()
 
         ctx.parameters = parameters
@@ -167,8 +103,9 @@ class PCSAFT_vp(torch.autograd.Function):
 
         for i, row in enumerate(state):
             try:
-                vp = epcsaft_pure_VP(parameters, row)
-            except:
+                vp = pure_vp(parameters, row)
+            # pylint: disable = broad-exception-caught
+            except Exception:
                 vp = np.nan
             result[i] = vp
         return torch.tensor(result)

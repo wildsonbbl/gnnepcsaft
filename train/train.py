@@ -1,4 +1,4 @@
-import os
+"""Module to be used for model training"""
 import os.path as osp
 import time
 
@@ -8,16 +8,14 @@ import wandb
 from absl import app, flags, logging
 from ml_collections import config_flags
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import (CosineAnnealingWarmRestarts,
-                                      ReduceLROnPlateau)
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
-from data.graphdataset import ThermoMLDataset, ThermoMLpara, ramirez
-from epcsaft import epcsaft_cython
-from train import models
-from train.utils import calc_deg, create_model, create_optimizer, savemodel
+from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
+from ..epcsaft import epcsaft_cython
+from .utils import calc_deg, create_model, create_optimizer, savemodel
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
@@ -26,11 +24,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     Args:
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
+      dataset: dataset name (ramirez or thermoml)
     """
 
-    class Noop(object):
-        def step(*args, **kwargs):
-            pass
+    class Noop:
+        """Dummy noop scheduler"""
+
+        def step(self, *args, **kwargs):
+            """Scheduler step"""
 
         def __getattr__(self, _):
             return self.step
@@ -41,7 +42,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     use_amp = config.amp
     # Create writer for logs.
     wandb.login()
-    run = wandb.init(
+    wandb.init(
         # Set the project where this run will be logged
         project="gnn-pc-saft",
         # Track hyperparameters and run metadata
@@ -55,12 +56,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = ramirez(path)
+        train_dataset = Ramirez(path)
     elif dataset == "thermoml":
         path = osp.join(workdir, "data/thermoml")
         train_dataset = ThermoMLpara(path)
     else:
-        ValueError(
+        raise ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
@@ -74,12 +75,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config, deg).to(device)
-    pcsaft_den = epcsaft_cython.PCSAFT_den.apply
-    pcsaft_vp = epcsaft_cython.PCSAFT_vp.apply
-    HLoss = HuberLoss("mean").to(device)
-    mape = MeanAbsolutePercentageError().to(device)
-    dummy = test_loader[0].to(device)
+    model = create_model(config, deg)
+    model.to(device)
+    # pylint: disable=no-member
+    pcsaft_den = epcsaft_cython.DenFromTensor.apply
+    pcsaft_vp = epcsaft_cython.VpFromTensor.apply
+    hloss = HuberLoss("mean")
+    hloss.to(device)
+    mape = MeanAbsolutePercentageError()
+    mape.to(device)
+    dummy = test_loader[0]
+    dummy.to(device)
     logging.info(f"Model summary: \n {summary(model, dummy)}")
 
     # Create the optimizer.
@@ -139,8 +145,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             if ~torch.all(datapoints == torch.zeros_like(datapoints)):
                 pred = pcsaft_den(pred_para, datapoints)
                 target = datapoints[:, -1]
+                # pylint: disable = not-callable
                 loss_mape = mape(pred, target)
-                loss_huber = HLoss(pred, target)
+                loss_huber = hloss(pred, target)
                 total_mape_den += [loss_mape.item()]
                 total_huber_den += [loss_huber.item()]
 
@@ -149,8 +156,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 pred = pcsaft_vp(pred_para, datapoints)
                 target = datapoints[:, -1]
                 result_filter = ~torch.isnan(pred)
+                # pylint: disable = not-callable
                 loss_mape = mape(pred[result_filter], target[result_filter])
-                loss_huber = HLoss(pred[result_filter], target[result_filter])
+                loss_huber = hloss(pred[result_filter], target[result_filter])
                 if loss_mape.item() >= 0.9:
                     continue
                 total_mape_vp += [loss_mape.item()]
@@ -178,11 +186,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             graphs = graphs.to(device)
             optimizer.zero_grad()
             with torch.autocast(
-                device_type="cuda", dtype=torch.float16, enabled=use_amp
+                device_type=device, dtype=torch.float16, enabled=use_amp
             ):
                 pred = model(graphs)
+                # pylint: disable = not-callable
                 loss_mape = mape(pred, target)
-                loss_huber = HLoss(pred, target)
+                loss_huber = hloss(pred, target)
             scaler.scale(loss_mape).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -260,6 +269,7 @@ config_flags.DEFINE_config_file(
 
 
 def main(argv):
+    """Execution from command line"""
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 

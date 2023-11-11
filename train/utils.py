@@ -1,22 +1,30 @@
+"""Model with important functions to help model training"""
 import os.path as osp
 
 import ml_collections
+import numpy as np
 import torch
+from pcsaft import (  # pylint: disable = no-name-in-module
+    SolutionError,
+    flashTQ,
+    pcsaft_den,
+)
 from torch_geometric.utils import degree
 
-from data.graphdataset import ThermoMLpara, ramirez
-from train import models
+from ..data.graphdataset import Ramirez, ThermoMLpara
+from . import models
 
 
 def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
+    """Calculates deg for `PNAPCSAFT` model."""
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = ramirez(path)
+        train_dataset = Ramirez(path)
     elif dataset == "thermoml":
         path = osp.join(workdir, "data/thermoml")
         train_dataset = ThermoMLpara(path)
     else:
-        ValueError(
+        raise ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
         )
     # Compute the maximum in-degree in the training data.
@@ -38,29 +46,24 @@ def create_model(
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
-    if config.model == "PNA":
-        return models.PNAPCSAFT(
-            hidden_dim=config.hidden_dim,
+    if config.model == "PNA2":
+        pna_params = models.PnaconvsParams(
             propagation_depth=config.propagation_depth,
             pre_layers=config.pre_layers,
             post_layers=config.post_layers,
+            deg=deg,
+            skip_connections=config.skip_connections,
+            self_loops=config.add_self_loops,
+        )
+        mlp_params = models.RadoutMLPParams(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
-            deg=deg,
-            dropout=config.dropout_rate,
         )
-    elif config.model == "PNA2":
         return models.PNAPCSAFT2(
             hidden_dim=config.hidden_dim,
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-            deg=deg,
+            pna_params=pna_params,
+            mlp_params=mlp_params,
             dropout=config.dropout_rate,
-            skip_connections=config.skip_connections,
-            add_self_loops=config.add_self_loops,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 
@@ -87,6 +90,7 @@ def create_optimizer(config: ml_collections.ConfigDict, params):
 
 
 def savemodel(model, optimizer, scaler, path, step):
+    """To checkpoint model during training."""
     torch.save(
         {
             "model_state_dict": model.state_dict(),
@@ -96,3 +100,90 @@ def savemodel(model, optimizer, scaler, path, step):
         },
         path,
     )
+
+
+def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = True):
+    """
+    Calculates mean absolute percentage error
+    of ePC-SAFT predicted density and vapor pressurre relative to experimental data.
+
+    """
+    parameters = np.abs(parameters)
+    m = parameters[0]
+    s = parameters[1]
+    e = parameters[2]
+    pred_mape = 0.0
+
+    if ~np.all(rho == np.zeros_like(rho)):
+        pred_mape = []
+        for state in rho:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = "liq" if state[2] == 1 else "vap"
+            params = {"m": m, "s": s, "e": e}
+            den = pcsaft_den(t, p, x, params, phase=phase)
+            pred_mape += [np.abs((state[-1] - den) / state[-1])]
+
+    den = np.asarray(pred_mape)
+    if mean:
+        den = den.mean()
+
+    pred_mape = 0.0
+    if ~np.all(vp == np.zeros_like(vp)):
+        pred_mape = []
+        for state in vp:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = "liq" if state[2] == 1 else "vap"
+            params = {"m": m, "s": s, "e": e}
+            try:
+                vp, _, _ = flashTQ(t, 0, x, params, p)
+                pred_mape += [np.abs((state[-1] - vp) / state[-1])]
+            except SolutionError:
+                pass
+
+    vp = np.asarray(mape)
+    if mean:
+        vp = vp.mean()
+
+    return den, vp
+
+
+def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
+    """Calculates density and vapor pressure with ePC-SAFT"""
+    parameters = np.abs(parameters)
+    m = parameters[0]
+    s = parameters[1]
+    e = parameters[2]
+    den = []
+
+    if ~np.all(rho == np.zeros_like(rho)):
+        for state in rho:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = ["liq" if state[2] == 1 else "vap"][0]
+            params = {"m": m, "s": s, "e": e}
+            den += [pcsaft_den(t, p, x, params, phase=phase)]
+
+    den = np.asarray(den)
+
+    vpl = []
+    if ~np.all(vp == np.zeros_like(vp)):
+        for state in vp:
+            x = np.asarray([1.0])
+            t = state[0]
+            p = state[1]
+            phase = ["liq" if state[2] == 1 else "vap"][0]
+            params = {"m": m, "s": s, "e": e}
+            try:
+                vp, _, _ = flashTQ(t, 0, x, params, p)
+                vpl += [vp]
+            except SolutionError:
+                vpl += [np.nan]
+
+    vp = np.asarray(vpl)
+
+    return den, vp
