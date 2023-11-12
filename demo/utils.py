@@ -8,11 +8,11 @@ import torch
 from rdkit import Chem
 from rdkit.Chem import Draw
 
-from ..configs.default import get_config
-from ..data.graph import from_InChI, from_smiles
-from ..data.graphdataset import Ramirez, ThermoMLDataset
-from ..train.models import PNAPCSAFT
-from ..train.utils import calc_deg, mape, rhovp_data
+from configs.default import get_config
+from data.graph import from_InChI, from_smiles
+from data.graphdataset import Ramirez, ThermoMLDataset
+from train.models import PNAPCSAFT
+from train.utils import calc_deg, mape, rhovp_data
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 

@@ -1,4 +1,4 @@
-"""Module to be called for hyperparameter tuning"""
+"""Module to be used for hyperparameter tuning"""
 import os
 import os.path as osp
 import tempfile
@@ -20,9 +20,16 @@ from ray.tune.search.bohb import TuneBOHB
 from torch.nn import HuberLoss
 from torchmetrics import MeanAbsolutePercentageError
 
-from ..epcsaft import epcsaft_cython
-from .train import build_datasets_loaders, create_schedulers
-from .utils import calc_deg, create_model, create_optimizer, savemodel
+from epcsaft import epcsaft_cython
+
+from .utils import (
+    build_datasets_loaders,
+    calc_deg,
+    create_model,
+    create_optimizer,
+    create_schedulers,
+    savemodel,
+)
 
 os.environ["WANDB_SILENT"] = "true"
 os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
@@ -66,6 +73,7 @@ def train_and_evaluate(
     Args:
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
+      dataset: dataset name (ramirez or thermoml)
     """
 
     deg = calc_deg(dataset, workdir)
@@ -89,18 +97,21 @@ def train_and_evaluate(
 
     # Create and initialize the network.
     logging.info("Initializing network.")
-    model = create_model(config, deg).to(device)
+    model = create_model(config, deg)
+    model.to(device)
     # pylint: disable=no-member
     pcsaft_den = epcsaft_cython.DenFromTensor.apply
-    hloss = HuberLoss("mean").to(device)
-    mape = MeanAbsolutePercentageError().to(device)
+    hloss = HuberLoss("mean")
+    hloss.to(device)
+    mape = MeanAbsolutePercentageError()
+    mape.to(device)
 
     # Create the optimizer.
     optimizer = create_optimizer(config, model.parameters())
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # Set up checkpointing of the model.
-    initial_step = load_checkpoint(config, model, optimizer, scaler)
+    step = load_checkpoint(config, model, optimizer, scaler)
 
     # Scheduler
     scheduler, scheduler2 = create_schedulers(config, optimizer)
@@ -118,7 +129,6 @@ def train_and_evaluate(
                 if graphs.InChI not in para_data:
                     continue
             graphs = graphs.to(device)
-            # pylint: disable = not-callable
             pred_para = model(graphs).squeeze().to("cpu", torch.float64)
 
             datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
@@ -138,68 +148,73 @@ def train_and_evaluate(
 
     # Begin training loop.
     logging.info("Starting training.")
-    step = initial_step
     total_loss_mape = []
     total_loss_huber = []
     lr = []
 
+    def train_step(graphs):
+        target = graphs.para.to(device).view(-1, 3)
+        graphs = graphs.to(device)
+        optimizer.zero_grad()
+        with torch.autocast(
+            device_type=device.type, dtype=torch.float16, enabled=use_amp
+        ):
+            pred = model(graphs)
+            loss_mape = mape(pred, target)
+            loss_huber = hloss(pred, target)
+        scaler.scale(loss_mape).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        total_loss_mape.append(loss_mape.item())
+        total_loss_huber.append(loss_huber.item())
+        if config.change_sch:
+            lr.append(optimizer.param_groups[0]["lr"])
+        else:
+            lr.append(scheduler.get_last_lr()[0])
+        scheduler.step(step)
+        return pred
+
+    def train_logging():
+        mape_den, huber_den = test(test="val")
+        with tempfile.TemporaryDirectory() as tempdir:
+            savemodel(
+                model,
+                optimizer,
+                scaler,
+                osp.join(tempdir, "checkpoint.pt"),
+                step,
+            )
+
+            train.report(
+                {
+                    "train_mape": torch.tensor(total_loss_mape).mean().item(),
+                    "train_huber": torch.tensor(total_loss_huber).mean().item(),
+                    "train_lr": torch.tensor(lr).mean().item(),
+                    "mape_den": mape_den,
+                    "huber_den": huber_den,
+                },
+                checkpoint=Checkpoint.from_directory(tempdir),
+            )
+        scheduler2.step(torch.tensor(total_loss_huber).mean())
+
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = graphs.para.to(device).view(-1, 3)
-            graphs = graphs.to(device)
-            optimizer.zero_grad()
-            with torch.autocast(
-                device_type=device, dtype=torch.float16, enabled=use_amp
-            ):
-                # pylint: disable = not-callable
-                pred = model(graphs)
-                loss_mape = mape(pred, target)
-                loss_huber = hloss(pred, target)
-            scaler.scale(loss_mape).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            total_loss_mape += [loss_mape.item()]
-            total_loss_huber += [loss_huber.item()]
-            if config.change_sch:
-                lr += [optimizer.param_groups[0]["lr"]]
-            else:
-                lr += scheduler.get_last_lr()
-            scheduler.step(step)
+            _ = train_step(graphs)
 
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
 
             # Log, if required.
             if step % config.log_every_steps == 0:
-                mape_den, huber_den = test(test="val")
-                with tempfile.TemporaryDirectory() as tempdir:
-                    savemodel(
-                        model,
-                        optimizer,
-                        scaler,
-                        osp.join(tempdir, "checkpoint.pt"),
-                        step,
-                    )
-
-                    train.report(
-                        {
-                            "train_mape": torch.tensor(total_loss_mape).mean().item(),
-                            "train_huber": torch.tensor(total_loss_huber).mean().item(),
-                            "train_lr": torch.tensor(lr).mean().item(),
-                            "mape_den": mape_den,
-                            "huber_den": huber_den,
-                        },
-                        checkpoint=Checkpoint.from_directory(tempdir),
-                    )
-                scheduler2.step(torch.tensor(total_loss_huber).mean())
+                train_logging()
                 total_loss_mape = []
                 total_loss_huber = []
                 lr = []
                 model.train()
 
             step += 1
-            if step >= config.num_train_steps + 1:
+            if step > config.num_train_steps:
                 break
 
 

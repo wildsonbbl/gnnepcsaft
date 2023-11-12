@@ -9,9 +9,13 @@ from pcsaft import (  # pylint: disable = no-name-in-module
     flashTQ,
     pcsaft_den,
 )
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
+from torch_geometric.loader import DataLoader
 from torch_geometric.utils import degree
 
-from ..data.graphdataset import Ramirez, ThermoMLpara
+import wandb
+from data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
+
 from . import models
 
 
@@ -46,7 +50,7 @@ def create_model(
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
-    if config.model == "PNA2":
+    if config.model == "PNA":
         pna_params = models.PnaconvsParams(
             propagation_depth=config.propagation_depth,
             pre_layers=config.pre_layers,
@@ -60,6 +64,25 @@ def create_model(
             num_para=config.num_para,
         )
         return models.PNAPCSAFT(
+            hidden_dim=config.hidden_dim,
+            pna_params=pna_params,
+            mlp_params=mlp_params,
+            dropout=config.dropout_rate,
+        )
+    if config.model == "PNA2":
+        pna_params = models.PnaconvsParams(
+            propagation_depth=config.propagation_depth,
+            pre_layers=config.pre_layers,
+            post_layers=config.post_layers,
+            deg=deg,
+            skip_connections=config.skip_connections,
+            self_loops=config.add_self_loops,
+        )
+        mlp_params = models.RadoutMLPParams(
+            num_mlp_layers=config.num_mlp_layers,
+            num_para=config.num_para,
+        )
+        return models.PNAPCSAFT2(
             hidden_dim=config.hidden_dim,
             pna_params=pna_params,
             mlp_params=mlp_params,
@@ -105,7 +128,8 @@ def savemodel(model, optimizer, scaler, path, step):
 def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = True):
     """
     Calculates mean absolute percentage error
-    of ePC-SAFT predicted density and vapor pressurre relative to experimental data.
+    of ePC-SAFT predicted density and vapor pressurre
+    relative to experimental data.
 
     """
     parameters = np.abs(parameters)
@@ -144,7 +168,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
             except SolutionError:
                 pass
 
-    vp = np.asarray(mape)
+    vp = np.asarray(pred_mape)
     if mean:
         vp = vp.mean()
 
@@ -187,3 +211,97 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     vp = np.asarray(vpl)
 
     return den, vp
+
+
+def create_schedulers(config, optimizer):
+    "Creates lr schedulers."
+
+    class Noop:
+        """Dummy noop scheduler"""
+
+        def step(self, *args, **kwargs):
+            """Scheduler step"""
+
+        def __getattr__(self, _):
+            return self.step
+
+    if config.change_sch:
+        scheduler = Noop()
+        scheduler2 = ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            patience=config.patience,
+            verbose=True,
+            cooldown=config.patience,
+            min_lr=1e-15,
+            eps=1e-15,
+        )
+    else:
+        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
+        scheduler2 = Noop()
+    return scheduler, scheduler2
+
+
+def load_checkpoint(config, workdir, model, optimizer, scaler):
+    "Loads saved model checkpoints."
+    ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
+    initial_step = 1
+    if osp.exists(ckp_path):
+        checkpoint = torch.load(ckp_path)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        if not config.change_opt:
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scaler.load_state_dict(checkpoint["scaler_state_dict"])
+        step = checkpoint["step"]
+        initial_step = int(step) + 1
+        del checkpoint
+    return ckp_path, initial_step
+
+
+def build_datasets_loaders(config, workdir, dataset):
+    "Builds train and test dataset loader."
+    train_dataset = build_train_dataset(workdir, dataset)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+
+    test_loader, para_data = build_test_dataset(workdir, train_dataset)
+    return train_loader, test_loader, para_data
+
+
+def build_test_dataset(workdir, train_dataset):
+    "Builds test dataset."
+    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+
+    para_data = {}
+    for graph in train_dataset:
+        inchi, para = graph.InChI, graph.para.view(-1, 3)
+        para_data[inchi] = para
+    return test_loader, para_data
+
+
+def create_logger(config, dataset):
+    "Creates wandb logging or equivalent."
+    wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=config.to_dict(),
+        group=dataset,
+        tags=[dataset, "train"],
+    )
+
+
+def build_train_dataset(workdir, dataset):
+    "Builds train dataset."
+    if dataset == "ramirez":
+        path = osp.join(workdir, "data/ramirez2022")
+        train_dataset = Ramirez(path)
+    elif dataset == "thermoml":
+        path = osp.join(workdir, "data/thermoml")
+        train_dataset = ThermoMLpara(path)
+    else:
+        raise ValueError(
+            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+        )
+
+    return train_dataset

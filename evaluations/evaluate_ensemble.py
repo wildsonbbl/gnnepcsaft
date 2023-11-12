@@ -12,9 +12,8 @@ from ml_collections import config_flags
 from torch.nn import HuberLoss
 from torchmetrics import MeanAbsolutePercentageError
 
-from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
-from ..epcsaft import epcsaft_cython
-from ..train.utils import calc_deg, create_model
+from epcsaft import epcsaft_cython
+from train.utils import build_datasets_loaders, calc_deg, create_model
 
 device = torch.device("cpu")
 MODEL_DTYPE = torch.float64
@@ -45,7 +44,7 @@ def evaluate(
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
 
-    test_loader, para_data = create_dataset(workdir, dataset)
+    _, test_loader, para_data = build_datasets_loaders(config, workdir, dataset)
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -80,7 +79,7 @@ def evaluate(
         test_loader=test_loader,
         para_data=para_data,
         model_dict=model_dict,
-        test="val",
+        test="test",
     )
     wandb.log(
         {
@@ -199,28 +198,6 @@ def test_vp(test_loader, para_data, model_dict, test="test"):
         torch.tensor(total_loss[0]).nanmean().item(),
         torch.tensor(total_loss[1]).nanmean().item(),
     )
-
-
-def create_dataset(workdir, dataset):
-    "Builds datasets."
-    if dataset == "ramirez":
-        path = osp.join(workdir, "data/ramirez2022")
-        train_loader = Ramirez(path)
-    elif dataset == "thermoml":
-        path = osp.join(workdir, "data/thermoml")
-        train_loader = ThermoMLpara(path)
-    else:
-        raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
-        )
-
-    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-
-    para_data = {}
-    for graph in train_loader:
-        inchi, para = graph.InChI, graph.para.view(-1, 3)
-        para_data[inchi] = para
-    return test_loader, para_data
 
 
 FLAGS = flags.FLAGS

@@ -11,7 +11,8 @@ from absl import app, flags, logging
 from pcsaft import SolutionError, flashTQ, pcsaft_den
 from scipy.optimize import least_squares
 
-from ..data.graphdataset import ThermoMLDataset
+from data.graphdataset import ThermoMLDataset
+
 from .utils import mape
 
 path = osp.join("data", "thermoml")

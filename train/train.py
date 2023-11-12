@@ -1,21 +1,27 @@
 """Module to be used for model training"""
-import os.path as osp
 import time
 
 import ml_collections
 import torch
-import wandb
 from absl import app, flags, logging
 from ml_collections import config_flags
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
-from torch_geometric.loader import DataLoader
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
-from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
-from ..epcsaft import epcsaft_cython
-from .utils import calc_deg, create_model, create_optimizer, savemodel
+import wandb
+from epcsaft import epcsaft_cython
+
+from .utils import (
+    build_datasets_loaders,
+    calc_deg,
+    create_logger,
+    create_model,
+    create_optimizer,
+    create_schedulers,
+    load_checkpoint,
+    savemodel,
+)
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
@@ -135,16 +141,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         target = graphs.para.to(device).view(-1, 3)
         graphs = graphs.to(device)
         optimizer.zero_grad()
-        with torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp):
+        with torch.autocast(
+            device_type=device.type, dtype=torch.float16, enabled=use_amp
+        ):
             pred = model(graphs)
-            # pylint: disable = not-callable
             loss_mape = mape(pred, target)
             loss_huber = hloss(pred, target)
         scaler.scale(loss_mape).backward()
         scaler.step(optimizer)
         scaler.update()
-        total_loss_mape.append([loss_mape.item()])
-        total_loss_huber.append([loss_huber.item()])
+        total_loss_mape.append(loss_mape.item())
+        total_loss_huber.append(loss_huber.item())
         if config.change_sch:
             lr.append(optimizer.param_groups[0]["lr"])
         else:
@@ -202,100 +209,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 break
         if torch.any(torch.isnan(pred)):
             break
-
-
-def create_schedulers(config, optimizer):
-    "Creates lr schedulers."
-
-    class Noop:
-        """Dummy noop scheduler"""
-
-        def step(self, *args, **kwargs):
-            """Scheduler step"""
-
-        def __getattr__(self, _):
-            return self.step
-
-    if config.change_sch:
-        scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(
-            optimizer,
-            mode="min",
-            patience=config.patience,
-            verbose=True,
-            cooldown=config.patience,
-            min_lr=1e-15,
-            eps=1e-15,
-        )
-    else:
-        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-        scheduler2 = Noop()
-    return scheduler, scheduler2
-
-
-def load_checkpoint(config, workdir, model, optimizer, scaler):
-    "Loads saved model checkpoints."
-    ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
-    initial_step = 1
-    if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        if not config.change_opt:
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scaler.load_state_dict(checkpoint["scaler_state_dict"])
-        step = checkpoint["step"]
-        initial_step = int(step) + 1
-        del checkpoint
-    return ckp_path, initial_step
-
-
-def build_datasets_loaders(config, workdir, dataset):
-    "Builds train and test dataset loader."
-    train_dataset = build_train_dataset(workdir, dataset)
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    test_loader, para_data = build_test_dataset(workdir, train_dataset)
-    return train_loader, test_loader, para_data
-
-
-def build_test_dataset(workdir, train_dataset):
-    "Builds test dataset."
-    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-
-    para_data = {}
-    for graph in train_dataset:
-        inchi, para = graph.InChI, graph.para.view(-1, 3)
-        para_data[inchi] = para
-    return test_loader, para_data
-
-
-def create_logger(config, dataset):
-    "Creates wandb logging or equivalent."
-    wandb.login()
-    wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-        group=dataset,
-        tags=[dataset, "train"],
-    )
-
-
-def build_train_dataset(workdir, dataset):
-    "Builds train dataset."
-    if dataset == "ramirez":
-        path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = Ramirez(path)
-    elif dataset == "thermoml":
-        path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path)
-    else:
-        raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
-        )
-
-    return train_dataset
 
 
 FLAGS = flags.FLAGS
