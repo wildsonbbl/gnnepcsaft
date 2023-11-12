@@ -29,7 +29,7 @@ class RadoutMLPParams:
     num_para: int
 
 
-class PNAPCSAFT2(torch.nn.Module):
+class PNAPCSAFT(torch.nn.Module):
     """Graph neural network to predict ePCSAFT parameters"""
 
     def __init__(

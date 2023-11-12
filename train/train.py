@@ -27,51 +27,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
       dataset: dataset name (ramirez or thermoml)
     """
 
-    class Noop:
-        """Dummy noop scheduler"""
-
-        def step(self, *args, **kwargs):
-            """Scheduler step"""
-
-        def __getattr__(self, _):
-            return self.step
-
     deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     use_amp = config.amp
     # Create writer for logs.
-    wandb.login()
-    wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-        group=dataset,
-        tags=[dataset, "train"],
-    )
+    create_logger(config, dataset)
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-
-    if dataset == "ramirez":
-        path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = Ramirez(path)
-    elif dataset == "thermoml":
-        path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path)
-    else:
-        raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
-        )
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-
-    para_data = {}
-    for graph in train_dataset:
-        inchi, para = graph.InChI, graph.para.view(-1, 3)
-        para_data[inchi] = para
+    train_loader, test_loader, para_data = build_datasets_loaders(
+        config, workdir, dataset
+    )
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -93,36 +60,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # Set up checkpointing of the model.
-    if dataset == "ramirez":
-        ckp_path = osp.join(workdir, "train/checkpoints/ra_last_checkpoint.pth")
-    else:
-        ckp_path = osp.join(workdir, "train/checkpoints/tml_last_checkpoint.pth")
-    initial_step = 1
-    if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        if not config.change_opt:
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scaler.load_state_dict(checkpoint["scaler_state_dict"])
-        step = checkpoint["step"]
-        initial_step = int(step) + 1
-        del checkpoint
+    ckp_path, step = load_checkpoint(config, workdir, model, optimizer, scaler)
 
     # Scheduler
-    if config.change_sch:
-        scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(
-            optimizer,
-            mode="min",
-            patience=config.patience,
-            verbose=True,
-            cooldown=config.patience,
-            min_lr=1e-15,
-            eps=1e-15,
-        )
-    else:
-        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-        scheduler2 = Noop()
+    scheduler, scheduler2 = create_schedulers(config, optimizer)
 
     @torch.no_grad()
     def test(test="test"):
@@ -171,37 +112,66 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             torch.tensor(total_huber_vp).nanmean().item(),
         )
 
+    def test_logging():
+        mape_den, huber_den, mape_vp, huber_vp = test(test="val")
+        wandb.log(
+            {
+                "mape_den": mape_den,
+                "huber_den": huber_den,
+                "mape_vp": mape_vp,
+                "huber_vp": huber_vp,
+            },
+            step=step,
+        )
+
     # Begin training loop.
     logging.info("Starting training.")
-    step = initial_step
     total_loss_mape = []
     total_loss_huber = []
     lr = []
     start_time = time.time()
 
+    def train_step(graphs):
+        target = graphs.para.to(device).view(-1, 3)
+        graphs = graphs.to(device)
+        optimizer.zero_grad()
+        with torch.autocast(device_type=device, dtype=torch.float16, enabled=use_amp):
+            pred = model(graphs)
+            # pylint: disable = not-callable
+            loss_mape = mape(pred, target)
+            loss_huber = hloss(pred, target)
+        scaler.scale(loss_mape).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        total_loss_mape.append([loss_mape.item()])
+        total_loss_huber.append([loss_huber.item()])
+        if config.change_sch:
+            lr.append(optimizer.param_groups[0]["lr"])
+        else:
+            lr.append(scheduler.get_last_lr()[0])
+        scheduler.step(step)
+        return pred
+
+    def train_logging():
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        logging.log_first_n(
+            logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
+        )
+        wandb.log(
+            {
+                "train_mape": torch.tensor(total_loss_mape).mean().item(),
+                "train_huber": torch.tensor(total_loss_huber).mean().item(),
+                "train_lr": torch.tensor(lr).mean().item(),
+            },
+            step=step,
+        )
+        scheduler2.step(torch.tensor(total_loss_huber).mean())
+
     model.train()
     while step < config.num_train_steps + 1:
         for graphs in train_loader:
-            target = graphs.para.to(device).view(-1, 3)
-            graphs = graphs.to(device)
-            optimizer.zero_grad()
-            with torch.autocast(
-                device_type=device, dtype=torch.float16, enabled=use_amp
-            ):
-                pred = model(graphs)
-                # pylint: disable = not-callable
-                loss_mape = mape(pred, target)
-                loss_huber = hloss(pred, target)
-            scaler.scale(loss_mape).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            total_loss_mape += [loss_mape.item()]
-            total_loss_huber += [loss_huber.item()]
-            if config.change_sch:
-                lr += [optimizer.param_groups[0]["lr"]]
-            else:
-                lr += scheduler.get_last_lr()
-            scheduler.step(step)
+            pred = train_step(graphs)
 
             # Quick indication that training is happening.
             logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
@@ -209,24 +179,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             # Log, if required.
             is_last_step = step == config.num_train_steps
             if step % config.log_every_steps == 0 or is_last_step:
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                start_time = time.time()
-                logging.log_first_n(
-                    logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
-                )
-                wandb.log(
-                    {
-                        "train_mape": torch.tensor(total_loss_mape).mean().item(),
-                        "train_huber": torch.tensor(total_loss_huber).mean().item(),
-                        "train_lr": torch.tensor(lr).mean().item(),
-                    },
-                    step=step,
-                )
-                scheduler2.step(torch.tensor(total_loss_huber).mean())
+                train_logging()
                 total_loss_mape = []
                 total_loss_huber = []
                 lr = []
+                start_time = time.time()
 
             # Checkpoint model, if required.
             if (step % config.checkpoint_every_steps == 0 or is_last_step) and (
@@ -236,16 +193,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             # Evaluate on validation.
             if step % config.eval_every_steps == 0 or is_last_step:
-                mape_den, huber_den, mape_vp, huber_vp = test(test="val")
-                wandb.log(
-                    {
-                        "mape_den": mape_den,
-                        "huber_den": huber_den,
-                        "mape_vp": mape_vp,
-                        "huber_vp": huber_vp,
-                    },
-                    step=step,
-                )
+                test_logging()
                 model.train()
 
             step += 1
@@ -254,6 +202,100 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
                 break
         if torch.any(torch.isnan(pred)):
             break
+
+
+def create_schedulers(config, optimizer):
+    "Creates lr schedulers."
+
+    class Noop:
+        """Dummy noop scheduler"""
+
+        def step(self, *args, **kwargs):
+            """Scheduler step"""
+
+        def __getattr__(self, _):
+            return self.step
+
+    if config.change_sch:
+        scheduler = Noop()
+        scheduler2 = ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            patience=config.patience,
+            verbose=True,
+            cooldown=config.patience,
+            min_lr=1e-15,
+            eps=1e-15,
+        )
+    else:
+        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
+        scheduler2 = Noop()
+    return scheduler, scheduler2
+
+
+def load_checkpoint(config, workdir, model, optimizer, scaler):
+    "Loads saved model checkpoints."
+    ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
+    initial_step = 1
+    if osp.exists(ckp_path):
+        checkpoint = torch.load(ckp_path)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        if not config.change_opt:
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scaler.load_state_dict(checkpoint["scaler_state_dict"])
+        step = checkpoint["step"]
+        initial_step = int(step) + 1
+        del checkpoint
+    return ckp_path, initial_step
+
+
+def build_datasets_loaders(config, workdir, dataset):
+    "Builds train and test dataset loader."
+    train_dataset = build_train_dataset(workdir, dataset)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+
+    test_loader, para_data = build_test_dataset(workdir, train_dataset)
+    return train_loader, test_loader, para_data
+
+
+def build_test_dataset(workdir, train_dataset):
+    "Builds test dataset."
+    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+
+    para_data = {}
+    for graph in train_dataset:
+        inchi, para = graph.InChI, graph.para.view(-1, 3)
+        para_data[inchi] = para
+    return test_loader, para_data
+
+
+def create_logger(config, dataset):
+    "Creates wandb logging or equivalent."
+    wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=config.to_dict(),
+        group=dataset,
+        tags=[dataset, "train"],
+    )
+
+
+def build_train_dataset(workdir, dataset):
+    "Builds train dataset."
+    if dataset == "ramirez":
+        path = osp.join(workdir, "data/ramirez2022")
+        train_dataset = Ramirez(path)
+    elif dataset == "thermoml":
+        path = osp.join(workdir, "data/thermoml")
+        train_dataset = ThermoMLpara(path)
+    else:
+        raise ValueError(
+            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+        )
+
+    return train_dataset
 
 
 FLAGS = flags.FLAGS

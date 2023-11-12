@@ -18,12 +18,10 @@ from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 from torch.nn import HuberLoss
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
-from torch_geometric.loader import DataLoader
 from torchmetrics import MeanAbsolutePercentageError
 
-from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
 from ..epcsaft import epcsaft_cython
+from .train import build_datasets_loaders, create_schedulers
 from .utils import calc_deg, create_model, create_optimizer, savemodel
 
 os.environ["WANDB_SILENT"] = "true"
@@ -70,15 +68,6 @@ def train_and_evaluate(
       workdir: Working Directory.
     """
 
-    class Noop:
-        """Dummy noop scheduler"""
-
-        def step(self, *args, **kwargs):
-            """Scheduler step"""
-
-        def __getattr__(self, _):
-            return self.step
-
     deg = calc_deg(dataset, workdir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -94,25 +83,9 @@ def train_and_evaluate(
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
-
-    if dataset == "ramirez":
-        path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = Ramirez(path)
-    elif dataset == "thermoml":
-        path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path)
-    else:
-        raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
-        )
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
-
-    para_data = {}
-    for graph in train_dataset:
-        inchi, para = graph.InChI, graph.para.view(-1, 3)
-        para_data[inchi] = para
+    train_loader, test_loader, para_data = build_datasets_loaders(
+        config, workdir, dataset
+    )
 
     # Create and initialize the network.
     logging.info("Initializing network.")
@@ -127,34 +100,10 @@ def train_and_evaluate(
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # Set up checkpointing of the model.
-    initial_step = 1
-    checkpoint = train.get_checkpoint()
-    if checkpoint:
-        with checkpoint.as_directory() as checkpoint_dir:
-            checkpoint = torch.load(osp.join(checkpoint_dir, "checkpoint.pt"))
-            model.load_state_dict(checkpoint["model_state_dict"])
-            if not config.change_opt:
-                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-            scaler.load_state_dict(checkpoint["scaler_state_dict"])
-            step = checkpoint["step"]
-            initial_step = int(step) + 1
-            del checkpoint
+    initial_step = load_checkpoint(config, model, optimizer, scaler)
 
     # Scheduler
-    if config.change_sch:
-        scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(
-            optimizer,
-            mode="min",
-            patience=config.patience,
-            verbose=True,
-            cooldown=config.patience,
-            min_lr=1e-15,
-            eps=1e-15,
-        )
-    else:
-        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-        scheduler2 = Noop()
+    scheduler, scheduler2 = create_schedulers(config, optimizer)
 
     @torch.no_grad()
     def test(test="test"):
@@ -252,6 +201,23 @@ def train_and_evaluate(
             step += 1
             if step >= config.num_train_steps + 1:
                 break
+
+
+def load_checkpoint(config, model, optimizer, scaler):
+    "Loads saved model checkpoints."
+    initial_step = 1
+    checkpoint = train.get_checkpoint()
+    if checkpoint:
+        with checkpoint.as_directory() as checkpoint_dir:
+            checkpoint = torch.load(osp.join(checkpoint_dir, "checkpoint.pt"))
+            model.load_state_dict(checkpoint["model_state_dict"])
+            if not config.change_opt:
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            scaler.load_state_dict(checkpoint["scaler_state_dict"])
+            step = checkpoint["step"]
+            initial_step = int(step) + 1
+            del checkpoint
+    return initial_step
 
 
 FLAGS = flags.FLAGS

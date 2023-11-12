@@ -59,7 +59,7 @@ def create_model(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
         )
-        return models.PNAPCSAFT2(
+        return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             pna_params=pna_params,
             mlp_params=mlp_params,
