@@ -62,31 +62,12 @@ def create_model(
         mlp_params = models.RadoutMLPParams(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
+            dropout=config.dropout_rate,
         )
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             pna_params=pna_params,
             mlp_params=mlp_params,
-            dropout=config.dropout_rate,
-        )
-    if config.model == "PNA2":
-        pna_params = models.PnaconvsParams(
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            deg=deg,
-            skip_connections=config.skip_connections,
-            self_loops=config.add_self_loops,
-        )
-        mlp_params = models.RadoutMLPParams(
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-        )
-        return models.PNAPCSAFT2(
-            hidden_dim=config.hidden_dim,
-            pna_params=pna_params,
-            mlp_params=mlp_params,
-            dropout=config.dropout_rate,
         )
     raise ValueError(f"Unsupported model: {config.model}.")
 

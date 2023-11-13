@@ -27,6 +27,7 @@ class RadoutMLPParams:
     "Parameters for the MLP layers."
     num_mlp_layers: int
     num_para: int
+    dropout: float = 0.0
 
 
 class PNAPCSAFT(torch.nn.Module):
@@ -37,7 +38,6 @@ class PNAPCSAFT(torch.nn.Module):
         hidden_dim: int,
         pna_params: PnaconvsParams,
         mlp_params: RadoutMLPParams,
-        dropout: float = 0.0,
     ):
         super().__init__()
 
@@ -71,18 +71,20 @@ class PNAPCSAFT(torch.nn.Module):
             self.mlp.append(Linear(hidden_dim, hidden_dim))
             self.mlp.append(BatchNorm1d(hidden_dim))
             self.mlp.append(ReLU())
-            self.mlp.append(Dropout(p=dropout))
+            self.mlp.append(Dropout(p=mlp_params.dropout))
 
-        self.ouput = Sequential(
-            Linear(hidden_dim, hidden_dim // 2),
-            BatchNorm1d(hidden_dim // 2),
-            ReLU(),
-            Dropout(p=dropout),
-            Linear(hidden_dim // 2, hidden_dim // 4),
-            BatchNorm1d(hidden_dim // 4),
-            ReLU(),
-            Dropout(p=dropout),
-            Linear(hidden_dim // 4, mlp_params.num_para),
+        self.mlp.append(
+            Sequential(
+                Linear(hidden_dim, hidden_dim // 2),
+                BatchNorm1d(hidden_dim // 2),
+                ReLU(),
+                Dropout(p=mlp_params.dropout),
+                Linear(hidden_dim // 2, hidden_dim // 4),
+                BatchNorm1d(hidden_dim // 4),
+                ReLU(),
+                Dropout(p=mlp_params.dropout),
+                Linear(hidden_dim // 4, mlp_params.num_para),
+            )
         )
 
     def forward(
@@ -115,5 +117,4 @@ class PNAPCSAFT(torch.nn.Module):
 
         x = global_add_pool(x, batch)
         x = self.mlp(x)
-        x = self.ouput(x)
         return x
