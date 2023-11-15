@@ -59,7 +59,7 @@ def create_model(
             skip_connections=config.skip_connections,
             self_loops=config.add_self_loops,
         )
-        mlp_params = models.RadoutMLPParams(
+        mlp_params = models.ReadoutMLPParams(
             num_mlp_layers=config.num_mlp_layers,
             num_para=config.num_para,
             dropout=config.dropout_rate,
