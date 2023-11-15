@@ -5,12 +5,11 @@ import os.path as osp
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from rdkit import Chem
-from rdkit.Chem import Draw
-
 from configs.default import get_config
 from data.graph import from_InChI, from_smiles
 from data.graphdataset import Ramirez, ThermoMLDataset
+from rdkit import Chem
+from rdkit.Chem import Draw
 from train.models import PNAPCSAFT
 from train.utils import calc_deg, mape, rhovp_data
 
@@ -20,20 +19,18 @@ config = get_config()
 device = torch.device("cpu")
 # pylint: disable = invalid-name
 model_dtype = torch.float64
-deg_model2 = calc_deg("thermoml", "./")
-deg_model1 = calc_deg("ramirez", "./")
-
-ra_loader = Ramirez("./data/ramirez2022")
+real_path = osp.dirname(__file__)
+ra_loader = Ramirez(osp.join(real_path, "../data/ramirez2022"))
 ra_para = {}
 for graph in ra_loader:
     InChI, para = graph.InChI, graph.para.view(-1, 3).round(decimals=2)
     ra_para[InChI] = para.tolist()[0]
-tml_loader = ThermoMLDataset("./data/thermoml")
+tml_loader = ThermoMLDataset(osp.join(real_path, "../data/thermoml"))
 tml_para = {}
 for graph in tml_loader:
     tml_para[graph.InChI] = graph
-path = osp.join("data", "thermoml")
-testloader = ThermoMLDataset(path)
+
+testloader = ThermoMLDataset(osp.join(real_path, "../data/thermoml"))
 device = torch.device("cpu")
 
 
