@@ -24,15 +24,7 @@ def from_InChI(
 
     RDLogger.DisableLog("rdApp.*")
 
-    mol = Chem.MolFromInchi(InChI)
-
-    # pylint: disable = no-member
-    if with_hydrogen:
-        mol = Chem.AddHs(mol)
-    if kekulize:
-        Chem.Kekulize(mol)
-
-    smiles = Chem.MolToSmiles(mol)
+    smiles = inchitosmiles(InChI, with_hydrogen, kekulize)
     graph = smiles2graph(smiles)
 
     x = graph["node_feat"]
@@ -46,6 +38,34 @@ def from_InChI(
         InChI=InChI,
         smiles=smiles,
     )
+
+
+def inchitosmiles(InChI, with_hydrogen, kekulize):
+    "Transform InChI to a SMILES."
+    mol = Chem.MolFromInchi(InChI)
+
+    # pylint: disable = no-member
+    if with_hydrogen:
+        mol = Chem.AddHs(mol)
+    if kekulize:
+        Chem.Kekulize(mol)
+
+    smiles = Chem.MolToSmiles(mol)
+    return smiles
+
+
+def smilestoinchi(smiles, with_hydrogen=False, kekulize=False):
+    "Transform SMILES to InChI."
+    mol = Chem.MolFromSmiles(smiles)
+
+    # pylint: disable = no-member
+    if with_hydrogen:
+        mol = Chem.AddHs(mol)
+    if kekulize:
+        Chem.Kekulize(mol)
+
+    inchi = Chem.MolToInchi(mol)
+    return inchi
 
 
 def from_smiles(smiles: str) -> Data:
