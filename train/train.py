@@ -3,25 +3,37 @@ import time
 
 import ml_collections
 import torch
+import wandb
 from absl import app, flags, logging
 from ml_collections import config_flags
 from torch.nn import HuberLoss
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
-import wandb
 from epcsaft import epcsaft_cython
 
 from .utils import (
     build_datasets_loaders,
     calc_deg,
-    create_logger,
     create_model,
     create_optimizer,
     create_schedulers,
     load_checkpoint,
     savemodel,
 )
+
+
+def create_logger(config, dataset):
+    "Creates wandb logging or equivalent."
+    wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=config.to_dict(),
+        group=dataset,
+        tags=[dataset, "train"],
+    )
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):

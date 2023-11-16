@@ -13,7 +13,6 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlat
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import degree
 
-import wandb
 from data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
 
 from . import models
@@ -257,19 +256,6 @@ def build_test_dataset(workdir, train_dataset):
         inchi, para = graph.InChI, graph.para.view(-1, 3)
         para_data[inchi] = para
     return test_loader, para_data
-
-
-def create_logger(config, dataset):
-    "Creates wandb logging or equivalent."
-    wandb.login()
-    wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-        group=dataset,
-        tags=[dataset, "train"],
-    )
 
 
 def build_train_dataset(workdir, dataset):
