@@ -5,13 +5,13 @@ import os.path as osp
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from rdkit import Chem
+
 from configs.default import get_config
 from data.graph import from_InChI, from_smiles
 from data.graphdataset import Ramirez, ThermoMLDataset
-from rdkit import Chem
-from rdkit.Chem import Draw
 from train.models import PNAPCSAFT
-from train.utils import calc_deg, mape, rhovp_data
+from train.utils import mape, rhovp_data
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -47,6 +47,7 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
     parameters"""
+    from rdkit.Chem import Draw
 
     if inchi in tml_para:
         gh = tml_para[inchi]
