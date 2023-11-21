@@ -1,4 +1,4 @@
-## GNN-ePC-SAFT
+## GNNePCSAFT
 
 Project focused in the use of graph neural networks to estimate the pure-component parameters of the Equation of State ePC-SAFT.
 
@@ -7,6 +7,8 @@ The motivation of this work is to be able to use a robust Equation of State, ePC
 Currently, the model takes in account only the hard-chain and dispersive terms of ePC-SAFT. Future work on associative, polar and ionic terms are being studied.
 
 Code is being developed mainly in Pytorch (PYG) and secondarily in JAX (JRAPH).
+
+You can find the model deployed at [GNNePCSAFT app](https://gnnepcsaft.online/).
 
 Use cases of this package are demonstrated in Jupyter Notebooks:
 
