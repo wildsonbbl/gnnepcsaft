@@ -65,6 +65,8 @@ class CustomStopper(tune.Stopper):
         return False
 
 
+# pylint: disable=R0914
+# pylint: disable=R0915
 def train_and_evaluate(
     config_tuner: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
 ):

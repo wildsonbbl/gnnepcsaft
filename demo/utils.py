@@ -47,6 +47,7 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
     parameters"""
+    # pylint: disable=C0415
     from rdkit.Chem import Draw
 
     if inchi in tml_para:

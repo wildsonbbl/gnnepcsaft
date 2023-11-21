@@ -4,13 +4,13 @@ import pickle
 
 import numpy as np
 import torch
+import wandb
 from absl import app, flags, logging
 
 # pylint: disable = no-name-in-module
 from pcsaft import SolutionError, flashTQ, pcsaft_den
 from scipy.optimize import least_squares
 
-import wandb
 from data.graphdataset import ThermoMLDataset
 
 from .utils import mape

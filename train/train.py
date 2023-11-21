@@ -36,6 +36,8 @@ def create_logger(config, dataset):
     )
 
 
+# pylint: disable=R0914
+# pylint: disable=R0915
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
     """Execute model training and evaluation loop.
 

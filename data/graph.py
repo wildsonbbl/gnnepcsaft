@@ -56,9 +56,9 @@ def inchitosmiles(InChI, with_hydrogen, kekulize):
 
 def smilestoinchi(smiles, with_hydrogen=False, kekulize=False):
     "Transform SMILES to InChI."
+    # pylint: disable = no-member
     mol = Chem.MolFromSmiles(smiles)
 
-    # pylint: disable = no-member
     if with_hydrogen:
         mol = Chem.AddHs(mol)
     if kekulize:
