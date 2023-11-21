@@ -4,6 +4,7 @@ import os.path as osp
 
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 from rdkit import Chem
 
@@ -12,6 +13,8 @@ from ..data.graph import from_InChI, from_smiles
 from ..data.graphdataset import Ramirez, ThermoMLDataset
 from ..train.models import PNAPCSAFT
 from ..train.utils import mape, rhovp_data
+
+sns.set_theme(style="ticks")
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -49,6 +52,9 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
     parameters"""
     # pylint: disable=C0415
     from rdkit.Chem import Draw
+
+    if not osp.exists("images"):
+        os.mkdir("images")
 
     if inchi in tml_para:
         gh = tml_para[inchi]
@@ -97,7 +103,7 @@ def pltline(x, y):
 
 def pltscatter(x, y):
     "Scatter plot."
-    return plt.scatter(x, y, marker="x", c="black", s=10)
+    return plt.scatter(x, y, marker="x", s=10)
 
 
 def plterr(x, y, m):
@@ -125,6 +131,7 @@ def pltcustom(ra, scale="linear", ylabel="", n=2):
     plt.legend(legend, loc=(1.01, 0.75))
     plt.grid(False)
     plt.yscale(scale)
+    sns.despine(trim=True)
 
 
 def predparams(inchi, models):
@@ -269,12 +276,15 @@ def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
     for i in range(1, n + 1):
         legend += [f"Modelo {i}"]
     plt.legend(legend, loc=(1.01, 0.75))
+    sns.despine(trim=True)
 
 
 def plotparams(smiles: list[str], models: list[PNAPCSAFT], xlabel: str = "CnHn+2"):
     """
     For plotting te behaviour between parameters and chain length.
     """
+    if not osp.exists("images"):
+        os.mkdir("images")
 
     list_array_params = predparams2(smiles, models)
 
