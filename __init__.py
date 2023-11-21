@@ -1,3 +1,4 @@
+# pylint: disable=invalid-name
 """
 Package for the GNN-ePC-SAFT project.
 
