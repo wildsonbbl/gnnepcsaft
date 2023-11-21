@@ -24,7 +24,7 @@ jobs:
         unzip -q eigen-master.zip
         unzip -q v1.4.1.zip
         cp -rf eigen-master/. PC-SAFT-1.4.1/externals/eigen
-        python -m pip install ./PC-SAFT-1.4.1
+        python -m pip install ./PC-SAFT-1.4.1 --no-build-isolation
         rm -rf PC-SAFT* eigen-master* v1.4.1.zip
     - name: Analysing the code with pylint
       run: |
