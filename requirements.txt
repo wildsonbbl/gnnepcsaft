@@ -2,6 +2,7 @@ absl_py
 Cython
 jax
 matplotlib
+seaborn
 ml_collections
 numpy
 ogb
