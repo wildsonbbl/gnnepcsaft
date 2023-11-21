@@ -12,8 +12,8 @@ from ml_collections import config_flags
 from torch.nn import HuberLoss
 from torchmetrics import MeanAbsolutePercentageError
 
-from epcsaft import epcsaft_cython
-from train.utils import build_datasets_loaders, calc_deg, create_model
+from ..epcsaft import epcsaft_cython
+from ..train.utils import build_datasets_loaders, calc_deg, create_model
 
 device = torch.device("cpu")
 MODEL_DTYPE = torch.float64

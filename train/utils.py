@@ -13,8 +13,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlat
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import degree
 
-from data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
-
+from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
 from . import models
 
 

@@ -10,8 +10,7 @@ from torch.nn import HuberLoss
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
-from epcsaft import epcsaft_cython
-
+from ..epcsaft import epcsaft_cython
 from .utils import (
     build_datasets_loaders,
     calc_deg,
