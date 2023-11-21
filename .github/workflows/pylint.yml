@@ -18,13 +18,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pylint
-        pip install -r requirements.txt
+        python -m pip install -r requirements.txt
         curl -O -L https://gitlab.com/libeigen/eigen/-/archive/master/eigen-master.zip
         curl -O -L https://github.com/zmeri/PC-SAFT/archive/refs/tags/v1.4.1.zip
-        unzip eigen-master.zip
-        unzip v1.4.1.zip
-        cp -r eigen-master/. PC-SAFT-1.4.1/external/eigen
-        pip install PC-SAFT-1.4.1
+        unzip -q eigen-master.zip
+        unzip -q v1.4.1.zip
+        cp -rf eigen-master/. PC-SAFT-1.4.1/externals/eigen
+        pip install ./PC-SAFT-1.4.1
         rm -rf PC-SAFT* eigen-master* v1.4.1.zip
     - name: Analysing the code with pylint
       run: |
