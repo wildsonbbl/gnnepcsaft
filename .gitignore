@@ -1,5 +1,5 @@
 .pytest_cache
-__pycache__
+**__pycache__
 test*
 *Zone.Identifier
 wandb
@@ -9,11 +9,11 @@ pcsaft
 .dockerignore
 ray*
 images
-*.csv
-*/checkpoints
+**/checkpoints
 .kaggle
 kaggle*
-toy*
-gnnepcsaft-app
+**/toy.py
 **build
 **egg-info
+/dist/
+*.pyc
