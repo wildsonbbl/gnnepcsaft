@@ -12,4 +12,8 @@ setup(
     packages=find_packages(),
     requires=["torch", "torch_geometric"],
     zip_safe=False,
+    include_package_data=True,
+    package_data={
+        "gnnepcsaft": ["data/*/*/*.pt", "data/*/*/*.pkl", "data/*/*/*.parquet"],
+    },
 )
