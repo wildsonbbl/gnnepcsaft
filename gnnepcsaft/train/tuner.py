@@ -269,7 +269,7 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
-    logging.info("Calling tuner")
+    logging.info("Calling tuner!")
 
     ptrain = partial(
         train_and_evaluate,
