@@ -219,7 +219,7 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
-    logging.info("Calling evaluate")
+    logging.info("Calling evaluate!")
 
     evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset, FLAGS.modelname)
 

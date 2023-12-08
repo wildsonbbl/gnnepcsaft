@@ -3,12 +3,13 @@ import time
 
 import ml_collections
 import torch
-import wandb
 from absl import app, flags, logging
 from ml_collections import config_flags
 from torch.nn import HuberLoss
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
+
+import wandb
 
 from ..epcsaft import epcsaft_cython
 from .utils import (
@@ -241,7 +242,7 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
 
-    logging.info("Calling train and evaluate")
+    logging.info("Calling train and evaluate!")
 
     train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
 

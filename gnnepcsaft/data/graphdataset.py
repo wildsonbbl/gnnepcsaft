@@ -192,7 +192,7 @@ class Ramirez(InMemoryDataset):
 
     """
     Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
-    `Ramírez-Vélez et al. (2022, doi: 10.1002/aic.17722)` experimental data.
+    `Ramírez-Vélez et al. (2022, doi: 10.1002/aic.17722)`.
 
     PARAMETERS
     ----------
