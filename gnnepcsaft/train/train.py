@@ -1,4 +1,5 @@
 """Module to be used for model training"""
+import os.path as osp
 import time
 
 import ml_collections
@@ -36,6 +37,21 @@ def create_logger(config, dataset):
     )
 
 
+def create_artifacts():
+    "Creates wandb artifacts"
+    file_path = osp.dirname(__file__)
+    ramirez_path = file_path + "/../" + "data/ramirez2022"
+    ramirez_art = wandb.Artifact(name="ramirez", type="dataset")
+    ramirez_art.add_dir(local_path=ramirez_path, name="ramirez2022")
+    thermoml_path = file_path + "/../" + "data/thermoml"
+    thermoml_art = wandb.Artifact(name="thermoml", type="dataset")
+    thermoml_art.add_dir(local_path=thermoml_path, name="thermoml")
+    model_path = file_path + "/checkpoints/last_checkpoint.pth"
+    model_art = wandb.Artifact(name="model", type="model")
+    model_art.add_file(local_path=model_path)
+    return ramirez_art, thermoml_art, model_art
+
+
 # pylint: disable=R0914
 # pylint: disable=R0915
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
@@ -53,6 +69,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     use_amp = config.amp
     # Create writer for logs.
     create_logger(config, dataset)
+    ramirez_art, thermoml_art, model_art = create_artifacts()
+    wandb.log_artifact(ramirez_art)
+    wandb.log_artifact(thermoml_art)
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -64,6 +83,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     logging.info("Initializing network.")
     model = create_model(config, deg)
     model.to(device)
+    wandb.watch(model)
     # pylint: disable=no-member
     pcsaft_den = epcsaft_cython.DenFromTensor.apply
     pcsaft_vp = epcsaft_cython.VpFromTensor.apply
@@ -219,6 +239,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             step += 1
             if step > config.num_train_steps or (torch.any(torch.isnan(pred))):
+                wandb.log_artifact(model_art)
                 wandb.finish()
                 break
         if torch.any(torch.isnan(pred)):

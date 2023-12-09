@@ -1,0 +1,29 @@
+name: Training run on kaggle
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  train-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup kaggle secrets
+        run: |
+          mkdir /.kaggle
+          echo "{secrets.KAGGLE_SECRETS}" > /.kaggle/kaggle.json 
+      - name: Checking kaggle kernels
+        run: 
+          kaggle kernels list -m
+      - name: Pulling kernel and metadata
+        run: 
+          kaggle kernels pull wildsonbblima/training -p . -m
+      - name: Push kernel for running
+        run:
+          ls # kaggle kernels push -p .
+      - name: Check kernel status
+        run: 
+          kaggle kernels status wildsonbblima/training
