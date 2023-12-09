@@ -34,7 +34,7 @@ jobs:
           cp ./tmp/kernel-metadata.json ./kernel-metadata.json
       - name: Push kernel for running
         run:
-          ls # kaggle kernels push -p .
+          kaggle kernels push -p .
       - name: Check kernel status
         run: 
           kaggle kernels status ${{ secrets.KAGGLE_USERNAME }}/training
