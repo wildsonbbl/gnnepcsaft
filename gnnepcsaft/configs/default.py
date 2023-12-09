@@ -16,7 +16,7 @@ def get_config():
 
     config.batch_size = 128
     config.pad_size = 128
-    config.num_train_steps = 19_000_000
+    config.num_train_steps = 17_500_001
     config.warmup_steps = 100
     config.log_every_steps = 5_000
     config.eval_every_steps = 25_000

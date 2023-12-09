@@ -30,7 +30,8 @@ jobs:
           kaggle kernels list -m
       - name: Pulling kernel and metadata
         run: 
-          kaggle kernels pull wildsonbblima/training -p . -m
+          kaggle kernels pull wildsonbblima/training -p ./tmp -m
+          cp ./tmp/kernel-metadata.json ./kernel-metadata.json
       - name: Push kernel for running
         run:
           ls # kaggle kernels push -p .
