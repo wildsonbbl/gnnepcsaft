@@ -55,8 +55,6 @@ def create_artifacts(workdir):
         model_art.add_file(local_path=model_path)
         wandb.use_artifact(model_art)
 
-    return ramirez_art, thermoml_art, model_art
-
 
 # pylint: disable=R0914
 # pylint: disable=R0915
@@ -75,7 +73,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     use_amp = config.amp
     # Create writer for logs.
     create_logger(config, dataset)
-    _, _, model_art = create_artifacts(workdir)
+    create_artifacts(workdir)
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -243,6 +241,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             step += 1
             if step > config.num_train_steps or (torch.any(torch.isnan(pred))):
+                model_art = wandb.Artifact(name="model", type="model")
                 model_art.add_file(local_path=ckp_path)
                 wandb.log_artifact(model_art)
                 wandb.finish()
