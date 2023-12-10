@@ -38,21 +38,22 @@ def create_logger(config, dataset):
     )
 
 
-def create_artifacts():
+def create_artifacts(workdir):
     "Creates wandb artifacts"
-    file_path = osp.dirname(__file__)
-    ramirez_path = file_path + "/../" + "data/ramirez2022"
+    file_path = workdir
+    ramirez_path = file_path + "/data/ramirez2022"
     ramirez_art = wandb.Artifact(name="ramirez", type="dataset")
     ramirez_art.add_dir(local_path=ramirez_path, name="ramirez2022")
     wandb.use_artifact(ramirez_art)
-    thermoml_path = file_path + "/../" + "data/thermoml"
+    thermoml_path = file_path + "/data/thermoml"
     thermoml_art = wandb.Artifact(name="thermoml", type="dataset")
     thermoml_art.add_dir(local_path=thermoml_path, name="thermoml")
     wandb.use_artifact(thermoml_art)
-    model_path = file_path + "/checkpoints/last_checkpoint.pth"
+    model_path = file_path + "/train/checkpoints/last_checkpoint.pth"
     model_art = wandb.Artifact(name="model", type="model")
-    model_art.add_file(local_path=model_path)
-    wandb.use_artifact(model_art)
+    if osp.exists(model_path):
+        model_art.add_file(local_path=model_path)
+        wandb.use_artifact(model_art)
 
     return ramirez_art, thermoml_art, model_art
 
@@ -74,9 +75,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     use_amp = config.amp
     # Create writer for logs.
     create_logger(config, dataset)
-    ramirez_art, thermoml_art, model_art = create_artifacts()
-    wandb.log_artifact(ramirez_art)
-    wandb.log_artifact(thermoml_art)
+    _, _, model_art = create_artifacts(workdir)
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -244,6 +243,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             step += 1
             if step > config.num_train_steps or (torch.any(torch.isnan(pred))):
+                model_art.add_file(local_path=ckp_path)
                 wandb.log_artifact(model_art)
                 wandb.finish()
                 break
