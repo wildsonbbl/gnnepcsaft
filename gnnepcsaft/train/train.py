@@ -83,7 +83,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     logging.info("Initializing network.")
     model = create_model(config, deg)
     model.to(device)
-    wandb.watch(model)
+    wandb.watch(model, log="all", log_graph=True)
     # pylint: disable=no-member
     pcsaft_den = epcsaft_cython.DenFromTensor.apply
     pcsaft_vp = epcsaft_cython.VpFromTensor.apply
