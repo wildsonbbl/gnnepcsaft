@@ -34,6 +34,7 @@ def create_logger(config, dataset):
         config=config.to_dict(),
         group=dataset,
         tags=[dataset, "train"],
+        job_type="train",
     )
 
 
@@ -43,12 +44,16 @@ def create_artifacts():
     ramirez_path = file_path + "/../" + "data/ramirez2022"
     ramirez_art = wandb.Artifact(name="ramirez", type="dataset")
     ramirez_art.add_dir(local_path=ramirez_path, name="ramirez2022")
+    wandb.use_artifact(ramirez_art)
     thermoml_path = file_path + "/../" + "data/thermoml"
     thermoml_art = wandb.Artifact(name="thermoml", type="dataset")
     thermoml_art.add_dir(local_path=thermoml_path, name="thermoml")
+    wandb.use_artifact(thermoml_art)
     model_path = file_path + "/checkpoints/last_checkpoint.pth"
     model_art = wandb.Artifact(name="model", type="model")
     model_art.add_file(local_path=model_path)
+    wandb.use_artifact(model_art)
+
     return ramirez_art, thermoml_art, model_art
 
 

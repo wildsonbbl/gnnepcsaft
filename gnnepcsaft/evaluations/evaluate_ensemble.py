@@ -68,6 +68,7 @@ def evaluate(
         name=modelname,
         group=dataset,
         tags=[dataset, "eval"],
+        job_type="eval",
     )
     # Evaluate on validation or test, if required.
     val = test_den(
