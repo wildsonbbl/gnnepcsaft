@@ -4,12 +4,13 @@ import pickle
 
 import numpy as np
 import torch
-import wandb
 from absl import app, flags, logging
 
 # pylint: disable = no-name-in-module
 from pcsaft import SolutionError, flashTQ, pcsaft_den
 from scipy.optimize import least_squares
+
+import wandb
 
 from ..data.graphdataset import ThermoMLDataset
 from .utils import mape
@@ -67,6 +68,7 @@ def parametrisation(weight_decay):
         project="gnn-pc-saft",
         config={"weight decay": weight_decay},
         tags=["para"],
+        job_type="parametrisation",
     )
 
     x_scale = np.array([10.0, 10.0, 1000.0])
