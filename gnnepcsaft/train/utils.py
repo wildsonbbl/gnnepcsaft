@@ -221,12 +221,12 @@ def create_schedulers(config, optimizer):
     return scheduler, scheduler2
 
 
-def load_checkpoint(config, workdir, model, optimizer, scaler):
+def load_checkpoint(config, workdir, model, optimizer, scaler, device):
     "Loads saved model checkpoints."
     ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
     initial_step = 1
     if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path)
+        checkpoint = torch.load(ckp_path, map_location=device)
         model.load_state_dict(checkpoint["model_state_dict"])
         if not config.change_opt:
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
