@@ -291,7 +291,7 @@ def input_artifacts(workdir: str, dataset: str, model="last_checkpoint"):
     model_path = workdir + f"/train/checkpoints/{model}.pth"
     model_art = wandb.Artifact(name="model", type="model")
     if osp.exists(model_path):
-        model_art.add_file(local_path=model_path)
+        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
         wandb.use_artifact(model_art)
 
 
@@ -303,5 +303,5 @@ def output_artifacts(workdir: str):
     model_path = workdir + "/train/checkpoints/last_checkpoint.pth"
     model_art = wandb.Artifact(name="model", type="model")
     if osp.exists(model_path):
-        model_art.add_file(local_path=model_path)
+        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
         wandb.log_artifact(model_art)

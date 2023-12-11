@@ -46,6 +46,16 @@ def evaluate(
     logging.info(f"evaluating models {modelnames}")
     # Create writer for logs.
     wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=config.to_dict(),
+        name=modelname,
+        group=dataset,
+        tags=[dataset, "eval"],
+        job_type="eval",
+    )
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -66,16 +76,6 @@ def evaluate(
         model_dict[name].load_state_dict(checkpoint["model_state_dict"])
         model_dict[name].eval()
 
-    wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-        name=modelname,
-        group=dataset,
-        tags=[dataset, "eval"],
-        job_type="eval",
-    )
     # Evaluate on validation or test, if required.
     val = test_den(
         test_loader=test_loader,
