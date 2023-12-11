@@ -1,0 +1,21 @@
+{
+  "id": "kaggle_user_to_replace/training",
+  "title": "training",
+  "code_file": "training.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "kaggle_user_to_replace/gnnepcsaft",
+    "kaggle_user_to_replace/pcsaftpkg"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}
