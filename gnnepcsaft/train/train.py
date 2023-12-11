@@ -1,5 +1,4 @@
 """Module to be used for model training"""
-import os.path as osp
 import time
 
 import ml_collections
@@ -19,7 +18,9 @@ from .utils import (
     create_model,
     create_optimizer,
     create_schedulers,
+    input_artifacts,
     load_checkpoint,
+    output_artifacts,
     savemodel,
 )
 
@@ -36,24 +37,6 @@ def create_logger(config, dataset):
         tags=[dataset, "train"],
         job_type="train",
     )
-
-
-def create_artifacts(workdir):
-    "Creates wandb artifacts"
-    file_path = workdir
-    ramirez_path = file_path + "/data/ramirez2022"
-    ramirez_art = wandb.Artifact(name="ramirez", type="dataset")
-    ramirez_art.add_dir(local_path=ramirez_path, name="ramirez2022")
-    wandb.use_artifact(ramirez_art)
-    thermoml_path = file_path + "/data/thermoml"
-    thermoml_art = wandb.Artifact(name="thermoml", type="dataset")
-    thermoml_art.add_dir(local_path=thermoml_path, name="thermoml")
-    wandb.use_artifact(thermoml_art)
-    model_path = file_path + "/train/checkpoints/last_checkpoint.pth"
-    model_art = wandb.Artifact(name="model", type="model")
-    if osp.exists(model_path):
-        model_art.add_file(local_path=model_path)
-        wandb.use_artifact(model_art)
 
 
 # pylint: disable=R0914
@@ -73,7 +56,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     use_amp = config.amp
     # Create writer for logs.
     create_logger(config, dataset)
-    create_artifacts(workdir)
+    input_artifacts(workdir, dataset)
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -178,7 +161,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
         graphs = graphs.to(device)
         optimizer.zero_grad()
         with torch.autocast(
-            device_type=device.type, dtype=torch.float16, enabled=use_amp
+            device_type=device.type,
+            dtype=torch.float16 if device.type == "cuda" else torch.bfloat16,
+            enabled=use_amp,
         ):
             pred = model(graphs)
             loss_mape = mape(pred, target)
@@ -241,9 +226,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
 
             step += 1
             if step > config.num_train_steps or (torch.any(torch.isnan(pred))):
-                model_art = wandb.Artifact(name="model", type="model")
-                model_art.add_file(local_path=ckp_path)
-                wandb.log_artifact(model_art)
+                output_artifacts(workdir)
                 wandb.finish()
                 break
         if torch.any(torch.isnan(pred)):

@@ -14,7 +14,12 @@ from torchmetrics import MeanAbsolutePercentageError
 import wandb
 
 from ..epcsaft import epcsaft_cython
-from ..train.utils import build_datasets_loaders, calc_deg, create_model
+from ..train.utils import (
+    build_datasets_loaders,
+    calc_deg,
+    create_model,
+    input_artifacts,
+)
 
 device = torch.device("cpu")
 MODEL_DTYPE = torch.float64
@@ -41,6 +46,16 @@ def evaluate(
     logging.info(f"evaluating models {modelnames}")
     # Create writer for logs.
     wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=config.to_dict(),
+        name=modelname,
+        group=dataset,
+        tags=[dataset, "eval"],
+        job_type="eval",
+    )
 
     # Get datasets, organized by split.
     logging.info("Obtaining datasets.")
@@ -55,21 +70,12 @@ def evaluate(
 
     # Set up checkpointing of the model.
     for name in model_dict:
+        input_artifacts(workdir, dataset, name)
         ckp_path = osp.join(workdir, "train/checkpoints", f"{name}.pth")
         checkpoint = torch.load(ckp_path, map_location=torch.device("cpu"))
         model_dict[name].load_state_dict(checkpoint["model_state_dict"])
         model_dict[name].eval()
 
-    wandb.init(
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=config.to_dict(),
-        name=modelname,
-        group=dataset,
-        tags=[dataset, "eval"],
-        job_type="eval",
-    )
     # Evaluate on validation or test, if required.
     val = test_den(
         test_loader=test_loader,

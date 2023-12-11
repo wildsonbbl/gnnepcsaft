@@ -271,3 +271,37 @@ def build_train_dataset(workdir, dataset):
         )
 
     return train_dataset
+
+
+def input_artifacts(workdir: str, dataset: str, model="last_checkpoint"):
+    "Creates input wandb artifacts"
+    # pylint: disable=C0415
+    import wandb
+
+    if dataset == "ramirez":
+        ramirez_path = workdir + "/data/ramirez2022"
+        ramirez_art = wandb.Artifact(name="ramirez", type="dataset")
+        ramirez_art.add_dir(local_path=ramirez_path, name="ramirez2022")
+        wandb.use_artifact(ramirez_art)
+    if dataset == "thermoml":
+        thermoml_path = workdir + "/data/thermoml"
+        thermoml_art = wandb.Artifact(name="thermoml", type="dataset")
+        thermoml_art.add_dir(local_path=thermoml_path, name="thermoml")
+        wandb.use_artifact(thermoml_art)
+    model_path = workdir + f"/train/checkpoints/{model}.pth"
+    model_art = wandb.Artifact(name="model", type="model")
+    if osp.exists(model_path):
+        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
+        wandb.use_artifact(model_art)
+
+
+def output_artifacts(workdir: str):
+    "Creates output wandb artifacts"
+    # pylint: disable=C0415
+    import wandb
+
+    model_path = workdir + "/train/checkpoints/last_checkpoint.pth"
+    model_art = wandb.Artifact(name="model", type="model")
+    if osp.exists(model_path):
+        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
+        wandb.log_artifact(model_art)
