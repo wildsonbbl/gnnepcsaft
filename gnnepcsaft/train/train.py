@@ -85,7 +85,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     # Set up checkpointing of the model.
-    ckp_path, step = load_checkpoint(config, workdir, model, optimizer, scaler)
+    ckp_path, step = load_checkpoint(config, workdir, model, optimizer, scaler, device)
 
     # Scheduler
     scheduler, scheduler2 = create_schedulers(config, optimizer)
