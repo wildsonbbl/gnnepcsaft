@@ -14,7 +14,12 @@ from torchmetrics import MeanAbsolutePercentageError
 import wandb
 
 from ..epcsaft import epcsaft_cython
-from ..train.utils import build_datasets_loaders, calc_deg, create_model
+from ..train.utils import (
+    build_datasets_loaders,
+    calc_deg,
+    create_model,
+    input_artifacts,
+)
 
 device = torch.device("cpu")
 MODEL_DTYPE = torch.float64
@@ -55,6 +60,7 @@ def evaluate(
 
     # Set up checkpointing of the model.
     for name in model_dict:
+        input_artifacts(workdir, dataset, name)
         ckp_path = osp.join(workdir, "train/checkpoints", f"{name}.pth")
         checkpoint = torch.load(ckp_path, map_location=torch.device("cpu"))
         model_dict[name].load_state_dict(checkpoint["model_state_dict"])
