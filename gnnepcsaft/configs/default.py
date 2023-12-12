@@ -16,17 +16,17 @@ def get_config():
 
     config.batch_size = 1024
     config.pad_size = 128
-    config.num_train_steps = 22_700_000
+    config.num_train_steps = 22_650_000
     config.warmup_steps = 100
-    config.log_every_steps = 5_000
-    config.eval_every_steps = 25_000
-    config.checkpoint_every_steps = 25_000
-    config.amp = False
+    config.log_every_steps = 500
+    config.eval_every_steps = 3000
+    config.checkpoint_every_steps = 3000
+    config.amp = True
     config.momentum = 0.9
     config.patience = 5
     config.weight_decay = 1e-3
     config.dataset = "ramirez"
-    config.checkpoint = "model5-22_6e6.pth"
+    config.checkpoint = "model5-22_625e6.pth"
 
     # GNN hyperparameters.
     config.model_name = "model5"
