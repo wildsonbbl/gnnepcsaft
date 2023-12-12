@@ -3,7 +3,7 @@ name: Training run on kaggle
 on:
   push:
     branches:
-      - main
+      - experiments
 env:
   KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
   KAGGLE_KEY: ${{ secrets.KAGGLE_SECRET }}
