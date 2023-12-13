@@ -21,7 +21,7 @@ def get_config():
     config.log_every_steps = 500
     config.eval_every_steps = 3000
     config.checkpoint_every_steps = 3000
-    config.amp = True
+    config.amp = False
     config.momentum = 0.9
     config.patience = 5
     config.weight_decay = 1e-3
