@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - experiments
+    paths:
+      - "**default.py"
 env:
   KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
   KAGGLE_KEY: ${{ secrets.KAGGLE_SECRET }}
