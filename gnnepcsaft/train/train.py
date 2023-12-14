@@ -265,7 +265,7 @@ def main(argv):
         tml_dataset, para_data = build_test_dataset(FLAGS.workdir, train_dataset)
         test_idx = []
         val_idx = []
-        for idx, graph in tml_dataset:
+        for idx, graph in enumerate(tml_dataset):
             if graph.InChI in para_data:
                 val_idx.append(idx)
             else:
