@@ -228,7 +228,7 @@ class PNApcsaftL(L.LightningModule):
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if self.config.optimizer == "adam":
             return torch.optim.AdamW(
-                self.parameters,
+                self.parameters(),
                 lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay,
                 amsgrad=True,
@@ -236,7 +236,7 @@ class PNApcsaftL(L.LightningModule):
             )
         if self.config.optimizer == "sgd":
             return torch.optim.SGD(
-                self.parameters,
+                self.parameters(),
                 lr=self.config.learning_rate,
                 momentum=self.config.momentum,
                 weight_decay=self.config.weight_decay,
@@ -244,20 +244,21 @@ class PNApcsaftL(L.LightningModule):
             )
         raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
 
-    def training_step(self, graphs) -> STEP_OUTPUT:
+    # pylint: disable = W0613
+    def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         target = graphs.para.view(-1, 3)
-        pred = self.forward(graphs)
+        pred = self(graphs)
         loss_mape = mape(pred, target)
-        self.log("train_mape", loss_mape)
+        self.log("train_mape", loss_mape, on_step=False, on_epoch=True, prog_bar=True)
         return loss_mape
 
-    def validation_step(self, graphs) -> STEP_OUTPUT:
+    def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         mape_den = None
         huber_den = None
         mape_vp = None
         huber_vp = None
 
-        pred_para = self.forward(graphs).squeeze().to(torch.float64)
+        pred_para = self(graphs).squeeze().to(torch.float64)
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
             pred = pcsaft_den(pred_para, datapoints)
@@ -286,5 +287,8 @@ class PNApcsaftL(L.LightningModule):
                 "mape_vp": mape_vp,
                 "huber_vp": huber_vp,
             },
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
         )
         return (mape_den, huber_den, mape_vp, huber_vp)
