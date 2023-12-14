@@ -67,7 +67,7 @@ def create_model(
             pna_params=pna_params,
             mlp_params=mlp_params,
         )
-    elif config.model == "PNAL":
+    if config.model == "PNAL":
         pna_params = models.PnaconvsParams(
             propagation_depth=config.propagation_depth,
             pre_layers=config.pre_layers,

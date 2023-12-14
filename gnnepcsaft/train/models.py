@@ -7,28 +7,20 @@ import torch
 import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
-from torch.nn import (
-    BatchNorm1d,
-    Dropout,
-    HuberLoss,
-    Linear,
-    ModuleList,
-    ReLU,
-    Sequential,
-)
+from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
 from torch_geometric.data import Data
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
-from torchmetrics import MeanAbsolutePercentageError
+from torchmetrics.functional import mean_absolute_percentage_error as mape
 
 from ..epcsaft import epcsaft_cython
-from .utils import create_optimizer
 
 # from typing import Any
 
 
 pcsaft_den = epcsaft_cython.DenFromTensor.apply
 pcsaft_vp = epcsaft_cython.VpFromTensor.apply
+hloss = F.huber_loss
 
 
 @dataclasses.dataclass
@@ -199,8 +191,6 @@ class PNApcsaftL(L.LightningModule):
                 Linear(hidden_dim // 4, mlp_params.num_para),
             )
         )
-        self.mape = MeanAbsolutePercentageError()
-        self.hloss = HuberLoss("mean")
 
     # pylint: disable=W0221
     def forward(
@@ -236,13 +226,28 @@ class PNApcsaftL(L.LightningModule):
         return x
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
-        optimizer = create_optimizer(self.config, self.parameters)
-        return optimizer
+        if self.config.optimizer == "adam":
+            return torch.optim.AdamW(
+                self.parameters,
+                lr=self.config.learning_rate,
+                weight_decay=self.config.weight_decay,
+                amsgrad=True,
+                eps=1e-5,
+            )
+        if self.config.optimizer == "sgd":
+            return torch.optim.SGD(
+                self.parameters,
+                lr=self.config.learning_rate,
+                momentum=self.config.momentum,
+                weight_decay=self.config.weight_decay,
+                nesterov=True,
+            )
+        raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
 
     def training_step(self, graphs) -> STEP_OUTPUT:
         target = graphs.para.view(-1, 3)
         pred = self.forward(graphs)
-        loss_mape = self.mape(pred, target)
+        loss_mape = mape(pred, target)
         self.log("train_mape", loss_mape)
         return loss_mape
 
@@ -258,8 +263,8 @@ class PNApcsaftL(L.LightningModule):
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1]
             # pylint: disable = not-callable
-            loss_mape = self.mape(pred, target)
-            loss_huber = self.hloss(pred, target)
+            loss_mape = mape(pred, target)
+            loss_huber = hloss(pred, target, reduction="mean")
             mape_den = loss_mape.item()
             huber_den = loss_huber.item()
 
@@ -269,8 +274,8 @@ class PNApcsaftL(L.LightningModule):
             target = datapoints[:, -1]
             result_filter = ~torch.isnan(pred)
             # pylint: disable = not-callable
-            loss_mape = self.mape(pred[result_filter], target[result_filter])
-            loss_huber = self.hloss(pred[result_filter], target[result_filter])
+            loss_mape = mape(pred[result_filter], target[result_filter])
+            loss_huber = hloss(pred[result_filter], target[result_filter])
             if loss_mape.item() < 0.9:
                 mape_vp = loss_mape.item()
                 huber_vp = loss_huber.item()
