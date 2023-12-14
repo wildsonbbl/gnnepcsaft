@@ -1,6 +1,7 @@
 """Module to be used for model training"""
 import time
 
+import lightning as L
 import ml_collections
 import torch
 from absl import app, flags, logging
@@ -237,6 +238,8 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
+flags.DEFINE_bool("lightning", False, "Training run with pytorch lighting.")
+flags.DEFINE_string("device", "gpu", "Device to run training.")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -252,7 +255,17 @@ def main(argv):
 
     logging.info("Calling train and evaluate!")
 
-    train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+    if FLAGS.lightning:
+        train_loader, test_loader, _ = build_datasets_loaders(
+            FLAGS.config, FLAGS.workdir, FLAGS.dataset
+        )
+        deg = calc_deg(FLAGS.dataset, FLAGS.workdir)
+        model = create_model(FLAGS.config, deg)
+        trainer = L.Trainer()
+        trainer.fit(model, train_loader, test_loader)
+
+    else:
+        train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
 
 
 if __name__ == "__main__":

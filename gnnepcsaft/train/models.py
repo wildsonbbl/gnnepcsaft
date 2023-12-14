@@ -1,13 +1,34 @@
 """Module with all available Graph Neural Network models developed and used in the project"""
 import dataclasses
 
+import lightning as L
+import ml_collections
 import torch
 import torch.nn.functional as F
+from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
-from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
+from torch.nn import (
+    BatchNorm1d,
+    Dropout,
+    HuberLoss,
+    Linear,
+    ModuleList,
+    ReLU,
+    Sequential,
+)
 from torch_geometric.data import Data
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
+from torchmetrics import MeanAbsolutePercentageError
+
+from ..epcsaft import epcsaft_cython
+from .utils import create_optimizer
+
+# from typing import Any
+
+
+pcsaft_den = epcsaft_cython.DenFromTensor.apply
+pcsaft_vp = epcsaft_cython.VpFromTensor.apply
 
 
 @dataclasses.dataclass
@@ -120,19 +141,21 @@ class PNAPCSAFT(torch.nn.Module):
         return x
 
 
-class PNAPCSAFTDUMMY(torch.nn.Module):
-    """Graph neural network to predict ePCSAFT parameters"""
+class PNApcsaftL(L.LightningModule):
+    """Graph neural network to predict ePCSAFT parameters with pytorch lightning."""
 
     def __init__(
         self,
-        hidden_dim: int,
         pna_params: PnaconvsParams,
         mlp_params: ReadoutMLPParams,
+        config: ml_collections.ConfigDict,
     ):
         super().__init__()
 
         aggregators = ["mean", "min", "max", "std"]
         scalers = ["identity", "amplification", "attenuation"]
+        self.config = config
+        hidden_dim = config.hidden_dim
         self.pna_params = pna_params
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
@@ -163,16 +186,23 @@ class PNAPCSAFTDUMMY(torch.nn.Module):
             self.mlp.append(ReLU())
             self.mlp.append(Dropout(p=mlp_params.dropout))
 
-        self.ouput = Sequential(
-            Linear(hidden_dim, hidden_dim // 2),
-            BatchNorm1d(hidden_dim // 2),
-            ReLU(),
-            Linear(hidden_dim // 2, hidden_dim // 4),
-            BatchNorm1d(hidden_dim // 4),
-            ReLU(),
-            Linear(hidden_dim // 4, mlp_params.num_para),
+        self.mlp.append(
+            Sequential(
+                Linear(hidden_dim, hidden_dim // 2),
+                BatchNorm1d(hidden_dim // 2),
+                ReLU(),
+                Dropout(p=mlp_params.dropout),
+                Linear(hidden_dim // 2, hidden_dim // 4),
+                BatchNorm1d(hidden_dim // 4),
+                ReLU(),
+                Dropout(p=mlp_params.dropout),
+                Linear(hidden_dim // 4, mlp_params.num_para),
+            )
         )
+        self.mape = MeanAbsolutePercentageError()
+        self.hloss = HuberLoss("mean")
 
+    # pylint: disable=W0221
     def forward(
         self,
         data: Data,
@@ -203,5 +233,53 @@ class PNAPCSAFTDUMMY(torch.nn.Module):
 
         x = global_add_pool(x, batch)
         x = self.mlp(x)
-        x = self.ouput(x)
         return x
+
+    def configure_optimizers(self) -> OptimizerLRScheduler:
+        optimizer = create_optimizer(self.config, self.parameters)
+        return optimizer
+
+    def training_step(self, graphs) -> STEP_OUTPUT:
+        target = graphs.para.view(-1, 3)
+        pred = self.forward(graphs)
+        loss_mape = self.mape(pred, target)
+        self.log("train_mape", loss_mape)
+        return loss_mape
+
+    def validation_step(self, graphs) -> STEP_OUTPUT:
+        mape_den = None
+        huber_den = None
+        mape_vp = None
+        huber_vp = None
+
+        pred_para = self.forward(graphs).squeeze().to(torch.float64)
+        datapoints = graphs.rho.to(torch.float64).view(-1, 5)
+        if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+            pred = pcsaft_den(pred_para, datapoints)
+            target = datapoints[:, -1]
+            # pylint: disable = not-callable
+            loss_mape = self.mape(pred, target)
+            loss_huber = self.hloss(pred, target)
+            mape_den = loss_mape.item()
+            huber_den = loss_huber.item()
+
+        datapoints = graphs.vp.to(torch.float64).view(-1, 5)
+        if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+            pred = pcsaft_vp(pred_para, datapoints)
+            target = datapoints[:, -1]
+            result_filter = ~torch.isnan(pred)
+            # pylint: disable = not-callable
+            loss_mape = self.mape(pred[result_filter], target[result_filter])
+            loss_huber = self.hloss(pred[result_filter], target[result_filter])
+            if loss_mape.item() < 0.9:
+                mape_vp = loss_mape.item()
+                huber_vp = loss_huber.item()
+        self.log_dict(
+            {
+                "mape_den": mape_den,
+                "huber_den": huber_den,
+                "mape_vp": mape_vp,
+                "huber_vp": huber_vp,
+            },
+        )
+        return (mape_den, huber_den, mape_vp, huber_vp)

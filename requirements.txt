@@ -14,3 +14,4 @@ torch
 torch_geometric
 torchmetrics
 wandb
+lightning
