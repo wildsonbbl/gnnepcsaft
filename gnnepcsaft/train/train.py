@@ -9,7 +9,7 @@ from absl import app, flags, logging
 from lightning.pytorch.callbacks import ModelCheckpoint
 from ml_collections import config_flags
 from torch.nn import HuberLoss
-from torch_geometric.data.lightning import LightningDataset
+from torch_geometric.loader import DataLoader
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
@@ -259,6 +259,7 @@ def main(argv):
         raise app.UsageError("Too many command-line arguments.")
 
     logging.info("Calling train and evaluate!")
+    torch.set_float32_matmul_precision("medium")
 
     if FLAGS.lightning:
         train_dataset = build_train_dataset(FLAGS.workdir, FLAGS.dataset)
@@ -272,25 +273,39 @@ def main(argv):
                 test_idx.append(idx)
         test_dataset = tml_dataset[test_idx]
         val_dataset = tml_dataset[val_idx]
-        datamodule = LightningDataset(
-            train_dataset=train_dataset,
-            val_dataset=val_dataset,
-            test_dataset=test_dataset,
+        train_loader = DataLoader(
+            train_dataset,
             batch_size=FLAGS.config.batch_size,
+            shuffle=True,
+            num_workers=15,
         )
         checkpoint = ModelCheckpoint(
             dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
             monitor="mape_den",
             save_top_k=1,
+            every_n_epochs=int(
+                FLAGS.config.checkpoint_every_steps
+                // (len(train_dataset) / FLAGS.config.batch_size)
+            ),
+            verbose=True,
         )
         deg = calc_deg(FLAGS.dataset, FLAGS.workdir)
         model = create_model(FLAGS.config, deg)
         trainer = L.Trainer(
-            max_epochs=FLAGS.config.num_train_steps // len(train_dataset),
+            max_steps=FLAGS.config.num_train_steps,
             log_every_n_steps=FLAGS.config.log_every_steps,
+            check_val_every_n_epoch=int(
+                FLAGS.config.eval_every_steps
+                // (len(train_dataset) / FLAGS.config.batch_size)
+            ),
             callbacks=[checkpoint],
         )
-        trainer.fit(model, datamodule)
+        trainer.fit(
+            model,
+            train_loader,
+            val_dataset,
+        )
+        trainer.test(model, test_dataset)
 
     else:
         train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)

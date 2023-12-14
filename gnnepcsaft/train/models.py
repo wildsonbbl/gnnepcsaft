@@ -249,30 +249,42 @@ class PNApcsaftL(L.LightningModule):
         target = graphs.para.view(-1, 3)
         pred = self(graphs)
         loss_mape = mape(pred, target)
-        self.log("train_mape", loss_mape, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "train_mape",
+            loss_mape,
+            batch_size=target.shape[0],
+        )
         return loss_mape
 
     def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        mape_den = None
-        huber_den = None
-        mape_vp = None
-        huber_vp = None
+        mape_den = 0.0
+        huber_den = 0.0
+        mape_vp = 0.0
+        huber_vp = 0.0
+        metrics_dict = {}
 
         pred_para = self(graphs).squeeze().to(torch.float64)
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
             pred = pcsaft_den(pred_para, datapoints)
-            target = datapoints[:, -1]
+            target = datapoints[:, -1].cpu()
             # pylint: disable = not-callable
             loss_mape = mape(pred, target)
             loss_huber = hloss(pred, target, reduction="mean")
             mape_den = loss_mape.item()
             huber_den = loss_huber.item()
+            # self.log("mape_den", mape_den)
+        metrics_dict.update(
+            {
+                "mape_den": mape_den,
+                "huber_den": huber_den,
+            }
+        )
 
         datapoints = graphs.vp.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
             pred = pcsaft_vp(pred_para, datapoints)
-            target = datapoints[:, -1]
+            target = datapoints[:, -1].cpu()
             result_filter = ~torch.isnan(pred)
             # pylint: disable = not-callable
             loss_mape = mape(pred[result_filter], target[result_filter])
@@ -280,15 +292,14 @@ class PNApcsaftL(L.LightningModule):
             if loss_mape.item() < 0.9:
                 mape_vp = loss_mape.item()
                 huber_vp = loss_huber.item()
-        self.log_dict(
+        metrics_dict.update(
             {
-                "mape_den": mape_den,
-                "huber_den": huber_den,
                 "mape_vp": mape_vp,
                 "huber_vp": huber_vp,
-            },
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
+            }
         )
+        self.log_dict(metrics_dict, batch_size=1)
         return (mape_den, huber_den, mape_vp, huber_vp)
+
+    def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
+        return self.validation_step(graphs, batch_idx)
