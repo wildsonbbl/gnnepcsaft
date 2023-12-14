@@ -143,53 +143,10 @@ class PNApcsaftL(L.LightningModule):
         config: ml_collections.ConfigDict,
     ):
         super().__init__()
-
-        aggregators = ["mean", "min", "max", "std"]
-        scalers = ["identity", "amplification", "attenuation"]
         self.config = config
-        hidden_dim = config.hidden_dim
-        self.pna_params = pna_params
-        self.convs = ModuleList()
-        self.batch_norms = ModuleList()
 
-        self.node_embed = AtomEncoder(hidden_dim)
-        self.edge_embed = BondEncoder(hidden_dim)
-
-        for _ in range(pna_params.propagation_depth):
-            conv = PNAConv(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=pna_params.deg,
-                edge_dim=hidden_dim,
-                towers=2,
-                pre_layers=pna_params.pre_layers,
-                post_layers=pna_params.post_layers,
-                divide_input=False,
-            )
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(hidden_dim))
-
-        self.mlp = Sequential()
-        for _ in range(mlp_params.num_mlp_layers):
-            self.mlp.append(Linear(hidden_dim, hidden_dim))
-            self.mlp.append(BatchNorm1d(hidden_dim))
-            self.mlp.append(ReLU())
-            self.mlp.append(Dropout(p=mlp_params.dropout))
-
-        self.mlp.append(
-            Sequential(
-                Linear(hidden_dim, hidden_dim // 2),
-                BatchNorm1d(hidden_dim // 2),
-                ReLU(),
-                Dropout(p=mlp_params.dropout),
-                Linear(hidden_dim // 2, hidden_dim // 4),
-                BatchNorm1d(hidden_dim // 4),
-                ReLU(),
-                Dropout(p=mlp_params.dropout),
-                Linear(hidden_dim // 4, mlp_params.num_para),
-            )
+        self.model = PNAPCSAFT(
+            config.hidden_dim, pna_params=pna_params, mlp_params=mlp_params
         )
 
     # pylint: disable=W0221
@@ -198,32 +155,7 @@ class PNApcsaftL(L.LightningModule):
         data: Data,
     ):
         """Forward pass of the model"""
-
-        x, edge_index, edge_attr, batch = (
-            data.x,
-            data.edge_index,
-            data.edge_attr,
-            data.batch,
-        )
-
-        if self.pna_params.self_loops:
-            edge_index, edge_attr = add_self_loops(
-                edge_index, edge_attr, 0, num_nodes=x.size(0)
-            )
-        x = self.node_embed(x)
-        edge_attr = self.edge_embed(edge_attr)
-
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
-            if self.pna_params.skip_connections:
-                x_previous = x
-            x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
-            x = F.dropout(x, p=self.pna_params.dropout, training=self.training)
-            if self.pna_params.skip_connections:
-                x = x + x_previous
-
-        x = global_add_pool(x, batch)
-        x = self.mlp(x)
-        return x
+        return self.model(data)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if self.config.optimizer == "adam":

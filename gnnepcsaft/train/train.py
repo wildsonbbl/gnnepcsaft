@@ -304,6 +304,11 @@ def main(argv):
             model,
             train_loader,
             val_dataset,
+            # ckpt_path=osp.join(
+            #     FLAGS.workdir, f"train/checkpoints/{FLAGS.config.checkpoint}"
+            # )
+            # if FLAGS.config.checkpoint
+            # else None,
         )
         trainer.test(model, test_dataset)
 
