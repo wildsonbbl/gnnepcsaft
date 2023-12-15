@@ -1,4 +1,5 @@
 """Module to be used for model training"""
+import os
 import os.path as osp
 import time
 
@@ -277,10 +278,12 @@ def main(argv):
             train_dataset,
             batch_size=FLAGS.config.batch_size,
             shuffle=True,
-            num_workers=15,
+            num_workers=os.cpu_count(),
         )
         checkpoint = ModelCheckpoint(
             dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
+            filename=FLAGS.config.model_name + "-{step}",
+            save_last=True,
             monitor="mape_den",
             save_top_k=1,
             every_n_epochs=int(
