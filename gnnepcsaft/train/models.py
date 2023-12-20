@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.data import Data
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
@@ -159,7 +160,7 @@ class PNApcsaftL(L.LightningModule):
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if self.config.optimizer == "adam":
-            return torch.optim.AdamW(
+            opt = torch.optim.AdamW(
                 self.parameters(),
                 lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay,
@@ -167,14 +168,23 @@ class PNApcsaftL(L.LightningModule):
                 eps=1e-5,
             )
         if self.config.optimizer == "sgd":
-            return torch.optim.SGD(
+            opt = torch.optim.SGD(
                 self.parameters(),
                 lr=self.config.learning_rate,
                 momentum=self.config.momentum,
                 weight_decay=self.config.weight_decay,
                 nesterov=True,
             )
-        raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
+        else:
+            raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
+        return {
+            "optimizer": opt,
+            "lr_scheduler": {
+                "scheduler": CosineAnnealingWarmRestarts(opt, self.config.warmup_steps),
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
@@ -206,12 +216,12 @@ class PNApcsaftL(L.LightningModule):
             mape_den = loss_mape.item()
             huber_den = loss_huber.item()
             # self.log("mape_den", mape_den)
-        metrics_dict.update(
-            {
-                "mape_den": mape_den,
-                "huber_den": huber_den,
-            }
-        )
+            metrics_dict.update(
+                {
+                    "mape_den": mape_den,
+                    "huber_den": huber_den,
+                }
+            )
 
         datapoints = graphs.vp.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
@@ -224,12 +234,12 @@ class PNApcsaftL(L.LightningModule):
             if loss_mape.item() < 0.9:
                 mape_vp = loss_mape.item()
                 huber_vp = loss_huber.item()
-        metrics_dict.update(
-            {
-                "mape_vp": mape_vp,
-                "huber_vp": huber_vp,
-            }
-        )
+            metrics_dict.update(
+                {
+                    "mape_vp": mape_vp,
+                    "huber_vp": huber_vp,
+                }
+            )
         self.log_dict(metrics_dict, batch_size=1)
         return (mape_den, huber_den, mape_vp, huber_vp)
 

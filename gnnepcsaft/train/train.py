@@ -6,15 +6,15 @@ import time
 import lightning as L
 import ml_collections
 import torch
+import wandb
 from absl import app, flags, logging
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 from ml_collections import config_flags
 from torch.nn import HuberLoss
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
-
-import wandb
 
 from ..epcsaft import epcsaft_cython
 from .utils import (
@@ -280,6 +280,7 @@ def main(argv):
             shuffle=True,
             num_workers=os.cpu_count(),
         )
+
         checkpoint = ModelCheckpoint(
             dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
             filename=FLAGS.config.model_name + "-{step}",
@@ -292,8 +293,13 @@ def main(argv):
             ),
             verbose=True,
         )
+
+        create_logger(FLAGS.config, FLAGS.dataset)
+        wandb_logger = WandbLogger()
+
         deg = calc_deg(FLAGS.dataset, FLAGS.workdir)
         model = create_model(FLAGS.config, deg)
+
         trainer = L.Trainer(
             max_steps=FLAGS.config.num_train_steps,
             log_every_n_steps=FLAGS.config.log_every_steps,
@@ -302,17 +308,20 @@ def main(argv):
                 // (len(train_dataset) / FLAGS.config.batch_size)
             ),
             callbacks=[checkpoint],
+            logger=wandb_logger,
         )
+
         trainer.fit(
             model,
             train_loader,
             val_dataset,
-            # ckpt_path=osp.join(
-            #     FLAGS.workdir, f"train/checkpoints/{FLAGS.config.checkpoint}"
-            # )
-            # if FLAGS.config.checkpoint
-            # else None,
+            ckpt_path=osp.join(
+                FLAGS.workdir, f"train/checkpoints/{FLAGS.config.checkpoint}"
+            )
+            if FLAGS.config.checkpoint
+            else None,
         )
+
         trainer.test(model, test_dataset)
 
     else:
