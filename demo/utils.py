@@ -1,18 +1,23 @@
-import os.path as osp, os
+import os
+import os.path as osp
 
+# pylint: disable=all
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-import torch, numpy as np
-from data.graphdataset import ThermoMLDataset, ramirez, ThermoMLpara
-from data.graph import from_smiles, from_InChI
-from train.models import PNAPCSAFT
-from train.model_deg import calc_deg
-from train.parametrisation import rhovp_data
 import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import torch
+from configs.default import get_config
+from data.graph import from_InChI, from_smiles
+from data.graphdataset import ThermoMLDataset, ThermoMLpara, ramirez
 from rdkit import Chem
 from rdkit.Chem import Draw
-from configs.default import get_config
+from train.model_deg import calc_deg
+from train.models import PNAPCSAFT
 from train.parametrisation import MAPE, rhovp_data
 
+sns.set_theme(style="ticks")
+from itertools import cycle
 
 config = get_config()
 device = torch.device("cpu")
@@ -44,11 +49,18 @@ def loadckp(ckp_path: str, model: PNAPCSAFT):
 
 
 def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
-    def pltline(x, y):
-        return plt.plot(x, y, linewidth=0.5)
+    plotletter = ["A", "B"]
 
-    def pltscatter(x, y):
-        return plt.scatter(x, y, marker="x", c="black", s=10)
+    markers = ["x", "v", "^", "o", "*", "+", "D", "H", "s", "<", ">", "8", "p"]
+    marker_cycle = cycle(markers)
+
+    def pltline(x, y, fig=1):
+        plt.figure(fig)
+        return plt.plot(x, y, marker=next(marker_cycle), linewidth=0.5, ms=2.5)
+
+    def pltscatter(x, y, fig=1):
+        plt.figure(fig)
+        return plt.scatter(x, y, s=15, marker=next(marker_cycle), c="black")
 
     def plterr(x, y, m):
         tb = 0
@@ -58,8 +70,9 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
                 tb = ta
                 plt.text(x[i], y[i], f"{mape} %", ha="center", va="center", fontsize=8)
 
-    def pltcustom(ra, scale="linear", ylabel="", n=2):
-        plt.xlabel("T (K)")
+    def pltcustom(ra, scale="linear", ylabel="", n=2, xlabel="T (K)", fig=1):
+        plt.figure(fig)
+        plt.xlabel(xlabel)
         plt.ylabel(ylabel)
         plt.title("")
         legend = ["Pontos experimentais"]
@@ -70,6 +83,8 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
         plt.legend(legend, loc=(1.01, 0.75))
         plt.grid(False)
         plt.yscale(scale)
+        sns.despine(trim=True)
+        plt.figtext(1.01, 0.5, plotletter[fig - 1], fontsize=44)
 
     with torch.no_grad():
         for graphs in testloader:
@@ -103,26 +118,44 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
         idx = np.argsort(vp[:, 0], 0)
         x = vp[idx, 0]
         y = vp[idx, -1] / 100000
-        pltscatter(x, y)
+        pltscatter(x, y, 1)
+        plt.figure(2)
+        plt.plot(y, y)
 
         for pred_vp in pred_vp_list:
-            y = pred_vp[idx] / 100000
-            pltline(x, y)
-            mvp_model = 100 * np.abs(vp[idx, -1] - pred_vp[idx]) / vp[idx, -1]
+            pred_y = pred_vp[idx] / 100000
+            pltline(x, pred_y, 1)
+            pltscatter(y, pred_y, 2)
+            # mvp_model = 100 * np.abs(vp[idx, -1] - pred_vp[idx]) / vp[idx, -1]
             # plterr(x, y, mvp_model)
 
         if inchi in ra_para:
             ra_vp = ra_vp
-            y = ra_vp[idx] / 100000
-            pltline(x, y)
-            mvp_ra = 100 * np.abs(vp[idx, -1] - ra_vp[idx]) / vp[idx, -1]
+            ra_y = ra_vp[idx] / 100000
+            pltline(x, ra_y, 1)
+            pltscatter(y, ra_y, 2)
+
+            # mvp_ra = 100 * np.abs(vp[idx, -1] - ra_vp[idx]) / vp[idx, -1]
             # plterr(x, y * 1.01, mvp_ra)
 
         # Customize the plot appearance
         pltcustom(inchi in ra_para, "log", "Pressão de vapor (bar)", len(models))
+        pltcustom(
+            inchi in ra_para,
+            "linear",
+            "Pressão de vapor predita (bar)",
+            len(models),
+            "Pressão de vapor experimental (bar)",
+            2,
+        )
 
         # Save the plot as a high-quality image file
         path = osp.join("images", "vp_" + molecule_name + ".png")
+        plt.figure(1)
+        plt.savefig(path, dpi=300, format="png", bbox_inches="tight", transparent=True)
+
+        path = osp.join("images", "normal_vp_" + molecule_name + ".png")
+        plt.figure(2)
         plt.savefig(path, dpi=300, format="png", bbox_inches="tight", transparent=True)
         plt.show()
 
@@ -134,31 +167,51 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
             x = rho[idx, 0]
             y = rho[idx, -1]
             pltscatter(x, y)
+            plt.figure(2)
+            plt.plot(y, y)
 
             for pred_den in pred_den_list:
                 pred_den = pred_den[idx_p]
-                y = pred_den[idx]
-                pltline(x, y)
-                mden_model = 100 * np.abs(rho[idx, -1] - pred_den[idx]) / rho[idx, -1]
+                pred_y = pred_den[idx]
+                pltline(x, pred_y)
+                pltscatter(y, pred_y, 2)
+                # mden_model = 100 * np.abs(rho[idx, -1] - pred_den[idx]) / rho[idx, -1]
                 # plterr(x, y, mden_model)
 
             if inchi in ra_para:
                 ra_den = ra_den[idx_p]
-                y = ra_den[idx]
-                pltline(x, y)
-                mden_ra = 100 * np.abs(rho[idx, -1] - ra_den[idx]) / rho[idx, -1]
+                ra_y = ra_den[idx]
+                pltline(x, ra_y)
+                pltscatter(y, ra_y, 2)
+                # mden_ra = 100 * np.abs(rho[idx, -1] - ra_den[idx]) / rho[idx, -1]
                 # plterr(x, y, mden_ra)
 
             # Customize the plot appearance
             pltcustom(inchi in ra_para, "linear", "Densidade (mol / m³)", len(models))
+            pltcustom(
+                inchi in ra_para,
+                "linear",
+                "Densidade predita (mol / m³)",
+                len(models),
+                "Densidade experimental (mol / m³)",
+                2,
+            )
+
             path = osp.join("images", "den_" + molecule_name + ".png")
+            plt.figure(1)
+            plt.savefig(
+                path, dpi=300, format="png", bbox_inches="tight", transparent=True
+            )
+
+            path = osp.join("images", "normal_den_" + molecule_name + ".png")
+            plt.figure(2)
             plt.savefig(
                 path, dpi=300, format="png", bbox_inches="tight", transparent=True
             )
             plt.show()
+    plt.figure(3)
     mol = Chem.MolFromInchi(inchi)
     img = Draw.MolToImage(mol, size=(600, 600))
-    img.show()
     path = osp.join("images", "mol_" + molecule_name + ".png")
     img.save(path, dpi=(300, 300), format="png", bitmap_format="png")
 

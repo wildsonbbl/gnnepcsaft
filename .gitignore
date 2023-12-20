@@ -11,3 +11,10 @@ pcsaft
 ray
 images
 *.csv
+**.dvc
+**checkpoints
+**egg-info
+**.env
+**build
+**.github
+**toy.py
