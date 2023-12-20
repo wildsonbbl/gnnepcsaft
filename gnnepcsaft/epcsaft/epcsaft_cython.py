@@ -64,8 +64,8 @@ class DenFromTensor(torch.autograd.Function):
     # pylint: disable = arguments-differ
     @staticmethod
     def forward(ctx, para: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        parameters = para.numpy()
-        state = state.numpy()
+        parameters = para.cpu().numpy()
+        state = state.cpu().numpy()
 
         ctx.parameters = parameters
         ctx.state = state
@@ -93,8 +93,8 @@ class VpFromTensor(torch.autograd.Function):
     # pylint: disable = arguments-differ
     @staticmethod
     def forward(ctx, para: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
-        parameters = para.numpy()
-        state = state.numpy()
+        parameters = para.cpu().numpy()
+        state = state.cpu().numpy()
 
         ctx.parameters = parameters
         ctx.state = state

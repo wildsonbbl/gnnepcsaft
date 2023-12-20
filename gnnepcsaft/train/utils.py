@@ -67,6 +67,26 @@ def create_model(
             pna_params=pna_params,
             mlp_params=mlp_params,
         )
+    if config.model == "PNAL":
+        pna_params = models.PnaconvsParams(
+            propagation_depth=config.propagation_depth,
+            pre_layers=config.pre_layers,
+            post_layers=config.post_layers,
+            deg=deg,
+            skip_connections=config.skip_connections,
+            self_loops=config.add_self_loops,
+        )
+        mlp_params = models.ReadoutMLPParams(
+            num_mlp_layers=config.num_mlp_layers,
+            num_para=config.num_para,
+            dropout=config.dropout_rate,
+        )
+        return models.PNApcsaftL(
+            pna_params=pna_params,
+            mlp_params=mlp_params,
+            config=config,
+        )
+
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
