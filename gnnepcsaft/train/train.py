@@ -18,6 +18,7 @@ from torchmetrics import MeanAbsolutePercentageError
 
 from ..epcsaft import epcsaft_cython
 from .utils import (
+    EpochTimer,
     build_datasets_loaders,
     build_test_dataset,
     build_train_dataset,
@@ -293,6 +294,7 @@ def main(argv):
             ),
             verbose=True,
         )
+        epoch_timer = EpochTimer()
 
         create_logger(FLAGS.config, FLAGS.dataset)
         wandb_logger = WandbLogger()
@@ -307,7 +309,7 @@ def main(argv):
                 FLAGS.config.eval_every_steps
                 // (len(train_dataset) / FLAGS.config.batch_size)
             ),
-            callbacks=[checkpoint],
+            callbacks=[checkpoint, epoch_timer],
             logger=wandb_logger,
             enable_progress_bar=False,
         )
