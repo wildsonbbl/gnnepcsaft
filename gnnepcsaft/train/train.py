@@ -309,6 +309,7 @@ def main(argv):
             ),
             callbacks=[checkpoint],
             logger=wandb_logger,
+            enable_progress_bar=False,
         )
 
         trainer.fit(

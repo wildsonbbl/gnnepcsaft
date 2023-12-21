@@ -234,12 +234,12 @@ class PNApcsaftL(L.LightningModule):
             if loss_mape.item() < 0.9:
                 mape_vp = loss_mape.item()
                 huber_vp = loss_huber.item()
-            metrics_dict.update(
-                {
-                    "mape_vp": mape_vp,
-                    "huber_vp": huber_vp,
-                }
-            )
+                metrics_dict.update(
+                    {
+                        "mape_vp": mape_vp,
+                        "huber_vp": huber_vp,
+                    }
+                )
         self.log_dict(metrics_dict, batch_size=1)
         return (mape_den, huber_den, mape_vp, huber_vp)
 

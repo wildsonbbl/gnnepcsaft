@@ -26,7 +26,7 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-3
     config.dataset = "ramirez"
-    config.checkpoint = False
+    config.checkpoint = "last.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "model6"
