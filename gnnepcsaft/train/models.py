@@ -191,11 +191,7 @@ class PNApcsaftL(L.LightningModule):
         target = graphs.para.view(-1, 3)
         pred = self(graphs)
         loss_mape = mape(pred, target)
-        self.log(
-            "train_mape",
-            loss_mape,
-            batch_size=target.shape[0],
-        )
+        self.log("train_mape", loss_mape, batch_size=target.shape[0], sync_dist=True)
         return loss_mape
 
     def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
@@ -240,7 +236,7 @@ class PNApcsaftL(L.LightningModule):
                         "huber_vp": huber_vp,
                     }
                 )
-        self.log_dict(metrics_dict, batch_size=1)
+        self.log_dict(metrics_dict, batch_size=1, sync_dist=True)
         return (mape_den, huber_den, mape_vp, huber_vp)
 
     def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
