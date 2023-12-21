@@ -167,7 +167,7 @@ class PNApcsaftL(L.LightningModule):
                 amsgrad=True,
                 eps=1e-5,
             )
-        if self.config.optimizer == "sgd":
+        elif self.config.optimizer == "sgd":
             opt = torch.optim.SGD(
                 self.parameters(),
                 lr=self.config.learning_rate,
