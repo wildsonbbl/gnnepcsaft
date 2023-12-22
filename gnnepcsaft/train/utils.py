@@ -1,9 +1,13 @@
 """Model with important functions to help model training"""
 import os.path as osp
+import time
 
 import ml_collections
 import numpy as np
 import torch
+from absl import logging
+from lightning import LightningModule, Trainer
+from lightning.pytorch.callbacks import Callback
 from pcsaft import (  # pylint: disable = no-name-in-module
     SolutionError,
     flashTQ,
@@ -67,6 +71,26 @@ def create_model(
             pna_params=pna_params,
             mlp_params=mlp_params,
         )
+    if config.model == "PNAL":
+        pna_params = models.PnaconvsParams(
+            propagation_depth=config.propagation_depth,
+            pre_layers=config.pre_layers,
+            post_layers=config.post_layers,
+            deg=deg,
+            skip_connections=config.skip_connections,
+            self_loops=config.add_self_loops,
+        )
+        mlp_params = models.ReadoutMLPParams(
+            num_mlp_layers=config.num_mlp_layers,
+            num_para=config.num_para,
+            dropout=config.dropout_rate,
+        )
+        return models.PNApcsaftL(
+            pna_params=pna_params,
+            mlp_params=mlp_params,
+            config=config,
+        )
+
     raise ValueError(f"Unsupported model: {config.model}.")
 
 
@@ -306,3 +330,22 @@ def output_artifacts(workdir: str):
     if osp.exists(model_path):
         model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
         wandb.log_artifact(model_art)
+
+
+class EpochTimer(Callback):
+    "Elapsed time counter."
+
+    start_time: float
+
+    def on_train_epoch_start(
+        self, trainer: Trainer, pl_module: LightningModule
+    ) -> None:
+        self.start_time = time.time()
+
+    def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        end_time = time.time()
+
+        elapsed_time = end_time - self.start_time
+        logging.log_first_n(
+            logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
+        )

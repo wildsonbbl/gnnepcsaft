@@ -14,3 +14,5 @@ torch
 torch_geometric
 torchmetrics
 wandb
+lightning
+dvc-s3
