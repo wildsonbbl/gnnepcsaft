@@ -35,7 +35,6 @@ from .utils import (
 
 def create_logger(config, dataset):
     "Creates wandb logging or equivalent."
-    wandb.login()
     wandb.init(
         # Set the project where this run will be logged
         project="gnn-pc-saft",
@@ -303,8 +302,16 @@ def ltrain_and_evaluate():
     )
     epoch_timer = EpochTimer()
 
-    create_logger(FLAGS.config, FLAGS.dataset)
-    wandb_logger = WandbLogger()
+    wandb_logger = WandbLogger(
+        log_model=True,
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=FLAGS.config.to_dict(),
+        group=FLAGS.dataset,
+        tags=[FLAGS.dataset, "train"],
+        job_type="train",
+    )
 
     deg = calc_deg(FLAGS.dataset, FLAGS.workdir)
     model = create_model(FLAGS.config, deg)
