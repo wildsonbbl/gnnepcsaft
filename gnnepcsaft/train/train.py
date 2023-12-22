@@ -290,7 +290,7 @@ def ltrain_and_evaluate():
 
     checkpoint_mape_den = ModelCheckpoint(
         dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-        filename=FLAGS.config.model_name + "-{epoch}-{mape_den:.2f}",
+        filename=FLAGS.config.model_name + "-{epoch}-{mape_den:.4f}",
         save_last=False,
         monitor="mape_den",
         save_top_k=1,
@@ -303,7 +303,7 @@ def ltrain_and_evaluate():
 
     checkpoint_train_loss = ModelCheckpoint(
         dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-        filename=FLAGS.config.model_name + "-{epoch}-{train_mape:.2f}",
+        filename=FLAGS.config.model_name + "-{epoch}-{train_mape:.4f}",
         save_last=False,
         monitor="train_mape",
         save_top_k=1,
