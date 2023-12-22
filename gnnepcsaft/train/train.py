@@ -288,10 +288,10 @@ def ltrain_and_evaluate():
         num_workers=os.cpu_count(),
     )
 
-    checkpoint = ModelCheckpoint(
+    checkpoint_mape_den = ModelCheckpoint(
         dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-        filename=FLAGS.config.model_name + "-{step}",
-        save_last=True,
+        filename=FLAGS.config.model_name + "-{epoch}-{mape_den:.2f}",
+        save_last=False,
         monitor="mape_den",
         save_top_k=1,
         every_n_epochs=int(
@@ -300,6 +300,20 @@ def ltrain_and_evaluate():
         ),
         verbose=True,
     )
+
+    checkpoint_train_loss = ModelCheckpoint(
+        dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
+        filename=FLAGS.config.model_name + "-{epoch}-{train_mape:.2f}",
+        save_last=False,
+        monitor="train_mape",
+        save_top_k=1,
+        every_n_epochs=int(
+            FLAGS.config.checkpoint_every_steps
+            // (len(train_dataset) / FLAGS.config.batch_size)
+        ),
+        verbose=True,
+    )
+
     epoch_timer = EpochTimer()
 
     wandb_logger = WandbLogger(
@@ -323,7 +337,7 @@ def ltrain_and_evaluate():
             FLAGS.config.eval_every_steps
             // (len(train_dataset) / FLAGS.config.batch_size)
         ),
-        callbacks=[checkpoint, epoch_timer],
+        callbacks=[checkpoint_mape_den, checkpoint_train_loss, epoch_timer],
         logger=wandb_logger,
         enable_progress_bar=False,
     )

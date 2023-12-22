@@ -16,7 +16,7 @@ def get_config():
 
     config.batch_size = 512
     config.pad_size = 128
-    config.num_train_steps = 750_000
+    config.num_train_steps = 850_000
     config.warmup_steps = 100
     config.log_every_steps = 5000
     config.eval_every_steps = 25000
@@ -26,7 +26,7 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-3
     config.dataset = "ramirez"
-    config.checkpoint = "last-v1.ckpt"
+    config.checkpoint = "model6-step=470052.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "model6"
