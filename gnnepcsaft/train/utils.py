@@ -6,13 +6,13 @@ import ml_collections
 import numpy as np
 import torch
 from absl import logging
+from lightning import LightningModule, Trainer
+from lightning.pytorch.callbacks import Callback
 from pcsaft import (  # pylint: disable = no-name-in-module
     SolutionError,
     flashTQ,
     pcsaft_den,
 )
-from pytorch_lightning import LightningModule, Trainer
-from pytorch_lightning.callbacks import Callback
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import degree
