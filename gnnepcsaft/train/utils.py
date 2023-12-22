@@ -1,14 +1,18 @@
 """Model with important functions to help model training"""
 import os.path as osp
+import time
 
 import ml_collections
 import numpy as np
 import torch
+from absl import logging
 from pcsaft import (  # pylint: disable = no-name-in-module
     SolutionError,
     flashTQ,
     pcsaft_den,
 )
+from pytorch_lightning import LightningModule, Trainer
+from pytorch_lightning.callbacks import Callback
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import degree
@@ -326,3 +330,22 @@ def output_artifacts(workdir: str):
     if osp.exists(model_path):
         model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
         wandb.log_artifact(model_art)
+
+
+class EpochTimer(Callback):
+    "Elapsed time counter."
+
+    start_time: float
+
+    def on_train_epoch_start(
+        self, trainer: Trainer, pl_module: LightningModule
+    ) -> None:
+        self.start_time = time.time()
+
+    def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        end_time = time.time()
+
+        elapsed_time = end_time - self.start_time
+        logging.log_first_n(
+            logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
+        )

@@ -167,7 +167,7 @@ class PNApcsaftL(L.LightningModule):
                 amsgrad=True,
                 eps=1e-5,
             )
-        if self.config.optimizer == "sgd":
+        elif self.config.optimizer == "sgd":
             opt = torch.optim.SGD(
                 self.parameters(),
                 lr=self.config.learning_rate,
@@ -191,11 +191,7 @@ class PNApcsaftL(L.LightningModule):
         target = graphs.para.view(-1, 3)
         pred = self(graphs)
         loss_mape = mape(pred, target)
-        self.log(
-            "train_mape",
-            loss_mape,
-            batch_size=target.shape[0],
-        )
+        self.log("train_mape", loss_mape, batch_size=target.shape[0], sync_dist=True)
         return loss_mape
 
     def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
@@ -234,13 +230,13 @@ class PNApcsaftL(L.LightningModule):
             if loss_mape.item() < 0.9:
                 mape_vp = loss_mape.item()
                 huber_vp = loss_huber.item()
-            metrics_dict.update(
-                {
-                    "mape_vp": mape_vp,
-                    "huber_vp": huber_vp,
-                }
-            )
-        self.log_dict(metrics_dict, batch_size=1)
+                metrics_dict.update(
+                    {
+                        "mape_vp": mape_vp,
+                        "huber_vp": huber_vp,
+                    }
+                )
+        self.log_dict(metrics_dict, batch_size=1, sync_dist=True)
         return (mape_den, huber_den, mape_vp, huber_vp)
 
     def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:

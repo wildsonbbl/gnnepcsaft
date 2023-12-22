@@ -18,6 +18,7 @@ from torchmetrics import MeanAbsolutePercentageError
 
 from ..epcsaft import epcsaft_cython
 from .utils import (
+    EpochTimer,
     build_datasets_loaders,
     build_test_dataset,
     build_train_dataset,
@@ -34,7 +35,6 @@ from .utils import (
 
 def create_logger(config, dataset):
     "Creates wandb logging or equivalent."
-    wandb.login()
     wandb.init(
         # Set the project where this run will be logged
         project="gnn-pc-saft",
@@ -263,69 +263,83 @@ def main(argv):
     torch.set_float32_matmul_precision("medium")
 
     if FLAGS.lightning:
-        train_dataset = build_train_dataset(FLAGS.workdir, FLAGS.dataset)
-        tml_dataset, para_data = build_test_dataset(FLAGS.workdir, train_dataset)
-        test_idx = []
-        val_idx = []
-        for idx, graph in enumerate(tml_dataset):
-            if graph.InChI in para_data:
-                val_idx.append(idx)
-            else:
-                test_idx.append(idx)
-        test_dataset = tml_dataset[test_idx]
-        val_dataset = tml_dataset[val_idx]
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=FLAGS.config.batch_size,
-            shuffle=True,
-            num_workers=os.cpu_count(),
-        )
-
-        checkpoint = ModelCheckpoint(
-            dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-            filename=FLAGS.config.model_name + "-{step}",
-            save_last=True,
-            monitor="mape_den",
-            save_top_k=1,
-            every_n_epochs=int(
-                FLAGS.config.checkpoint_every_steps
-                // (len(train_dataset) / FLAGS.config.batch_size)
-            ),
-            verbose=True,
-        )
-
-        create_logger(FLAGS.config, FLAGS.dataset)
-        wandb_logger = WandbLogger()
-
-        deg = calc_deg(FLAGS.dataset, FLAGS.workdir)
-        model = create_model(FLAGS.config, deg)
-
-        trainer = L.Trainer(
-            max_steps=FLAGS.config.num_train_steps,
-            log_every_n_steps=FLAGS.config.log_every_steps,
-            check_val_every_n_epoch=int(
-                FLAGS.config.eval_every_steps
-                // (len(train_dataset) / FLAGS.config.batch_size)
-            ),
-            callbacks=[checkpoint],
-            logger=wandb_logger,
-        )
-
-        trainer.fit(
-            model,
-            train_loader,
-            val_dataset,
-            ckpt_path=osp.join(
-                FLAGS.workdir, f"train/checkpoints/{FLAGS.config.checkpoint}"
-            )
-            if FLAGS.config.checkpoint
-            else None,
-        )
-
-        trainer.test(model, test_dataset)
-
+        ltrain_and_evaluate()
     else:
         train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+
+
+def ltrain_and_evaluate():
+    """Execute model training and evaluation loop with lightning."""
+    train_dataset = build_train_dataset(FLAGS.workdir, FLAGS.dataset)
+    tml_dataset, para_data = build_test_dataset(FLAGS.workdir, train_dataset)
+    test_idx = []
+    val_idx = []
+    for idx, graph in enumerate(tml_dataset):
+        if graph.InChI in para_data:
+            val_idx.append(idx)
+        else:
+            test_idx.append(idx)
+    test_dataset = tml_dataset[test_idx]
+    val_dataset = tml_dataset[val_idx]
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=FLAGS.config.batch_size,
+        shuffle=True,
+        num_workers=os.cpu_count(),
+    )
+
+    checkpoint = ModelCheckpoint(
+        dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
+        filename=FLAGS.config.model_name + "-{step}",
+        save_last=True,
+        monitor="mape_den",
+        save_top_k=1,
+        every_n_epochs=int(
+            FLAGS.config.checkpoint_every_steps
+            // (len(train_dataset) / FLAGS.config.batch_size)
+        ),
+        verbose=True,
+    )
+    epoch_timer = EpochTimer()
+
+    wandb_logger = WandbLogger(
+        log_model=True,
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=FLAGS.config.to_dict(),
+        group=FLAGS.dataset,
+        tags=[FLAGS.dataset, "train"],
+        job_type="train",
+    )
+
+    deg = calc_deg(FLAGS.dataset, FLAGS.workdir)
+    model = create_model(FLAGS.config, deg)
+
+    trainer = L.Trainer(
+        max_steps=FLAGS.config.num_train_steps,
+        log_every_n_steps=FLAGS.config.log_every_steps,
+        check_val_every_n_epoch=int(
+            FLAGS.config.eval_every_steps
+            // (len(train_dataset) / FLAGS.config.batch_size)
+        ),
+        callbacks=[checkpoint, epoch_timer],
+        logger=wandb_logger,
+        enable_progress_bar=False,
+    )
+
+    trainer.fit(
+        model,
+        train_loader,
+        val_dataset,
+        ckpt_path=osp.join(
+            FLAGS.workdir, f"train/checkpoints/{FLAGS.config.checkpoint}"
+        )
+        if FLAGS.config.checkpoint
+        else None,
+    )
+
+    trainer.test(model, test_dataset)
 
 
 if __name__ == "__main__":
