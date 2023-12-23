@@ -312,6 +312,7 @@ def ltrain_and_evaluate():
             // (len(train_dataset) / FLAGS.config.batch_size)
         ),
         verbose=True,
+        save_on_train_epoch_end=True,
     )
 
     epoch_timer = EpochTimer()
