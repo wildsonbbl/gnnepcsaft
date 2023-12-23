@@ -351,7 +351,21 @@ def ltrain_and_evaluate():
         else None,
     )
 
+    wandb.finish()
+
+    trainer.logger = WandbLogger(
+        log_model=True,
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=FLAGS.config.to_dict(),
+        group=FLAGS.dataset,
+        tags=[FLAGS.dataset, "test"],
+        job_type="test",
+    )
+
     trainer.test(model, test_dataset)
+    wandb.finish()
 
 
 if __name__ == "__main__":
