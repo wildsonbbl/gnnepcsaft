@@ -307,10 +307,7 @@ def ltrain_and_evaluate():
         save_last=False,
         monitor="train_mape",
         save_top_k=1,
-        every_n_epochs=int(
-            FLAGS.config.checkpoint_every_steps
-            // (len(train_dataset) / FLAGS.config.batch_size)
-        ),
+        every_n_train_steps=FLAGS.config.log_every_steps,
         verbose=True,
         save_on_train_epoch_end=True,
     )
