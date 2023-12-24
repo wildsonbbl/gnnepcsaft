@@ -314,6 +314,7 @@ def ltrain_and_evaluate():
 
     epoch_timer = EpochTimer()
 
+    logging.info("Training run!")
     wandb_logger = WandbLogger(
         log_model=True,
         # Set the project where this run will be logged
@@ -350,9 +351,9 @@ def ltrain_and_evaluate():
         if FLAGS.config.checkpoint
         else None,
     )
-
     wandb.finish()
 
+    logging.info("Testing run!")
     trainer.logger = WandbLogger(
         log_model=True,
         # Set the project where this run will be logged
@@ -360,8 +361,8 @@ def ltrain_and_evaluate():
         # Track hyperparameters and run metadata
         config=FLAGS.config.to_dict(),
         group=FLAGS.dataset,
-        tags=[FLAGS.dataset, "test"],
-        job_type="test",
+        tags=[FLAGS.dataset, "eval"],
+        job_type="eval",
     )
 
     trainer.test(model, test_dataset)
