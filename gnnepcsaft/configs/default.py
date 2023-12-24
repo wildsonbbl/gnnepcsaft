@@ -14,9 +14,9 @@ def get_config():
 
     # Training hyperparameters.
 
-    config.batch_size = 512
+    config.batch_size = 1024
     config.pad_size = 128
-    config.num_train_steps = 850_000
+    config.num_train_steps = 600_000
     config.warmup_steps = 100
     config.log_every_steps = 5000
     config.eval_every_steps = 25000
@@ -24,9 +24,9 @@ def get_config():
     config.amp = False
     config.momentum = 0.9
     config.patience = 5
-    config.weight_decay = 1e-3
+    config.weight_decay = 1e-2
     config.dataset = "ramirez"
-    config.checkpoint = "model6-step=470052.ckpt"
+    config.checkpoint = "model6-epoch=170939-mape_den=0.0131.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "model6"

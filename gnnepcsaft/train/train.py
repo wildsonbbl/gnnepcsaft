@@ -290,7 +290,7 @@ def ltrain_and_evaluate():
 
     checkpoint_mape_den = ModelCheckpoint(
         dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-        filename=FLAGS.config.model_name + "-{epoch}-{mape_den:.2f}",
+        filename=FLAGS.config.model_name + "-{epoch}-{mape_den:.4f}",
         save_last=False,
         monitor="mape_den",
         save_top_k=1,
@@ -303,19 +303,18 @@ def ltrain_and_evaluate():
 
     checkpoint_train_loss = ModelCheckpoint(
         dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-        filename=FLAGS.config.model_name + "-{epoch}-{train_mape:.2f}",
+        filename=FLAGS.config.model_name + "-{epoch}-{train_mape:.4f}",
         save_last=False,
         monitor="train_mape",
         save_top_k=1,
-        every_n_epochs=int(
-            FLAGS.config.checkpoint_every_steps
-            // (len(train_dataset) / FLAGS.config.batch_size)
-        ),
+        every_n_train_steps=FLAGS.config.log_every_steps,
         verbose=True,
+        save_on_train_epoch_end=True,
     )
 
     epoch_timer = EpochTimer()
 
+    logging.info("Training run!")
     wandb_logger = WandbLogger(
         log_model=True,
         # Set the project where this run will be logged
@@ -352,8 +351,22 @@ def ltrain_and_evaluate():
         if FLAGS.config.checkpoint
         else None,
     )
+    wandb.finish()
+
+    logging.info("Testing run!")
+    trainer.logger = WandbLogger(
+        log_model=True,
+        # Set the project where this run will be logged
+        project="gnn-pc-saft",
+        # Track hyperparameters and run metadata
+        config=FLAGS.config.to_dict(),
+        group=FLAGS.dataset,
+        tags=[FLAGS.dataset, "eval"],
+        job_type="eval",
+    )
 
     trainer.test(model, test_dataset)
+    wandb.finish()
 
 
 if __name__ == "__main__":
