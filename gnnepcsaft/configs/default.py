@@ -24,9 +24,9 @@ def get_config():
     config.amp = False
     config.momentum = 0.9
     config.patience = 5
-    config.weight_decay = 1e-3
+    config.weight_decay = 1e-2
     config.dataset = "ramirez"
-    config.checkpoint = "model6-step=470052.ckpt"
+    config.checkpoint = "model6-epoch=170939-mape_den=0.0131.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "model6"
