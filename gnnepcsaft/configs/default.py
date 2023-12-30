@@ -14,7 +14,7 @@ def get_config():
 
     # Training hyperparameters.
 
-    config.batch_size = 1024
+    config.batch_size = 512
     config.pad_size = 128
     config.num_train_steps = 600_000
     config.warmup_steps = 100
