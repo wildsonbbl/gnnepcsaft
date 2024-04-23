@@ -1,34 +1,31 @@
 """Module to be used for hyperparameter tuning"""
+
 import os
 import os.path as osp
-import tempfile
 from functools import partial
 
+import lightning as L
 import ml_collections
 import ray
-import torch
 from absl import app, flags, logging
 from ml_collections import config_flags
 from ray import train, tune
 from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train import Checkpoint
+from ray.train.lightning import (
+    RayDDPStrategy,
+    RayLightningEnvironment,
+    RayTrainReportCallback,
+    prepare_trainer,
+)
+from ray.train.torch import TorchTrainer
 from ray.tune import JupyterNotebookReporter
 from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
-from torch.nn import HuberLoss
-from torchmetrics import MeanAbsolutePercentageError
+from torch_geometric.loader import DataLoader
 
-from ..epcsaft import epcsaft_cython
-from .utils import (
-    build_datasets_loaders,
-    calc_deg,
-    create_model,
-    create_optimizer,
-    create_schedulers,
-    savemodel,
-)
+from .utils import build_test_dataset, build_train_dataset, calc_deg, create_model
 
 os.environ["WANDB_SILENT"] = "true"
 os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
@@ -66,7 +63,7 @@ class CustomStopper(tune.Stopper):
 
 # pylint: disable=R0914
 # pylint: disable=R0915
-def train_and_evaluate(
+def tune_training(
     config_tuner: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
 ):
     """Execute model training and evaluation loop.
@@ -76,12 +73,7 @@ def train_and_evaluate(
       workdir: Working Directory.
       dataset: dataset name (ramirez or thermoml)
     """
-
-    deg = calc_deg(dataset, workdir)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    use_amp = config.amp
-
+    # selected hyperparameters to test
     config.propagation_depth = config_tuner["propagation_depth"]
     config.hidden_dim = config_tuner["hidden_dim"]
     config.num_mlp_layers = config_tuner["num_mlp_layers"]
@@ -90,157 +82,66 @@ def train_and_evaluate(
     config.skip_connections = config_tuner["skip_connections"]
     config.add_self_loops = config_tuner["add_self_loops"]
 
-    # Get datasets, organized by split.
-    logging.info("Obtaining datasets.")
-    train_loader, test_loader, para_data = build_datasets_loaders(
-        config, workdir, dataset
+    # Dataset building
+    train_dataset = build_train_dataset(workdir, dataset)
+    tml_dataset, para_data = build_test_dataset(workdir, train_dataset)
+    test_idx = []
+    val_idx = []
+    # separate test and val dataset
+    for idx, graph in enumerate(tml_dataset):
+        if graph.InChI in para_data:
+            val_idx.append(idx)
+        else:
+            test_idx.append(idx)
+    # test_dataset = tml_dataset[test_idx]
+    val_dataset = tml_dataset[val_idx]
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        num_workers=os.cpu_count(),
     )
 
-    # Create and initialize the network.
-    logging.info("Initializing network.")
+    # creating model from config
+    deg = calc_deg(dataset, workdir)
     model = create_model(config, deg)
-    model.to(device)
-    # pylint: disable=no-member
-    pcsaft_den = epcsaft_cython.DenFromTensor.apply
-    hloss = HuberLoss("mean")
-    hloss.to(device)
-    mape = MeanAbsolutePercentageError()
-    mape.to(device)
 
-    # Create the optimizer.
-    optimizer = create_optimizer(config, model.parameters())
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    # creating Lighting trainer function
+    trainer = L.Trainer(
+        devices="auto",
+        accelerator="auto",
+        strategy=RayDDPStrategy(),
+        max_steps=config.num_train_steps,
+        log_every_n_steps=config.log_every_steps,
+        check_val_every_n_epoch=int(
+            config.eval_every_steps // (len(train_dataset) / config.batch_size)
+        ),
+        callbacks=[RayTrainReportCallback()],
+        plugins=[RayLightningEnvironment()],
+        enable_progress_bar=False,
+    )
+    trainer: L.Trainer = prepare_trainer(trainer)
 
-    # Set up checkpointing of the model.
-    step = load_checkpoint(config, model, optimizer, scaler)
-
-    # Scheduler
-    scheduler, scheduler2 = create_schedulers(config, optimizer)
-
-    @torch.no_grad()
-    def test(test="test"):
-        model.eval()
-        total_mape_den = []
-        total_huber_den = []
-        for graphs in test_loader:
-            if test == "test":
-                if graphs.InChI in para_data:
-                    continue
-            if test == "val":
-                if graphs.InChI not in para_data:
-                    continue
-            graphs = graphs.to(device)
-            pred_para = model(graphs).squeeze().to("cpu", torch.float64)
-
-            datapoints = graphs.rho.to("cpu", torch.float64).view(-1, 5)
-            if ~torch.all(datapoints == torch.zeros_like(datapoints)):
-                pred = pcsaft_den(pred_para, datapoints)
-                target = datapoints[:, -1]
-                # pylint: disable = not-callable
-                loss_mape = mape(pred, target)
-                loss_huber = hloss(pred, target)
-                total_mape_den += [loss_mape.item()]
-                total_huber_den += [loss_huber.item()]
-
-        return (
-            torch.tensor(total_mape_den).nanmean().item(),
-            torch.tensor(total_huber_den).nanmean().item(),
-        )
-
-    # Begin training loop.
-    logging.info("Starting training.")
-    total_loss_mape = []
-    total_loss_huber = []
-    lr = []
-
-    def train_step(graphs):
-        target = graphs.para.to(device).view(-1, 3)
-        graphs = graphs.to(device)
-        optimizer.zero_grad()
-        with torch.autocast(
-            device_type=device.type, dtype=torch.float16, enabled=use_amp
-        ):
-            pred = model(graphs)
-            loss_mape = mape(pred, target)
-            loss_huber = hloss(pred, target)
-        scaler.scale(loss_mape).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        total_loss_mape.append(loss_mape.item())
-        total_loss_huber.append(loss_huber.item())
-        if config.change_sch:
-            lr.append(optimizer.param_groups[0]["lr"])
-        else:
-            lr.append(scheduler.get_last_lr()[0])
-        scheduler.step(step)
-        return pred
-
-    def train_logging():
-        mape_den, huber_den = test(test="val")
-        with tempfile.TemporaryDirectory() as tempdir:
-            savemodel(
-                model,
-                optimizer,
-                scaler,
-                osp.join(tempdir, "checkpoint.pt"),
-                step,
-            )
-
-            train.report(
-                {
-                    "train_mape": torch.tensor(total_loss_mape).mean().item(),
-                    "train_huber": torch.tensor(total_loss_huber).mean().item(),
-                    "train_lr": torch.tensor(lr).mean().item(),
-                    "mape_den": mape_den,
-                    "huber_den": huber_den,
-                },
-                checkpoint=Checkpoint.from_directory(tempdir),
-            )
-        scheduler2.step(torch.tensor(total_loss_huber).mean())
-
-    model.train()
-    while step < config.num_train_steps + 1:
-        for graphs in train_loader:
-            _ = train_step(graphs)
-
-            # Quick indication that training is happening.
-            logging.log_first_n(logging.INFO, "Finished training step %d.", 10, step)
-
-            # Log, if required.
-            if step % config.log_every_steps == 0:
-                train_logging()
-                total_loss_mape = []
-                total_loss_huber = []
-                lr = []
-                model.train()
-
-            step += 1
-            if step > config.num_train_steps:
-                break
-
-
-def load_checkpoint(config, model, optimizer, scaler):
-    "Loads saved model checkpoints."
-    initial_step = 1
     checkpoint = train.get_checkpoint()
-    if checkpoint:
-        with checkpoint.as_directory() as checkpoint_dir:
-            checkpoint = torch.load(osp.join(checkpoint_dir, "checkpoint.pt"))
-            model.load_state_dict(checkpoint["model_state_dict"])
-            if not config.change_opt:
-                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-            scaler.load_state_dict(checkpoint["scaler_state_dict"])
-            step = checkpoint["step"]
-            initial_step = int(step) + 1
-            del checkpoint
-    return initial_step
+
+    # training run
+    trainer.fit(
+        model,
+        train_loader,
+        val_dataset,
+        ckpt_path=(
+            osp.join(checkpoint.as_directory(), "checkpoint.ckpt")
+            if checkpoint
+            else None
+        ),
+    )
 
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
-flags.DEFINE_list("tags", [], "Dataset to train model on")
+flags.DEFINE_list("tags", [], "wandb tags")
 flags.DEFINE_string(
     "restoredir", None, "Directory path to restore previous tuning results"
 )
@@ -272,7 +173,7 @@ def main(argv):
     logging.info("Calling tuner!")
 
     ptrain = partial(
-        train_and_evaluate,
+        tune_training,
         config=FLAGS.config,
         workdir=FLAGS.workdir,
         dataset=FLAGS.dataset,
@@ -307,7 +208,31 @@ def main(argv):
 
     ray.init(num_gpus=FLAGS.num_init_gpus)
     resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
-    trainable = tune.with_resources(tune.with_parameters(ptrain), resources=resources)
+    scaling_config = train.ScalingConfig(
+        num_workers=os.cpu_count(), use_gpu=True, resources_per_worker=resources
+    )
+    run_config = train.RunConfig(
+        name="gnnpcsaft",
+        storage_path=None,
+        callbacks=[
+            WandbLoggerCallback(
+                "gnn-pc-saft",
+                FLAGS.dataset,
+                tags=["tuning", FLAGS.dataset] + FLAGS.tags,
+            )
+        ],
+        verbose=FLAGS.verbose,
+        checkpoint_config=train.CheckpointConfig(
+            num_to_keep=1, checkpoint_at_end=False
+        ),
+        progress_reporter=reporter,
+        log_to_file=True,
+        stop=stopper,
+    )
+
+    trainable = TorchTrainer(
+        ptrain, scaling_config=scaling_config, run_config=run_config
+    )
 
     if FLAGS.resumedir:
         tuner = tune.Tuner.restore(
@@ -320,31 +245,13 @@ def main(argv):
     else:
         tuner = tune.Tuner(
             trainable,
-            param_space=search_space,
+            param_space={"train_loop_config": search_space},
             tune_config=tune.TuneConfig(
                 search_alg=search_alg,
                 scheduler=scheduler,
                 num_samples=FLAGS.num_samples,
                 time_budget_s=FLAGS.time_budget_s,
                 reuse_actors=True,
-            ),
-            run_config=train.RunConfig(
-                name="gnnpcsaft",
-                storage_path=None,
-                callbacks=[
-                    WandbLoggerCallback(
-                        "gnn-pc-saft",
-                        FLAGS.dataset,
-                        tags=["tuning", FLAGS.dataset] + FLAGS.tags,
-                    )
-                ],
-                verbose=FLAGS.verbose,
-                checkpoint_config=train.CheckpointConfig(
-                    num_to_keep=1, checkpoint_at_end=False
-                ),
-                progress_reporter=reporter,
-                log_to_file=True,
-                stop=stopper,
             ),
         )
 
