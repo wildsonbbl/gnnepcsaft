@@ -298,9 +298,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         save_last=False,
         monitor="mape_den",
         save_top_k=1,
-        every_n_epochs=int(
-            config.checkpoint_every_steps // (len(train_dataset) / config.batch_size)
-        ),
+        every_n_train_steps=config.checkpoint_every_steps,
         verbose=True,
     )
 
@@ -338,9 +336,8 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     trainer = L.Trainer(
         max_steps=config.num_train_steps,
         log_every_n_steps=config.log_every_steps,
-        check_val_every_n_epoch=int(
-            config.eval_every_steps // (len(train_dataset) / config.batch_size)
-        ),
+        val_check_interval=config.eval_every_steps,
+        check_val_every_n_epoch=None,
         callbacks=[checkpoint_mape_den, checkpoint_train_loss, epoch_timer],
         logger=wandb_logger,
         enable_progress_bar=False,
