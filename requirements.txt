@@ -17,5 +17,5 @@ lightning
 dvc-s3
 hpbandster
 ConfigSpace
-"ray[train]"
-"ray[tune]"
+ray[train]
+ray[tune]
