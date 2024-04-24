@@ -3,21 +3,21 @@
 import os
 import os.path as osp
 from functools import partial
+from tempfile import TemporaryDirectory
 
 import lightning as L
 import ml_collections
 import ray
 from absl import app, flags, logging
-from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import Callback
+
+# from lightning.pytorch.loggers import WandbLogger
 from ml_collections import config_flags
 from ray import train, tune
-from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train.lightning import (
-    RayDDPStrategy,
-    RayLightningEnvironment,
-    RayTrainReportCallback,
-    prepare_trainer,
-)
+
+# from ray.air.integrations.wandb import WandbLoggerCallback
+from ray.train import Checkpoint
+from ray.train.lightning import RayDDPStrategy, RayLightningEnvironment, prepare_trainer
 from ray.train.torch import TorchTrainer
 from ray.tune import JupyterNotebookReporter
 from ray.tune.experiment.trial import Trial
@@ -30,6 +30,33 @@ from .utils import build_test_dataset, build_train_dataset, calc_deg, create_mod
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
+
+
+class CustomRayTrainReportCallback(Callback):
+    "Custom ray tuner checkpoint."
+
+    def on_validation_end(self, trainer, pl_module):
+
+        with TemporaryDirectory() as tmpdir:
+            # Fetch metrics
+            metrics = trainer.callback_metrics
+            metrics = {k: v.item() for k, v in metrics.items()}
+
+            # Add customized metrics
+            metrics["epoch"] = trainer.current_epoch
+            metrics["step"] = trainer.global_step
+
+            checkpoint = None
+            global_rank = train.get_context().get_world_rank() == 0
+            if global_rank == 0:
+                # Save model checkpoint file to tmpdir
+                ckpt_path = os.path.join(tmpdir, "ckpt.pt")
+                trainer.save_checkpoint(ckpt_path, weights_only=False)
+
+                checkpoint = Checkpoint.from_directory(tmpdir)
+
+            # Report to train session
+            train.report(metrics=metrics, checkpoint=checkpoint)
 
 
 class TrialTerminationReporter(JupyterNotebookReporter):
@@ -54,9 +81,7 @@ class CustomStopper(tune.Stopper):
         self.max_iter = max_iter
 
     def __call__(self, trial_id, result):
-        if not self.should_stop and result["train_mape"] != result["train_mape"]:
-            self.should_stop = True
-        return self.should_stop or result["training_iteration"] >= self.max_iter
+        return result["training_iteration"] >= self.max_iter
 
     def stop_all(self):
         return False
@@ -113,10 +138,10 @@ def tune_training(
         accelerator="auto",
         strategy=RayDDPStrategy(),
         max_steps=config.num_train_steps,
-        check_val_every_n_epoch=int(
-            config.log_every_steps // (len(train_dataset) / config.batch_size)
-        ),
-        callbacks=None,
+        val_check_interval=config.log_every_steps,
+        check_val_every_n_epoch=None,
+        num_sanity_val_steps=0,
+        callbacks=[CustomRayTrainReportCallback()],
         plugins=[RayLightningEnvironment()],
         enable_progress_bar=False,
     )
@@ -130,9 +155,7 @@ def tune_training(
         train_loader,
         val_dataset,
         ckpt_path=(
-            osp.join(checkpoint.as_directory(), "checkpoint.ckpt")
-            if checkpoint
-            else None
+            osp.join(checkpoint.as_directory(), "ckpt.pt") if checkpoint else None
         ),
     )
 
@@ -203,8 +226,8 @@ def main(argv):
         max_t=max_t,
         stop_last_trials=True,
     )
-    reporter = TrialTerminationReporter()
-    stopper = CustomStopper(max_t)
+    # reporter = TrialTerminationReporter()
+    # stopper = CustomStopper(max_t)
 
     ray.init(num_gpus=FLAGS.num_init_gpus)
     resources = {"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus}
@@ -218,9 +241,9 @@ def main(argv):
         checkpoint_config=train.CheckpointConfig(
             num_to_keep=1,
         ),
-        progress_reporter=reporter,
+        progress_reporter=None,
         log_to_file=True,
-        stop=stopper,
+        stop=None,
     )
 
     trainable = TorchTrainer(
