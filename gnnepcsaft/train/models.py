@@ -1,4 +1,5 @@
 """Module with all available Graph Neural Network models developed and used in the project"""
+
 import dataclasses
 
 import lightning as L
@@ -237,7 +238,6 @@ class PNApcsaftL(L.LightningModule):
                     }
                 )
         self.log_dict(metrics_dict, batch_size=1, sync_dist=True)
-        return (mape_den, huber_den, mape_vp, huber_vp)
 
     def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         return self.validation_step(graphs, batch_idx)

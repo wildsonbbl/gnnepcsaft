@@ -8,6 +8,7 @@ import lightning as L
 import ml_collections
 import ray
 from absl import app, flags, logging
+from lightning.pytorch.loggers import WandbLogger
 from ml_collections import config_flags
 from ray import train, tune
 from ray.air.integrations.wandb import WandbLoggerCallback
@@ -28,7 +29,7 @@ from torch_geometric.loader import DataLoader
 from .utils import build_test_dataset, build_train_dataset, calc_deg, create_model
 
 os.environ["WANDB_SILENT"] = "true"
-os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
+# os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 
 
 class TrialTerminationReporter(JupyterNotebookReporter):
@@ -112,11 +113,10 @@ def tune_training(
         accelerator="auto",
         strategy=RayDDPStrategy(),
         max_steps=config.num_train_steps,
-        log_every_n_steps=config.log_every_steps,
         check_val_every_n_epoch=int(
-            config.eval_every_steps // (len(train_dataset) / config.batch_size)
+            config.log_every_steps // (len(train_dataset) / config.batch_size)
         ),
-        callbacks=[RayTrainReportCallback()],
+        callbacks=None,
         plugins=[RayLightningEnvironment()],
         enable_progress_bar=False,
     )
@@ -207,23 +207,16 @@ def main(argv):
     stopper = CustomStopper(max_t)
 
     ray.init(num_gpus=FLAGS.num_init_gpus)
-    resources = {"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
+    resources = {"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus}
     scaling_config = train.ScalingConfig(
-        num_workers=os.cpu_count(), use_gpu=True, resources_per_worker=resources
+        num_workers=1, use_gpu=True, resources_per_worker=resources
     )
     run_config = train.RunConfig(
         name="gnnpcsaft",
         storage_path=None,
-        callbacks=[
-            WandbLoggerCallback(
-                "gnn-pc-saft",
-                FLAGS.dataset,
-                tags=["tuning", FLAGS.dataset] + FLAGS.tags,
-            )
-        ],
         verbose=FLAGS.verbose,
         checkpoint_config=train.CheckpointConfig(
-            num_to_keep=1, checkpoint_at_end=False
+            num_to_keep=1,
         ),
         progress_reporter=reporter,
         log_to_file=True,
