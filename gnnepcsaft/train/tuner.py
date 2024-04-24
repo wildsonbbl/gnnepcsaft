@@ -229,7 +229,7 @@ def main(argv):
     # reporter = TrialTerminationReporter()
     # stopper = CustomStopper(max_t)
 
-    ray.init(num_gpus=FLAGS.num_init_gpus)
+    # ray.init(num_gpus=FLAGS.num_init_gpus)
     resources = {"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus}
     scaling_config = train.ScalingConfig(
         num_workers=1, use_gpu=True, resources_per_worker=resources
