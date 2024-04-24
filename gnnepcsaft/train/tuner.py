@@ -7,7 +7,8 @@ from tempfile import TemporaryDirectory
 
 import lightning as L
 import ml_collections
-import ray
+
+# import ray
 from absl import app, flags, logging
 from lightning.pytorch.callbacks import Callback
 
