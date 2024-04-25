@@ -45,7 +45,7 @@ class CustomRayTrainReportCallback(Callback):
             metrics["step"] = trainer.global_step
 
             checkpoint = None
-            global_rank = train.get_context().get_world_rank() == 0
+            global_rank = train.get_context().get_world_rank()
             if global_rank == 0:
                 # Save model checkpoint file to tmpdir
                 ckpt_path = os.path.join(tmpdir, "ckpt.pt")
