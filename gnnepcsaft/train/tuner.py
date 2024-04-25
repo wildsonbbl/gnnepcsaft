@@ -148,16 +148,18 @@ def tune_training(
     )
     trainer: L.Trainer = prepare_trainer(trainer)
 
-    checkpoint = train.get_checkpoint()
+    checkpoint: Checkpoint = train.get_checkpoint()
+    ckpt_path = None
+    if checkpoint:
+        with checkpoint.as_directory() as ckpt_dir:
+            ckpt_path = osp.join(ckpt_dir, "ckpt.pt")
 
     # training run
     trainer.fit(
         model,
         train_loader,
         val_dataset,
-        ckpt_path=(
-            osp.join(checkpoint.as_directory(), "ckpt.pt") if checkpoint else None
-        ),
+        ckpt_path=ckpt_path,
     )
 
 
