@@ -11,12 +11,9 @@ import ml_collections
 # import ray
 from absl import app, flags, logging
 from lightning.pytorch.callbacks import Callback
-
-# from lightning.pytorch.loggers import WandbLogger
 from ml_collections import config_flags
 from ray import train, tune
-
-# from ray.air.integrations.wandb import WandbLoggerCallback
+from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import Checkpoint
 from ray.train.lightning import RayDDPStrategy, RayLightningEnvironment, prepare_trainer
 from ray.train.torch import TorchTrainer
@@ -68,7 +65,10 @@ class TrialTerminationReporter(JupyterNotebookReporter):
         self.num_terminated = 0
 
     def should_report(self, trials, done=False):
-        """Reports only on trial termination events."""
+        """
+        Reports only on trial termination events.
+        It does so by tracking increase in number of trials terminated.
+        """
         old_num_terminated = self.num_terminated
         self.num_terminated = len([t for t in trials if t.status == Trial.TERMINATED])
         return self.num_terminated > old_num_terminated
@@ -206,11 +206,11 @@ def main(argv):
     config = FLAGS.config
 
     search_space = {
-        "propagation_depth": tune.choice([2, 3, 4, 5, 6, 7]),
-        "hidden_dim": tune.choice([32, 64, 128, 256, 512]),
-        "num_mlp_layers": tune.choice([1, 2, 3]),
-        "pre_layers": tune.choice([1, 2, 3]),
-        "post_layers": tune.choice([1, 2, 3]),
+        "propagation_depth": tune.choice([3, 4, 5, 6]),
+        "hidden_dim": tune.choice([64, 128, 256]),
+        "num_mlp_layers": tune.choice([0, 1, 2]),
+        "pre_layers": tune.choice([1, 2]),
+        "post_layers": tune.choice([1, 2]),
         "skip_connections": tune.choice([True, False]),
         "add_self_loops": tune.choice([True, False]),
     }
@@ -227,7 +227,7 @@ def main(argv):
         max_t=max_t,
         stop_last_trials=True,
     )
-    # reporter = TrialTerminationReporter()
+    reporter = TrialTerminationReporter()
     # stopper = CustomStopper(max_t)
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
@@ -242,9 +242,16 @@ def main(argv):
         checkpoint_config=train.CheckpointConfig(
             num_to_keep=1,
         ),
-        progress_reporter=None,
+        progress_reporter=reporter,
         log_to_file=True,
         stop=None,
+        callbacks=[
+            WandbLoggerCallback(
+                "gnn-pc-saft",
+                FLAGS.dataset,
+                tags=["tuning", FLAGS.dataset] + FLAGS.tags,
+            )
+        ],
     )
 
     trainable = TorchTrainer(
