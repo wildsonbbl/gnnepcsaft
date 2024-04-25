@@ -27,6 +27,7 @@ from torch_geometric.loader import DataLoader
 from .utils import build_test_dataset, build_train_dataset, calc_deg, create_model
 
 os.environ["WANDB_SILENT"] = "true"
+# os.environ["WANDB_MODE"] = "offline"
 # os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 
 
@@ -169,12 +170,14 @@ flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_list("tags", [], "wandb tags")
 flags.DEFINE_string(
-    "restoredir", None, "Directory path to restore previous tuning results"
+    "restoredir",
+    None,
+    "Directory path to restore the state of a searcher from previous tuning results",
 )
 flags.DEFINE_string("resumedir", None, "Directory path to resume unfinished tuning")
 flags.DEFINE_integer("verbose", 0, "Ray tune verbose")
-flags.DEFINE_integer("num_cpu", 1, "Number of CPU threads for trial")
-flags.DEFINE_integer("num_gpus", 1, "Number of GPUs for trial")
+flags.DEFINE_float("num_cpu", 1, "Number of CPU threads per trial")
+flags.DEFINE_float("num_gpus", 1, "Number of GPUs per trial")
 flags.DEFINE_integer("num_init_gpus", 1, "Number of GPUs to be initialized")
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
 flags.DEFINE_boolean("get_result", False, "Whether to show results or continue tuning")
