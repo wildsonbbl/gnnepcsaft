@@ -227,7 +227,7 @@ def main(argv):
         max_t=max_t,
         stop_last_trials=True,
     )
-    reporter = TrialTerminationReporter()
+    # reporter = TrialTerminationReporter()
     # stopper = CustomStopper(max_t)
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
@@ -242,7 +242,7 @@ def main(argv):
         checkpoint_config=train.CheckpointConfig(
             num_to_keep=1,
         ),
-        progress_reporter=reporter,
+        progress_reporter=None,
         log_to_file=True,
         stop=None,
         callbacks=[
