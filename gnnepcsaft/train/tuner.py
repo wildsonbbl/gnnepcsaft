@@ -176,9 +176,9 @@ flags.DEFINE_string(
 )
 flags.DEFINE_string("resumedir", None, "Directory path to resume unfinished tuning")
 flags.DEFINE_integer("verbose", 0, "Ray tune verbose")
-flags.DEFINE_float("num_cpu", 1, "Number of CPU threads per trial")
-flags.DEFINE_float("num_gpus", 1, "Number of GPUs per trial")
-flags.DEFINE_integer("num_init_gpus", 1, "Number of GPUs to be initialized")
+flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
+flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
+flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
 flags.DEFINE_boolean("get_result", False, "Whether to show results or continue tuning")
 flags.DEFINE_float(
@@ -236,9 +236,13 @@ def main(argv):
     # stopper = CustomStopper(max_t)
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
-    resources = {"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus}
+    resources_per_worker = {"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus}
+    trainer_resources = {"CPU": FLAGS.num_cpu_trainer}
     scaling_config = train.ScalingConfig(
-        num_workers=1, use_gpu=True, resources_per_worker=resources
+        num_workers=1,
+        use_gpu=True,
+        resources_per_worker=resources_per_worker,
+        trainer_resources=trainer_resources,
     )
     run_config = train.RunConfig(
         name="gnnpcsaft",
