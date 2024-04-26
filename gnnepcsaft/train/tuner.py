@@ -184,6 +184,9 @@ flags.DEFINE_integer("verbose", 0, "Ray tune verbose")
 flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
 flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
 flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
+flags.DEFINE_integer(
+    "max_concurrent", 4, "Maximum concurrent samples from the underlying searcher."
+)
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
 flags.DEFINE_boolean("get_result", False, "Whether to show results or continue tuning")
 flags.DEFINE_float(
@@ -214,7 +217,7 @@ def main(argv):
     )
 
     config = FLAGS.config
-
+    # Hyperparameter search space
     search_space = {
         "propagation_depth": tune.choice([3, 4, 5, 6]),
         "hidden_dim": tune.choice([64, 128, 256]),
@@ -225,12 +228,13 @@ def main(argv):
         "add_self_loops": tune.choice([True, False]),
     }
     max_t = config.num_train_steps // config.log_every_steps - 1
-
+    # BOHB search algorithm
     search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
         search_space = None
-    search_alg = ConcurrencyLimiter(search_alg, 4)
+    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
+    # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
         metric="mape_den",
         mode="min",
