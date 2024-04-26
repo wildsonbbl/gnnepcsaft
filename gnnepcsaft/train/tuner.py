@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 
 import lightning as L
 import ml_collections
+import torch
 
 # import ray
 from absl import app, flags, logging
@@ -123,6 +124,10 @@ def tune_training(
             test_idx.append(idx)
     # test_dataset = tml_dataset[test_idx]
     val_dataset = tml_dataset[val_idx]
+    # taking vp data off for performance boost
+    for graph in val_dataset:
+        graph.vp = torch.zeros(1, 5)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
