@@ -1,4 +1,5 @@
 """Module for molecular graph dataset building."""
+
 import pickle
 
 import polars as pl
@@ -10,7 +11,6 @@ from .graph import from_InChI
 
 
 class ThermoMLDataset(InMemoryDataset):
-
     """
     Molecular Graph dataset creator/manipulator with `ThermoML Archive` experimental data.
     PARAMETERS
@@ -150,15 +150,13 @@ class ThermoMLPadded(ds):
         vp = sample.vp
         n = vp.shape[0]
         pad = _nearest_bigger_power_of_two(n)
-        if pad > self.pad:
-            pad = self.pad
+        pad = min(pad, self.pad)
         vp = get_padded_array(vp, pad)
 
         rho = sample.rho
         n = rho.shape[0]
         pad = _nearest_bigger_power_of_two(n)
-        if pad > self.pad:
-            pad = self.pad
+        pad = min(pad, self.pad)
         rho = get_padded_array(rho, pad)
 
         data = Data(
@@ -189,7 +187,6 @@ def _nearest_bigger_power_of_two(x: int) -> int:
 
 
 class Ramirez(InMemoryDataset):
-
     """
     Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
     `Ramírez-Vélez et al. (2022, doi: 10.1002/aic.17722)`.
@@ -250,7 +247,6 @@ class Ramirez(InMemoryDataset):
 
 
 class ThermoMLpara(InMemoryDataset):
-
     """
     Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
     parametrisation with `ThermoML Archive` experimental data.

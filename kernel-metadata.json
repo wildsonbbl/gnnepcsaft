@@ -8,13 +8,8 @@
   "enable_gpu": true,
   "enable_tpu": false,
   "enable_internet": true,
-  "keywords": [
-    "gpu"
-  ],
-  "dataset_sources": [
-    "kaggle_user_to_replace/gnnepcsaft",
-    "kaggle_user_to_replace/pcsaftpkg"
-  ],
+  "keywords": ["gpu"],
+  "dataset_sources": [],
   "kernel_sources": [],
   "competition_sources": [],
   "model_sources": []
