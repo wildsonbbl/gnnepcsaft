@@ -4,6 +4,7 @@ import os
 import os.path as osp
 from functools import partial
 from tempfile import TemporaryDirectory
+from typing import Any
 
 import lightning as L
 import ml_collections
@@ -24,12 +25,23 @@ from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import BaseTransform
 
 from .utils import build_test_dataset, build_train_dataset, calc_deg, create_model
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
 # os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
+
+
+# taking vp data off for performance boost
+class VpOff(BaseTransform):
+    "take vp data off thermoml dataset"
+
+    def forward(self, data: Any) -> Any:
+
+        data.vp = torch.zeros(1, 5)
+        return data
 
 
 class CustomRayTrainReportCallback(Callback):
@@ -113,7 +125,9 @@ def tune_training(
 
     # Dataset building
     train_dataset = build_train_dataset(workdir, dataset)
-    tml_dataset, para_data = build_test_dataset(workdir, train_dataset)
+    tml_dataset, para_data = build_test_dataset(
+        workdir, train_dataset, transform=VpOff()
+    )
     test_idx = []
     val_idx = []
     # separate test and val dataset
@@ -124,9 +138,6 @@ def tune_training(
             test_idx.append(idx)
     # test_dataset = tml_dataset[test_idx]
     val_dataset = tml_dataset[val_idx]
-    # taking vp data off for performance boost
-    for graph in val_dataset:
-        graph.vp = torch.zeros(1, 5)
 
     train_loader = DataLoader(
         train_dataset,

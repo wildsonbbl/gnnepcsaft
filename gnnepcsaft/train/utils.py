@@ -1,4 +1,5 @@
 """Model with important functions to help model training"""
+
 import os.path as osp
 import time
 
@@ -271,9 +272,11 @@ def build_datasets_loaders(config, workdir, dataset):
     return train_loader, test_loader, para_data
 
 
-def build_test_dataset(workdir, train_dataset):
+def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
-    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+    test_loader = ThermoMLDataset(
+        osp.join(workdir, "data/thermoml"), transform=transform
+    )
 
     para_data = {}
     for graph in train_dataset:
@@ -282,14 +285,14 @@ def build_test_dataset(workdir, train_dataset):
     return test_loader, para_data
 
 
-def build_train_dataset(workdir, dataset):
+def build_train_dataset(workdir, dataset, transform=None):
     "Builds train dataset."
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = Ramirez(path)
+        train_dataset = Ramirez(path, transform=transform)
     elif dataset == "thermoml":
         path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path)
+        train_dataset = ThermoMLpara(path, transform=transform)
     else:
         raise ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
