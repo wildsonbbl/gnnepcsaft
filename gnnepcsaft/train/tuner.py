@@ -163,6 +163,7 @@ def tune_training(
         callbacks=[CustomRayTrainReportCallback()],
         plugins=[RayLightningEnvironment()],
         enable_progress_bar=False,
+        enable_checkpointing=False,
     )
     trainer: L.Trainer = prepare_trainer(trainer)
 
