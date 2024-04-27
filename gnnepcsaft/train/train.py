@@ -324,7 +324,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         # Track hyperparameters and run metadata
         config=config.to_dict(),
         group=dataset,
-        tags=[dataset, "train"],
+        tags=[dataset, "train", config.model_name],
         job_type="train",
     )
 
