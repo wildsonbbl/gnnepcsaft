@@ -35,6 +35,7 @@ os.environ["WANDB_SILENT"] = "true"
 
 
 # taking vp data off for performance boost
+# pylint: disable=R0903
 class VpOff(BaseTransform):
     "take vp data off thermoml dataset"
 
