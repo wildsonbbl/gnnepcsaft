@@ -1,78 +1,29 @@
 """Module to be used for hyperparameter tuning"""
 
 import os
-import os.path as osp
 from functools import partial
-from tempfile import TemporaryDirectory
-from typing import Any
 
-import lightning as L
 import ml_collections
 import torch
 
 # import ray
 from absl import app, flags, logging
-from lightning.pytorch.callbacks import Callback
-from ml_collections import config_flags
 from ray import train, tune
 from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train import Checkpoint
-from ray.train.lightning import RayDDPStrategy, RayLightningEnvironment, prepare_trainer
 from ray.train.torch import TorchTrainer
-from ray.tune import JupyterNotebookReporter
 from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
-from torch_geometric.loader import DataLoader
-from torch_geometric.transforms import BaseTransform
 
-from .utils import build_test_dataset, build_train_dataset, calc_deg, create_model
+from .train import ltrain_and_evaluate
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
 # os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 
 
-# taking vp data off for performance boost
-# pylint: disable=R0903
-class VpOff(BaseTransform):
-    "take vp data off thermoml dataset"
-
-    def forward(self, data: Any) -> Any:
-
-        data.vp = torch.zeros(1, 5)
-        return data
-
-
-class CustomRayTrainReportCallback(Callback):
-    "Custom ray tuner checkpoint."
-
-    def on_validation_end(self, trainer, pl_module):
-
-        with TemporaryDirectory() as tmpdir:
-            # Fetch metrics
-            metrics = trainer.callback_metrics
-            metrics = {k: v.item() for k, v in metrics.items()}
-
-            # Add customized metrics
-            metrics["epoch"] = trainer.current_epoch
-            metrics["step"] = trainer.global_step
-
-            checkpoint = None
-            global_rank = train.get_context().get_world_rank()
-            if global_rank == 0:
-                # Save model checkpoint file to tmpdir
-                ckpt_path = os.path.join(tmpdir, "ckpt.pt")
-                trainer.save_checkpoint(ckpt_path, weights_only=False)
-
-                checkpoint = Checkpoint.from_directory(tmpdir)
-
-            # Report to train session
-            train.report(metrics=metrics, checkpoint=checkpoint)
-
-
-class TrialTerminationReporter(JupyterNotebookReporter):
+class TrialTerminationReporter(tune.JupyterNotebookReporter):
     """Reporter for ray to report only when trial is terminated"""
 
     def __init__(self):
@@ -103,8 +54,6 @@ class CustomStopper(tune.Stopper):
         return False
 
 
-# pylint: disable=R0914
-# pylint: disable=R0915
 def tune_training(
     config_tuner: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
 ):
@@ -124,68 +73,11 @@ def tune_training(
     config.skip_connections = config_tuner["skip_connections"]
     config.add_self_loops = config_tuner["add_self_loops"]
 
-    # Dataset building
-    train_dataset = build_train_dataset(workdir, dataset)
-    tml_dataset, para_data = build_test_dataset(
-        workdir, train_dataset, transform=VpOff()
-    )
-    test_idx = []
-    val_idx = []
-    # separate test and val dataset
-    for idx, graph in enumerate(tml_dataset):
-        if graph.InChI in para_data:
-            val_idx.append(idx)
-        else:
-            test_idx.append(idx)
-    # test_dataset = tml_dataset[test_idx]
-    val_dataset = tml_dataset[val_idx]
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-        num_workers=os.cpu_count(),
-    )
-
-    # creating model from config
-    deg = calc_deg(dataset, workdir)
-    model = create_model(config, deg)
-
-    # creating Lighting trainer function
-    trainer = L.Trainer(
-        devices="auto",
-        accelerator="auto",
-        strategy=RayDDPStrategy(),
-        max_steps=config.num_train_steps,
-        val_check_interval=config.log_every_steps,
-        check_val_every_n_epoch=None,
-        num_sanity_val_steps=0,
-        callbacks=[CustomRayTrainReportCallback()],
-        plugins=[RayLightningEnvironment()],
-        enable_progress_bar=False,
-        enable_checkpointing=False,
-    )
-    trainer: L.Trainer = prepare_trainer(trainer)
-
-    checkpoint: Checkpoint = train.get_checkpoint()
-    ckpt_path = None
-    if checkpoint:
-        with checkpoint.as_directory() as ckpt_dir:
-            ckpt_path = osp.join(ckpt_dir, "ckpt.pt")
-
-    # training run
-    trainer.fit(
-        model,
-        train_loader,
-        val_dataset,
-        ckpt_path=ckpt_path,
-    )
+    ltrain_and_evaluate(config, workdir, dataset)
 
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string("workdir", None, "Working Directory.")
-flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_list("tags", [], "wandb tags")
 flags.DEFINE_string(
     "restoredir",
@@ -207,12 +99,6 @@ flags.DEFINE_float(
     3600,
     "Global time budget in seconds after which all trials are stopped",
 )
-config_flags.DEFINE_config_file(
-    "config",
-    None,
-    "File path to the training hyperparameter configuration.",
-    lock_config=True,
-)
 
 
 def main(argv):
@@ -221,6 +107,7 @@ def main(argv):
         raise app.UsageError("Too many command-line arguments.")
 
     logging.info("Calling tuner!")
+    torch.set_float32_matmul_precision("medium")
 
     ptrain = partial(
         tune_training,
@@ -240,7 +127,7 @@ def main(argv):
         "skip_connections": tune.choice([True, False]),
         "add_self_loops": tune.choice([True, False]),
     }
-    max_t = config.num_train_steps // config.log_every_steps - 1
+    max_t = config.num_train_steps // config.eval_every_steps
     # BOHB search algorithm
     search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
     if FLAGS.restoredir:
@@ -258,13 +145,11 @@ def main(argv):
     # stopper = CustomStopper(max_t)
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
-    resources_per_worker = {"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus}
-    trainer_resources = {"CPU": FLAGS.num_cpu_trainer}
     scaling_config = train.ScalingConfig(
         num_workers=1,
         use_gpu=True,
-        resources_per_worker=resources_per_worker,
-        trainer_resources=trainer_resources,
+        resources_per_worker={"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus},
+        trainer_resources={"CPU": FLAGS.num_cpu_trainer},
     )
     run_config = train.RunConfig(
         name="gnnpcsaft",

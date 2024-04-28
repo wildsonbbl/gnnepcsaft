@@ -6,6 +6,7 @@ import ml_collections
 def get_config():
     """Get the default hyperparameter configuration."""
     config = ml_collections.ConfigDict()
+    config.job_type = "train"
 
     # Optimizer.
     config.optimizer = "adam"
