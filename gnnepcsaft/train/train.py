@@ -352,10 +352,11 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         trainer: L.Trainer = prepare_trainer(trainer)
 
         checkpoint: Checkpoint = train.get_checkpoint()
+        trial_id = train.get_context().get_trial_id()
 
         if checkpoint:
             with checkpoint.as_directory() as ckpt_dir:
-                ckpt_path = osp.join(ckpt_dir, "ckpt.pt")
+                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.pt")
     elif config.checkpoint:
         ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
 

@@ -386,9 +386,10 @@ class CustomRayTrainReportCallback(Callback):
 
             checkpoint = None
             global_rank = train.get_context().get_world_rank()
+            trial_id = train.get_context().get_trial_id()
             if global_rank == 0:
                 # Save model checkpoint file to tmpdir
-                ckpt_path = osp.join(tmpdir, "ckpt.pt")
+                ckpt_path = osp.join(tmpdir, f"{trial_id}.pt")
                 trainer.save_checkpoint(ckpt_path, weights_only=False)
 
                 checkpoint = Checkpoint.from_directory(tmpdir)
