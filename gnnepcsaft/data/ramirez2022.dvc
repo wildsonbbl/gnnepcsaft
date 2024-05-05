@@ -1,6 +1,5 @@
 outs:
-- md5: 67a1501d2f5b0ffa0e1e5548b9a0f76c.dir
-  size: 3180439
+- md5: 22ca8d3a4afc75ef66c1fae8cfcee2dc.dir
   nfiles: 4
   hash: md5
   path: ramirez2022
