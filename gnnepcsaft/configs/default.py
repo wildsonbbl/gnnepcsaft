@@ -18,11 +18,11 @@ def get_config():
 
     config.batch_size = 512
     config.pad_size = 128
-    config.num_train_steps = 100_000
+    config.num_train_steps = 50_000
     config.warmup_steps = 100
     config.log_every_steps = 5000
     config.eval_every_steps = 25000
-    config.checkpoint_every_steps = 25000
+    config.checkpoint_every_steps = 25001
     config.amp = False
     config.momentum = 0.9
     config.patience = 5
@@ -31,9 +31,9 @@ def get_config():
     config.checkpoint = False
 
     # GNN hyperparameters.
-    config.model_name = "model7"
+    config.model_name = "model8"
     config.model = "PNAL"
-    config.propagation_depth = 6
+    config.propagation_depth = 3
     config.hidden_dim = 64
     config.pre_layers = 2
     config.post_layers = 1
