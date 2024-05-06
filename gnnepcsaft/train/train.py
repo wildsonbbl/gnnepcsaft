@@ -326,9 +326,11 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     if job_type == "train":
         strategy = "auto"
         plugins = None
+        enable_checkpointing = True
     else:
         strategy = RayDDPStrategy()
         plugins = [RayLightningEnvironment()]
+        enable_checkpointing = False
 
     # creating Lighting trainer function
     trainer = L.Trainer(
@@ -344,7 +346,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         logger=logger,
         plugins=plugins,
         enable_progress_bar=False,
-        enable_checkpointing=False,
+        enable_checkpointing=enable_checkpointing,
     )
 
     ckpt_path = None
