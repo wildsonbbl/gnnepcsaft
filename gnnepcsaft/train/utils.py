@@ -2,6 +2,8 @@
 
 import os.path as osp
 import time
+from tempfile import TemporaryDirectory
+from typing import Any
 
 import ml_collections
 import numpy as np
@@ -14,8 +16,11 @@ from pcsaft import (  # pylint: disable = no-name-in-module
     flashTQ,
     pcsaft_den,
 )
+from ray import train
+from ray.train import Checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
 from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
@@ -352,3 +357,42 @@ class EpochTimer(Callback):
         logging.log_first_n(
             logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
         )
+
+
+# taking vp data off for performance boost
+# pylint: disable=R0903
+class VpOff(BaseTransform):
+    "take vp data off thermoml dataset"
+
+    def forward(self, data: Any) -> Any:
+
+        data.vp = torch.zeros(1, 5)
+        return data
+
+
+class CustomRayTrainReportCallback(Callback):
+    "Custom ray tuner checkpoint."
+
+    def on_validation_end(self, trainer, pl_module):
+
+        with TemporaryDirectory() as tmpdir:
+            # Fetch metrics
+            metrics = trainer.callback_metrics
+            metrics = {k: v.item() for k, v in metrics.items()}
+
+            # Add customized metrics
+            metrics["epoch"] = trainer.current_epoch
+            metrics["step"] = trainer.global_step
+
+            checkpoint = None
+            global_rank = train.get_context().get_world_rank()
+            trial_id = train.get_context().get_trial_id()
+            if global_rank == 0:
+                # Save model checkpoint file to tmpdir
+                ckpt_path = osp.join(tmpdir, f"{trial_id}.pt")
+                trainer.save_checkpoint(ckpt_path, weights_only=False)
+
+                checkpoint = Checkpoint.from_directory(tmpdir)
+
+            # Report to train session
+            train.report(metrics=metrics, checkpoint=checkpoint)
