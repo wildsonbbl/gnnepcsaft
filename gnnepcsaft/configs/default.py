@@ -18,17 +18,17 @@ def get_config():
 
     config.batch_size = 512
     config.pad_size = 128
-    config.num_train_steps = 50_000
+    config.num_train_steps = 500_000
     config.warmup_steps = 100
-    config.log_every_steps = 5000
-    config.eval_every_steps = 25000
-    config.checkpoint_every_steps = 25001
+    config.log_every_steps = 10_000
+    config.eval_every_steps = 24_999
+    config.checkpoint_every_steps = 25000
     config.amp = False
     config.momentum = 0.9
     config.patience = 5
     config.weight_decay = 1e-2
     config.dataset = "ramirez"
-    config.checkpoint = False
+    config.checkpoint = "model8-epoch=12499-train_mape=0.0095.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "model8"
