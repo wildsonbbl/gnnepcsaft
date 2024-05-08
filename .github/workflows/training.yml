@@ -1,0 +1,36 @@
+name: Training run on kaggle
+
+on:
+  push:
+    branches:
+      - experiments
+    paths:
+      - "**default.py"
+env:
+  KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+  KAGGLE_KEY: ${{ secrets.KAGGLE_SECRET }}
+
+jobs:
+  train-run:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install kaggle
+      - name: Checking my kaggle kernels
+        run: kaggle kernels list -m
+      - name: Changing kernel metadata
+        run: sed -i "s/kaggle_user_to_replace/${{ secrets.KAGGLE_USERNAME }}/g" kernel-metadata.json
+      - name: Push kernel for running
+        run: kaggle kernels push -p .
+      - name: Check kernel status
+        run: kaggle kernels status ${{ secrets.KAGGLE_USERNAME }}/training

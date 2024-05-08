@@ -1,0 +1,36 @@
+name: Pylint
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "**.py"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pylint wheel
+          python -m pip install -r requirements.txt
+          curl -O -L https://gitlab.com/libeigen/eigen/-/archive/master/eigen-master.zip
+          curl -O -L https://github.com/zmeri/PC-SAFT/archive/refs/tags/v1.4.1.zip
+          unzip -q eigen-master.zip
+          unzip -q v1.4.1.zip
+          cp -rf eigen-master/. PC-SAFT-1.4.1/externals/eigen
+          python -m pip install ./PC-SAFT-1.4.1 --no-build-isolation
+          rm -rf PC-SAFT* eigen-master* v1.4.1.zip
+      - name: Analysing the code with pylint
+        run: |
+          pylint $(git ls-files '*.py') --rcfile=.pylintrc
