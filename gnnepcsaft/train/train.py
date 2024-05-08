@@ -395,7 +395,6 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_bool("lightning", False, "Training run with pytorch lighting.")
-flags.DEFINE_string("device", "gpu", "Device to run training.")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -413,9 +412,7 @@ def main(argv):
     torch.set_float32_matmul_precision("medium")
 
     if FLAGS.lightning:
-        config = FLAGS.config
-        config.accelerator = FLAGS.device
-        ltrain_and_evaluate(config, FLAGS.workdir, FLAGS.dataset)
+        ltrain_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
     else:
         train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
 

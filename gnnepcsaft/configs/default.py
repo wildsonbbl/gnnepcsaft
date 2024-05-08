@@ -16,6 +16,7 @@ def get_config():
 
     # Training hyperparameters.
 
+    config.accelerator = "gpu"
     config.batch_size = 512
     config.pad_size = 128
     config.num_train_steps = 500_000
