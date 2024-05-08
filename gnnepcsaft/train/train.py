@@ -335,7 +335,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     # creating Lighting trainer function
     trainer = L.Trainer(
         devices="auto",
-        accelerator="auto",
+        accelerator=config.accelerator,
         strategy=strategy,
         max_steps=config.num_train_steps,
         log_every_n_steps=config.log_every_steps,
@@ -413,7 +413,9 @@ def main(argv):
     torch.set_float32_matmul_precision("medium")
 
     if FLAGS.lightning:
-        ltrain_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+        config = FLAGS.config
+        config.accelerator = FLAGS.device
+        ltrain_and_evaluate(config, FLAGS.workdir, FLAGS.dataset)
     else:
         train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
 
