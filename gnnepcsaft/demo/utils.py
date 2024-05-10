@@ -1,6 +1,8 @@
 """Module for functions used in model demonstration."""
+
 import os
 import os.path as osp
+from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +13,7 @@ from rdkit import Chem
 from ..configs.default import get_config
 from ..data.graph import from_InChI, from_smiles
 from ..data.graphdataset import Ramirez, ThermoMLDataset
-from ..train.models import PNAPCSAFT
+from ..train.models import PNAPCSAFT, PNApcsaftL
 from ..train.utils import mape, rhovp_data
 
 sns.set_theme(style="ticks")
@@ -37,12 +39,12 @@ testloader = ThermoMLDataset(osp.join(real_path, "../data/thermoml"))
 device = torch.device("cpu")
 
 
-def loadckp(ckp_path: str, model: PNAPCSAFT):
+def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
     """Loads save checkpoint."""
     if osp.exists(ckp_path):
+        state = "model_state_dict" if isinstance(model, PNAPCSAFT) else "state_dict"
         checkpoint = torch.load(ckp_path, map_location=torch.device("cpu"))
-        model.load_state_dict(checkpoint["model_state_dict"])
-        print(f"model checkpoint step {checkpoint['step']}")
+        model.load_state_dict(checkpoint[state])
         del checkpoint
 
 

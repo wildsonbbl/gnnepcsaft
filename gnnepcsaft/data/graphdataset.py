@@ -68,7 +68,8 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in data_dict:
             try:
                 graph = from_InChI(inchi)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
+                print(f"Error for InChI: {inchi}\n\n", e, "\n\n")
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
