@@ -171,10 +171,9 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
             p = state[1]
             phase = "liq" if state[2] == 1 else "vap"
             params = {"m": m, "s": s, "e": e}
-            weight = 0.1 if p < 10000 else 1.0
             try:
                 vp, _, _ = flashTQ(t, 0, x, params, p)
-                pred_mape += [np.abs((state[-1] - vp) / state[-1]) * weight]
+                pred_mape += [np.abs((state[-1] - vp) / state[-1])]
             except SolutionError:
                 pass
 

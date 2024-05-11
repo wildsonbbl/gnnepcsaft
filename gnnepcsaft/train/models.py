@@ -233,10 +233,8 @@ class PNApcsaftL(L.LightningModule):
             result_filter = ~torch.isnan(pred)
             # pylint: disable = not-callable
             loss_mape = mape(pred[result_filter], target[result_filter])
-            if torch.max(target).item() < 10000:
-                loss_mape *= 0.1
             loss_huber = hloss(pred[result_filter], target[result_filter])
-            if loss_mape.item() < 0.9:
+            if loss_mape.item() < 0.5:
                 mape_vp = loss_mape.item()
                 huber_vp = loss_huber.item()
                 metrics_dict.update(
