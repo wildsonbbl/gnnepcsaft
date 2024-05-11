@@ -142,19 +142,16 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    m = parameters[0]
-    s = parameters[1]
-    e = parameters[2]
-    pred_mape = 0.0
-
+    params = {"m": parameters[0], "s": parameters[1], "e": parameters[2]}
+    x = np.asarray([1.0])
+    pred_mape = [0.0]
     if ~np.all(rho == np.zeros_like(rho)):
         pred_mape = []
         for state in rho:
-            x = np.asarray([1.0])
             t = state[0]
             p = state[1]
             phase = "liq" if state[2] == 1 else "vap"
-            params = {"m": m, "s": s, "e": e}
+
             den = pcsaft_den(t, p, x, params, phase=phase)
             pred_mape += [np.abs((state[-1] - den) / state[-1])]
 
@@ -162,18 +159,19 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if mean:
         den = den.mean()
 
-    pred_mape = 0.0
+    pred_mape = [0.0]
     if ~np.all(vp == np.zeros_like(vp)):
         pred_mape = []
         for state in vp:
-            x = np.asarray([1.0])
             t = state[0]
             p = state[1]
             phase = "liq" if state[2] == 1 else "vap"
-            params = {"m": m, "s": s, "e": e}
             try:
                 vp, _, _ = flashTQ(t, 0, x, params, p)
-                pred_mape += [np.abs((state[-1] - vp) / state[-1])]
+                mape_vp = np.abs((state[-1] - vp) / state[-1])
+                if mape_vp > 1:
+                    pass
+                pred_mape += [mape_vp]
             except SolutionError:
                 pass
 
