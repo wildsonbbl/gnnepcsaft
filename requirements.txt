@@ -20,3 +20,4 @@ hpbandster
 ConfigSpace
 ray[train]
 ray[tune]
+wheel
