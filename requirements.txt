@@ -10,6 +10,7 @@ polars
 rdkit
 scipy
 torch
+torch-scatter
 torch_geometric
 torchmetrics
 wandb
