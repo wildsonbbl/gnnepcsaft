@@ -170,7 +170,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
                 vp, _, _ = flashTQ(t, 0, x, params, p)
                 mape_vp = np.abs((state[-1] - vp) / state[-1])
                 if mape_vp > 1:
-                    pass
+                    continue
                 pred_mape += [mape_vp]
             except SolutionError:
                 pass
