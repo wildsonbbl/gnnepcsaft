@@ -335,7 +335,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     # creating Lighting trainer function
     trainer = L.Trainer(
         devices="auto",
-        accelerator="auto",
+        accelerator=config.accelerator,
         strategy=strategy,
         max_steps=config.num_train_steps,
         log_every_n_steps=config.log_every_steps,
@@ -395,7 +395,6 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_bool("lightning", False, "Training run with pytorch lighting.")
-flags.DEFINE_string("device", "gpu", "Device to run training.")
 config_flags.DEFINE_config_file(
     "config",
     None,

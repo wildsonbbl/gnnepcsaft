@@ -55,7 +55,9 @@ class ThermoMLDataset(InMemoryDataset):
         return ["tml_graph_data.pt"]
 
     def download(self):
-        return print("no url to download from")
+        raise ValueError(
+            f"No url to download from. Provide data at {self.raw_paths[0]}."
+        )
 
     def process(self):
         datalist = []
@@ -66,7 +68,8 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in data_dict:
             try:
                 graph = from_InChI(inchi)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
+                print(f"Error for InChI: {inchi}\n\n", e, "\n\n")
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
@@ -225,7 +228,9 @@ class Ramirez(InMemoryDataset):
         return ["ra_graph_data.pt"]
 
     def download(self):
-        return print("no url to download from")
+        raise ValueError(
+            f"No url to download from. Provide data at {self.raw_paths[0]}."
+        )
 
     def process(self):
         datalist = []
@@ -236,7 +241,8 @@ class Ramirez(InMemoryDataset):
             para = row[3:6]
             try:
                 graph = from_InChI(inchi)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
+                print(f"Error for InChI: {inchi}\n\n", e, "\n\n")
                 continue
 
             graph.para = torch.tensor(para)
@@ -285,7 +291,9 @@ class ThermoMLpara(InMemoryDataset):
         return ["tml_para_graph_data.pt"]
 
     def download(self):
-        return print("no url to download from")
+        raise ValueError(
+            f"No url to download from. Provide data at {self.raw_paths[0]}."
+        )
 
     def process(self):
         datalist = []

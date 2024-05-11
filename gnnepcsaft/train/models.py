@@ -234,7 +234,7 @@ class PNApcsaftL(L.LightningModule):
             # pylint: disable = not-callable
             loss_mape = mape(pred[result_filter], target[result_filter])
             loss_huber = hloss(pred[result_filter], target[result_filter])
-            if loss_mape.item() < 0.9:
+            if loss_mape.item() < 0.5:
                 mape_vp = loss_mape.item()
                 huber_vp = loss_huber.item()
                 metrics_dict.update(

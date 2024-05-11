@@ -1,4 +1,5 @@
 """Module to be used for ThermoML Archive dataset building"""
+
 import os.path as osp
 import pickle
 from urllib.parse import quote
@@ -126,7 +127,9 @@ def main(argv):
     logging.info("Calling preprocess!")
 
     puretmldataset(osp.join(FLAGS.root, "thermoml/raw/pure.parquet"), FLAGS.save_dir)
+    logging.info("Pure TML dataset preprocessed!")
     ramirez(osp.join(FLAGS.root, "ramirez2022/raw/RAMIREZ2022.csv"), FLAGS.save_dir)
+    logging.info("Ramírez-Vélez dataset preprocessed!")
 
 
 if __name__ == "__main__":
