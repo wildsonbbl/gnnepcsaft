@@ -16,6 +16,7 @@ from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 
+from .search_space import get_search_space
 from .train import ltrain_and_evaluate
 
 os.environ["WANDB_SILENT"] = "true"
@@ -118,15 +119,7 @@ def main(argv):
 
     config = FLAGS.config
     # Hyperparameter search space
-    search_space = {
-        "propagation_depth": tune.choice([3, 4, 5, 6]),
-        "hidden_dim": tune.choice([64, 128, 256]),
-        "num_mlp_layers": tune.choice([0, 1, 2]),
-        "pre_layers": tune.choice([1, 2]),
-        "post_layers": tune.choice([1, 2]),
-        "skip_connections": tune.choice([True, False]),
-        "add_self_loops": tune.choice([True, False]),
-    }
+    search_space = get_search_space()
     max_t = config.num_train_steps // config.eval_every_steps
     # BOHB search algorithm
     search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
