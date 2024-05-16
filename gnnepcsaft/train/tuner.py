@@ -79,17 +79,12 @@ def tune_training(
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_list("tags", [], "wandb tags")
 flags.DEFINE_string(
     "restoredir",
     None,
     "Directory path to restore the state of a searcher from previous tuning results",
 )
 flags.DEFINE_string("resumedir", None, "Directory path to resume unfinished tuning")
-flags.DEFINE_integer("verbose", 0, "Ray tune verbose")
-flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
-flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
-flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
 flags.DEFINE_integer(
     "max_concurrent", 4, "Maximum concurrent samples from the underlying searcher."
 )
@@ -139,7 +134,7 @@ def main(argv):
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
     scaling_config = train.ScalingConfig(
-        num_workers=1,
+        num_workers=FLAGS.num_workers,
         use_gpu=True,
         resources_per_worker={"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus},
         trainer_resources={"CPU": FLAGS.num_cpu_trainer},
