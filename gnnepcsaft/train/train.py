@@ -13,13 +13,16 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from ml_collections import config_flags
 from ray import train
+from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import Checkpoint
 from ray.train.lightning import RayDDPStrategy, RayLightningEnvironment, prepare_trainer
+from ray.train.torch import TorchTrainer
 from torch.nn import HuberLoss
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
+from ..configs.configs_parallel import get_configs
 from ..epcsaft import epcsaft_cython
 from .utils import (
     CustomRayTrainReportCallback,
@@ -390,11 +393,79 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         wandb.finish()
 
 
+def training_parallel(train_loop_config: dict):
+    """Execute model training and evaluation loop in parallel.
+
+    Args:
+      config: Hyperparameter configuration for training and evaluation.
+      workdir: Working Directory.
+      dataset: dataset name (ramirez or thermoml)
+    """
+    config = FLAGS.config
+    local_rank = train.get_context().get_local_rank()
+    train_config = train_loop_config[local_rank]
+    # selected hyperparameters to test
+    config.propagation_depth = train_config["propagation_depth"]
+    config.hidden_dim = train_config["hidden_dim"]
+    config.num_mlp_layers = train_config["num_mlp_layers"]
+    config.pre_layers = train_config["pre_layers"]
+    config.post_layers = train_config["post_layers"]
+    config.skip_connections = train_config["skip_connections"]
+    config.add_self_loops = train_config["add_self_loops"]
+
+    ltrain_and_evaluate(config, FLAGS.workdir, FLAGS.dataset)
+
+
+def torch_trainer(train_loop_config: dict):
+    """
+    Builds torch trainer from ray train to run training in parallel.
+    """
+    scaling_config = train.ScalingConfig(
+        num_workers=FLAGS.num_workers,
+        use_gpu=True,
+        resources_per_worker={"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus},
+        trainer_resources={"CPU": FLAGS.num_cpu_trainer},
+    )
+    run_config = train.RunConfig(
+        name="gnnpcsaft",
+        storage_path=osp.join(FLAGS.workdir, "train/checkpoints"),
+        verbose=FLAGS.verbose,
+        checkpoint_config=train.CheckpointConfig(
+            num_to_keep=1,
+        ),
+        progress_reporter=None,
+        log_to_file=True,
+        stop=None,
+        callbacks=[
+            WandbLoggerCallback(
+                "gnn-pc-saft",
+                FLAGS.dataset,
+                tags=["training", FLAGS.dataset] + FLAGS.tags,
+            )
+        ],
+    )
+
+    return TorchTrainer(
+        training_parallel,
+        train_loop_config=train_loop_config,
+        scaling_config=scaling_config,
+        run_config=run_config,
+    )
+
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
-flags.DEFINE_bool("lightning", False, "Training run with pytorch lighting.")
+flags.DEFINE_string(
+    "framework", "lightning", "Define framework to run: pytorch, lightning or ray."
+)
+flags.DEFINE_list("tags", [], "wandb tags")
+flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
+flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
+flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
+flags.DEFINE_integer("num_workers", 1, "number of workers")
+flags.DEFINE_integer("verbose", 0, "Ray train verbose")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -411,8 +482,18 @@ def main(argv):
     logging.info("Calling train and evaluate!")
     torch.set_float32_matmul_precision("medium")
 
-    if FLAGS.lightning:
+    if FLAGS.framework == "lightning":
         ltrain_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+    elif FLAGS.framework == "ray":
+        test_configs = get_configs()
+        train_loop_config = {
+            local_rank: test_configs[local_rank]
+            for local_rank in range(FLAGS.num_workers)
+        }
+        trainer = torch_trainer(train_loop_config)
+
+        result = trainer.fit()
+        print(result.metrics_dataframe)
     else:
         train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
 
