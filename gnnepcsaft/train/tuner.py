@@ -1,15 +1,12 @@
 """Module to be used for hyperparameter tuning"""
 
 import os
-from functools import partial
 
-import ml_collections
 import torch
 
 # import ray
 from absl import app, flags, logging
-from ray import train, tune
-from ray.air.integrations.wandb import WandbLoggerCallback
+from ray import tune
 from ray.train.torch import TorchTrainer
 from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import HyperBandForBOHB
@@ -17,7 +14,7 @@ from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 
 from .search_space import get_search_space
-from .train import ltrain_and_evaluate
+from .train import torch_trainer_config, training_updated
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
@@ -55,28 +52,6 @@ class CustomStopper(tune.Stopper):
         return False
 
 
-def tune_training(
-    config_tuner: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
-):
-    """Execute model training and evaluation loop.
-
-    Args:
-      config: Hyperparameter configuration for training and evaluation.
-      workdir: Working Directory.
-      dataset: dataset name (ramirez or thermoml)
-    """
-    # selected hyperparameters to test
-    config.propagation_depth = config_tuner["propagation_depth"]
-    config.hidden_dim = config_tuner["hidden_dim"]
-    config.num_mlp_layers = config_tuner["num_mlp_layers"]
-    config.pre_layers = config_tuner["pre_layers"]
-    config.post_layers = config_tuner["post_layers"]
-    config.skip_connections = config_tuner["skip_connections"]
-    config.add_self_loops = config_tuner["add_self_loops"]
-
-    ltrain_and_evaluate(config, workdir, dataset)
-
-
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
@@ -105,13 +80,6 @@ def main(argv):
     logging.info("Calling tuner!")
     torch.set_float32_matmul_precision("medium")
 
-    ptrain = partial(
-        tune_training,
-        config=FLAGS.config,
-        workdir=FLAGS.workdir,
-        dataset=FLAGS.dataset,
-    )
-
     config = FLAGS.config
     # Hyperparameter search space
     search_space = get_search_space()
@@ -133,33 +101,10 @@ def main(argv):
     # stopper = CustomStopper(max_t)
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
-    scaling_config = train.ScalingConfig(
-        num_workers=FLAGS.num_workers,
-        use_gpu=True,
-        resources_per_worker={"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus},
-        trainer_resources={"CPU": FLAGS.num_cpu_trainer},
-    )
-    run_config = train.RunConfig(
-        name="gnnpcsaft",
-        storage_path=None,
-        verbose=FLAGS.verbose,
-        checkpoint_config=train.CheckpointConfig(
-            num_to_keep=1,
-        ),
-        progress_reporter=None,
-        log_to_file=True,
-        stop=None,
-        callbacks=[
-            WandbLoggerCallback(
-                "gnn-pc-saft",
-                FLAGS.dataset,
-                tags=["tuning", FLAGS.dataset] + FLAGS.tags,
-            )
-        ],
-    )
+    scaling_config, run_config = torch_trainer_config()
 
     trainable = TorchTrainer(
-        ptrain, scaling_config=scaling_config, run_config=run_config
+        training_updated, scaling_config=scaling_config, run_config=run_config
     )
 
     if FLAGS.resumedir:

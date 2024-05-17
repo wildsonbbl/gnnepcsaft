@@ -397,14 +397,24 @@ def training_parallel(train_loop_config: dict):
     """Execute model training and evaluation loop in parallel.
 
     Args:
-      config: Hyperparameter configuration for training and evaluation.
-      workdir: Working Directory.
-      dataset: dataset name (ramirez or thermoml)
+      train_loop_config: Dict with hyperparameter configuration
+      for training and evaluation in each worker.
     """
-    config = FLAGS.config
+
     local_rank = train.get_context().get_local_rank()
     train_config = train_loop_config[local_rank]
     # selected hyperparameters to test
+    training_updated(train_config)
+
+
+def training_updated(train_config: dict):
+    """Execute model training and evaluation loop with updated config.
+
+    Args:
+      train_config: Updated hyperparameter configuration for training and evaluation.
+
+    """
+    config = FLAGS.config
     config.propagation_depth = train_config["propagation_depth"]
     config.hidden_dim = train_config["hidden_dim"]
     config.num_mlp_layers = train_config["num_mlp_layers"]
@@ -416,9 +426,9 @@ def training_parallel(train_loop_config: dict):
     ltrain_and_evaluate(config, FLAGS.workdir, FLAGS.dataset)
 
 
-def torch_trainer(train_loop_config: dict):
+def torch_trainer_config():
     """
-    Builds torch trainer from ray train to run training in parallel.
+    Builds torch trainer configs from ray train to run training in parallel.
     """
     scaling_config = train.ScalingConfig(
         num_workers=FLAGS.num_workers,
@@ -436,21 +446,20 @@ def torch_trainer(train_loop_config: dict):
         progress_reporter=None,
         log_to_file=True,
         stop=None,
-        callbacks=[
-            WandbLoggerCallback(
-                "gnn-pc-saft",
-                FLAGS.dataset,
-                tags=["training", FLAGS.dataset] + FLAGS.tags,
-            )
-        ],
+        callbacks=(
+            [
+                WandbLoggerCallback(
+                    "gnn-pc-saft",
+                    FLAGS.dataset,
+                    tags=["tuning", FLAGS.dataset] + FLAGS.tags,
+                )
+            ]
+            if FLAGS.config.job_type == "tuning"
+            else None
+        ),
     )
 
-    return TorchTrainer(
-        training_parallel,
-        train_loop_config=train_loop_config,
-        scaling_config=scaling_config,
-        run_config=run_config,
-    )
+    return scaling_config, run_config
 
 
 FLAGS = flags.FLAGS
@@ -490,7 +499,13 @@ def main(argv):
             local_rank: test_configs[local_rank]
             for local_rank in range(FLAGS.num_workers)
         }
-        trainer = torch_trainer(train_loop_config)
+        scaling_config, run_config = torch_trainer_config()
+        trainer = TorchTrainer(
+            training_parallel,
+            train_loop_config=train_loop_config,
+            scaling_config=scaling_config,
+            run_config=run_config,
+        )
 
         result = trainer.fit()
         print(result.metrics_dataframe)
