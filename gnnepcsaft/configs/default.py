@@ -29,7 +29,7 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-2
     config.dataset = "ramirez"
-    config.checkpoint = "model8-epoch=12499-train_mape=0.0095.ckpt"
+    config.checkpoint = None
 
     # GNN hyperparameters.
     config.model_name = "model8"

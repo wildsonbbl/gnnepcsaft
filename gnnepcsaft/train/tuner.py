@@ -1,6 +1,7 @@
 """Module to be used for hyperparameter tuning"""
 
 import os
+from functools import partial
 
 import torch
 
@@ -101,10 +102,27 @@ def main(argv):
     # stopper = CustomStopper(max_t)
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
-    scaling_config, run_config = torch_trainer_config()
+    scaling_config, run_config = torch_trainer_config(
+        FLAGS.num_workers,
+        FLAGS.num_cpu,
+        FLAGS.num_gpus,
+        FLAGS.num_cpu_trainer,
+        FLAGS.workdir,
+        FLAGS.verbose,
+        FLAGS.dataset,
+        FLAGS.config,
+        FLAGS.tags,
+    )
 
     trainable = TorchTrainer(
-        training_updated, scaling_config=scaling_config, run_config=run_config
+        partial(
+            training_updated,
+            config=FLAGS.config,
+            workdir=FLAGS.workdir,
+            dataset=FLAGS.dataset,
+        ),
+        scaling_config=scaling_config,
+        run_config=run_config,
     )
 
     if FLAGS.resumedir:

@@ -3,6 +3,7 @@
 import os
 import os.path as osp
 import time
+from functools import partial
 
 import lightning as L
 import ml_collections
@@ -393,7 +394,12 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         wandb.finish()
 
 
-def training_parallel(train_loop_config: dict):
+def training_parallel(
+    train_loop_config: dict,
+    config: ml_collections.ConfigDict,
+    workdir: str,
+    dataset: str,
+):
     """Execute model training and evaluation loop in parallel.
 
     Args:
@@ -404,17 +410,19 @@ def training_parallel(train_loop_config: dict):
     local_rank = train.get_context().get_local_rank()
     train_config = train_loop_config[local_rank]
     # selected hyperparameters to test
-    training_updated(train_config)
+    training_updated(train_config, config, workdir, dataset)
 
 
-def training_updated(train_config: dict):
+def training_updated(
+    train_config: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
+):
     """Execute model training and evaluation loop with updated config.
 
     Args:
       train_config: Updated hyperparameter configuration for training and evaluation.
 
     """
-    config = FLAGS.config
+
     config.propagation_depth = train_config["propagation_depth"]
     config.hidden_dim = train_config["hidden_dim"]
     config.num_mlp_layers = train_config["num_mlp_layers"]
@@ -423,23 +431,34 @@ def training_updated(train_config: dict):
     config.skip_connections = train_config["skip_connections"]
     config.add_self_loops = train_config["add_self_loops"]
 
-    ltrain_and_evaluate(config, FLAGS.workdir, FLAGS.dataset)
+    ltrain_and_evaluate(config, workdir, dataset)
 
 
-def torch_trainer_config():
+# pylint: disable=R0913
+def torch_trainer_config(
+    num_workers: int,
+    num_cpu: float,
+    num_gpus: float,
+    num_cpu_trainer: float,
+    workdir: str,
+    verbose: int,
+    dataset: str,
+    config: ml_collections.ConfigDict,
+    tags: list,
+):
     """
     Builds torch trainer configs from ray train to run training in parallel.
     """
     scaling_config = train.ScalingConfig(
-        num_workers=FLAGS.num_workers,
+        num_workers=num_workers,
         use_gpu=True,
-        resources_per_worker={"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus},
-        trainer_resources={"CPU": FLAGS.num_cpu_trainer},
+        resources_per_worker={"CPU": num_cpu, "GPU": num_gpus},
+        trainer_resources={"CPU": num_cpu_trainer},
     )
     run_config = train.RunConfig(
         name="gnnpcsaft",
-        storage_path=osp.join(FLAGS.workdir, "train/checkpoints"),
-        verbose=FLAGS.verbose,
+        storage_path=osp.join(workdir, "train/checkpoints"),
+        verbose=verbose,
         checkpoint_config=train.CheckpointConfig(
             num_to_keep=1,
         ),
@@ -450,11 +469,11 @@ def torch_trainer_config():
             [
                 WandbLoggerCallback(
                     "gnn-pc-saft",
-                    FLAGS.dataset,
-                    tags=["tuning", FLAGS.dataset] + FLAGS.tags,
+                    dataset,
+                    tags=["tuning", dataset] + tags,
                 )
             ]
-            if FLAGS.config.job_type == "tuning"
+            if config.job_type == "tuning"
             else None
         ),
     )
@@ -499,9 +518,24 @@ def main(argv):
             local_rank: test_configs[local_rank]
             for local_rank in range(FLAGS.num_workers)
         }
-        scaling_config, run_config = torch_trainer_config()
+        scaling_config, run_config = torch_trainer_config(
+            FLAGS.num_workers,
+            FLAGS.num_cpu,
+            FLAGS.num_gpus,
+            FLAGS.num_cpu_trainer,
+            FLAGS.workdir,
+            FLAGS.verbose,
+            FLAGS.dataset,
+            FLAGS.config,
+            FLAGS.tags,
+        )
         trainer = TorchTrainer(
-            training_parallel,
+            partial(
+                training_parallel,
+                config=FLAGS.config,
+                workdir=FLAGS.workdir,
+                dataset=FLAGS.dataset,
+            ),
             train_loop_config=train_loop_config,
             scaling_config=scaling_config,
             run_config=run_config,
