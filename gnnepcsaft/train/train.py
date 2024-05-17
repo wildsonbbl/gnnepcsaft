@@ -409,6 +409,7 @@ def training_parallel(
 
     local_rank = train.get_context().get_local_rank()
     train_config = train_loop_config[local_rank]
+    config.model_name = config.model_name + "_" + str(local_rank)
     # selected hyperparameters to test
     training_updated(train_config, config, workdir, dataset)
 
