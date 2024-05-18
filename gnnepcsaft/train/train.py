@@ -458,7 +458,7 @@ def torch_trainer_config(
     )
     run_config = train.RunConfig(
         name="gnnpcsaft",
-        storage_path=osp.join(workdir, "train/checkpoints"),
+        storage_path=None,
         verbose=verbose,
         checkpoint_config=train.CheckpointConfig(
             num_to_keep=1,
