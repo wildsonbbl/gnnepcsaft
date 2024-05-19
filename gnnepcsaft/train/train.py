@@ -407,7 +407,7 @@ def training_parallel(
       for training and evaluation in each worker.
     """
 
-    local_rank = train.get_context().get_local_rank()
+    local_rank = str(train.get_context().get_local_rank())
     train_config = train_loop_config[local_rank]
     config.model_name = config.model_name + "_" + str(local_rank)
     # selected hyperparameters to test
@@ -516,7 +516,7 @@ def main(argv):
     elif FLAGS.framework == "ray":
         test_configs = get_configs()
         train_loop_config = {
-            local_rank: test_configs[local_rank]
+            str(local_rank): test_configs[local_rank]
             for local_rank in range(FLAGS.num_workers)
         }
         scaling_config, run_config = torch_trainer_config(
