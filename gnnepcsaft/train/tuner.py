@@ -107,7 +107,6 @@ def main(argv):
         FLAGS.num_cpu,
         FLAGS.num_gpus,
         FLAGS.num_cpu_trainer,
-        FLAGS.workdir,
         FLAGS.verbose,
         FLAGS.dataset,
         FLAGS.config,
