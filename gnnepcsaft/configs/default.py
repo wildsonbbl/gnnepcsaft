@@ -32,7 +32,7 @@ def get_config():
     config.checkpoint = None
 
     # GNN hyperparameters.
-    config.model_name = "model8_1"
+    config.model_name = "model8_2"
     config.model = "PNAL"
     config.propagation_depth = 3
     config.hidden_dim = 64
