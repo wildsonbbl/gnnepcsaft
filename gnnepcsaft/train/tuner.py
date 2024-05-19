@@ -3,20 +3,19 @@
 import os
 from functools import partial
 
-import ml_collections
 import torch
 
 # import ray
 from absl import app, flags, logging
-from ray import train, tune
-from ray.air.integrations.wandb import WandbLoggerCallback
+from ray import tune
 from ray.train.torch import TorchTrainer
 from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 
-from .train import ltrain_and_evaluate
+from .search_space import get_search_space
+from .train import torch_trainer_config, training_updated
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
@@ -54,41 +53,14 @@ class CustomStopper(tune.Stopper):
         return False
 
 
-def tune_training(
-    config_tuner: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
-):
-    """Execute model training and evaluation loop.
-
-    Args:
-      config: Hyperparameter configuration for training and evaluation.
-      workdir: Working Directory.
-      dataset: dataset name (ramirez or thermoml)
-    """
-    # selected hyperparameters to test
-    config.propagation_depth = config_tuner["propagation_depth"]
-    config.hidden_dim = config_tuner["hidden_dim"]
-    config.num_mlp_layers = config_tuner["num_mlp_layers"]
-    config.pre_layers = config_tuner["pre_layers"]
-    config.post_layers = config_tuner["post_layers"]
-    config.skip_connections = config_tuner["skip_connections"]
-    config.add_self_loops = config_tuner["add_self_loops"]
-
-    ltrain_and_evaluate(config, workdir, dataset)
-
-
 FLAGS = flags.FLAGS
 
-flags.DEFINE_list("tags", [], "wandb tags")
 flags.DEFINE_string(
     "restoredir",
     None,
     "Directory path to restore the state of a searcher from previous tuning results",
 )
 flags.DEFINE_string("resumedir", None, "Directory path to resume unfinished tuning")
-flags.DEFINE_integer("verbose", 0, "Ray tune verbose")
-flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
-flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
-flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
 flags.DEFINE_integer(
     "max_concurrent", 4, "Maximum concurrent samples from the underlying searcher."
 )
@@ -109,24 +81,9 @@ def main(argv):
     logging.info("Calling tuner!")
     torch.set_float32_matmul_precision("medium")
 
-    ptrain = partial(
-        tune_training,
-        config=FLAGS.config,
-        workdir=FLAGS.workdir,
-        dataset=FLAGS.dataset,
-    )
-
     config = FLAGS.config
     # Hyperparameter search space
-    search_space = {
-        "propagation_depth": tune.choice([3, 4, 5, 6]),
-        "hidden_dim": tune.choice([64, 128, 256]),
-        "num_mlp_layers": tune.choice([0, 1, 2]),
-        "pre_layers": tune.choice([1, 2]),
-        "post_layers": tune.choice([1, 2]),
-        "skip_connections": tune.choice([True, False]),
-        "add_self_loops": tune.choice([True, False]),
-    }
+    search_space = get_search_space()
     max_t = config.num_train_steps // config.eval_every_steps
     # BOHB search algorithm
     search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
@@ -145,33 +102,26 @@ def main(argv):
     # stopper = CustomStopper(max_t)
 
     # ray.init(num_gpus=FLAGS.num_init_gpus)
-    scaling_config = train.ScalingConfig(
-        num_workers=1,
-        use_gpu=True,
-        resources_per_worker={"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus},
-        trainer_resources={"CPU": FLAGS.num_cpu_trainer},
-    )
-    run_config = train.RunConfig(
-        name="gnnpcsaft",
-        storage_path=None,
-        verbose=FLAGS.verbose,
-        checkpoint_config=train.CheckpointConfig(
-            num_to_keep=1,
-        ),
-        progress_reporter=None,
-        log_to_file=True,
-        stop=None,
-        callbacks=[
-            WandbLoggerCallback(
-                "gnn-pc-saft",
-                FLAGS.dataset,
-                tags=["tuning", FLAGS.dataset] + FLAGS.tags,
-            )
-        ],
+    scaling_config, run_config = torch_trainer_config(
+        FLAGS.num_workers,
+        FLAGS.num_cpu,
+        FLAGS.num_gpus,
+        FLAGS.num_cpu_trainer,
+        FLAGS.verbose,
+        FLAGS.dataset,
+        FLAGS.config,
+        FLAGS.tags,
     )
 
     trainable = TorchTrainer(
-        ptrain, scaling_config=scaling_config, run_config=run_config
+        partial(
+            training_updated,
+            config=FLAGS.config,
+            workdir=FLAGS.workdir,
+            dataset=FLAGS.dataset,
+        ),
+        scaling_config=scaling_config,
+        run_config=run_config,
     )
 
     if FLAGS.resumedir:

@@ -1,4 +1,4 @@
-absl_py
+absl-py
 Cython
 jax
 matplotlib
@@ -19,3 +19,4 @@ hpbandster
 ConfigSpace
 ray[train]
 ray[tune]
+wheel

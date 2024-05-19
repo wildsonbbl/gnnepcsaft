@@ -105,7 +105,7 @@ def pltline(x, y):
 
 def pltscatter(x, y):
     "Scatter plot."
-    return plt.scatter(x, y, marker="x", s=10)
+    return plt.scatter(x, y, marker="x", s=10, c="black")
 
 
 def plterr(x, y, m):
@@ -125,9 +125,9 @@ def pltcustom(ra, scale="linear", ylabel="", n=2):
     plt.xlabel("T (K)")
     plt.ylabel(ylabel)
     plt.title("")
-    legend = ["Pontos experimentais"]
+    legend = ["ThermoML Archive"]
     for i in range(1, n + 1):
-        legend += [f"Modelo {i}"]
+        legend += [f"GNNePCSAFT {i}"]
     if ra:
         legend += ["Ramírez-Vélez et al. (2022)"]
     plt.legend(legend, loc=(1.01, 0.75))
@@ -195,7 +195,7 @@ def plotden(inchi, molecule_name, models, data):
                 # plterr(x, y, mden_ra)
 
             # Customize the plot appearance
-            pltcustom(inchi in ra_para, "linear", "Densidade (mol / m³)", len(models))
+            pltcustom(inchi in ra_para, "linear", "Density (mol / m³)", len(models))
             img_path = osp.join("images", "den_" + molecule_name + ".png")
             plt.savefig(
                 img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
@@ -225,7 +225,7 @@ def plotvp(inchi, molecule_name, models, data):
             # plterr(x, y * 1.01, mvp_ra)
 
         # Customize the plot appearance
-        pltcustom(inchi in ra_para, "log", "Pressão de vapor (bar)", len(models))
+        pltcustom(inchi in ra_para, "log", "Vapor pressure (bar)", len(models))
 
         # Save the plot as a high-quality image file
         img_path = osp.join("images", "vp_" + molecule_name + ".png")

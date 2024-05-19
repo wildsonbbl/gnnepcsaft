@@ -19,7 +19,7 @@ def get_config():
     config.accelerator = "gpu"
     config.batch_size = 512
     config.pad_size = 128
-    config.num_train_steps = 400_000
+    config.num_train_steps = 130_000
     config.warmup_steps = 100
     config.log_every_steps = 10_000
     config.eval_every_steps = 24_999
@@ -29,10 +29,10 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-2
     config.dataset = "ramirez"
-    config.checkpoint = "model8-epoch=12499-train_mape=0.0095.ckpt"
+    config.checkpoint = None
 
     # GNN hyperparameters.
-    config.model_name = "model8"
+    config.model_name = "model8_1"
     config.model = "PNAL"
     config.propagation_depth = 3
     config.hidden_dim = 64
