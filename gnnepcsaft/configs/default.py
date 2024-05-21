@@ -11,7 +11,7 @@ def get_config():
     # Optimizer.
     config.optimizer = "sgd"
     config.learning_rate = 1.0e-5
-    config.change_opt = False
+    config.change_opt = True
     config.change_sch = False
 
     # Training hyperparameters.
