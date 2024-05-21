@@ -25,6 +25,7 @@ from torchmetrics import MeanAbsolutePercentageError
 
 from ..configs.configs_parallel import get_configs
 from ..epcsaft import epcsaft_cython
+from . import models
 from .utils import (
     CustomRayTrainReportCallback,
     EpochTimer,
@@ -365,6 +366,11 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
                 ckpt_path = osp.join(ckpt_dir, f"{trial_id}.pt")
     elif config.checkpoint:
         ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
+        if config.change_opt:
+            # pylint: disable=E1120
+            model = models.PNApcsaftL.load_from_checkpoint(ckpt_path)
+            # pylint: enable=E1120
+            ckpt_path = None
 
     # training run
     logging.info("Training run!")
