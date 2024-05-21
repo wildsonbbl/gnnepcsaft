@@ -325,7 +325,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
 
     # creating model from config
     deg = calc_deg(dataset, workdir)
-    model = create_model(config, deg)
+    model: models.PNApcsaftL = create_model(config, deg)
 
     # Trainer configs
     if job_type == "train":
@@ -368,7 +368,8 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
         if config.change_opt:
             # pylint: disable=E1120
-            model = models.PNApcsaftL.load_from_checkpoint(ckpt_path)
+            ckpt = torch.load(ckpt_path)
+            model = model.load_state_dict(ckpt)
             # pylint: enable=E1120
             ckpt_path = None
 
