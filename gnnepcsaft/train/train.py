@@ -369,7 +369,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         if config.change_opt:
             # pylint: disable=E1120
             ckpt = torch.load(ckpt_path)
-            model = model.load_state_dict(ckpt)
+            model.load_state_dict(ckpt["state_dict"])
             # pylint: enable=E1120
             ckpt_path = None
 
