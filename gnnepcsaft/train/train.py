@@ -25,6 +25,7 @@ from torchmetrics import MeanAbsolutePercentageError
 
 from ..configs.configs_parallel import get_configs
 from ..epcsaft import epcsaft_cython
+from . import models
 from .utils import (
     CustomRayTrainReportCallback,
     EpochTimer,
@@ -324,7 +325,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
 
     # creating model from config
     deg = calc_deg(dataset, workdir)
-    model = create_model(config, deg)
+    model: models.PNApcsaftL = create_model(config, deg)
 
     # Trainer configs
     if job_type == "train":
@@ -365,6 +366,12 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
                 ckpt_path = osp.join(ckpt_dir, f"{trial_id}.pt")
     elif config.checkpoint:
         ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
+        if config.change_opt:
+            # pylint: disable=E1120
+            ckpt = torch.load(ckpt_path)
+            model = model.load_state_dict(ckpt)
+            # pylint: enable=E1120
+            ckpt_path = None
 
     # training run
     logging.info("Training run!")
@@ -386,7 +393,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
             # Track hyperparameters and run metadata
             config=config.to_dict(),
             group=dataset,
-            tags=[dataset, "eval"],
+            tags=[dataset, "eval", config.model_name],
             job_type="eval",
         )
 

@@ -9,9 +9,9 @@ def get_config():
     config.job_type = "train"
 
     # Optimizer.
-    config.optimizer = "adam"
-    config.learning_rate = 1.0e-3
-    config.change_opt = False
+    config.optimizer = "sgd"
+    config.learning_rate = 1.0e-9
+    config.change_opt = True
     config.change_sch = False
 
     # Training hyperparameters.
@@ -19,7 +19,7 @@ def get_config():
     config.accelerator = "gpu"
     config.batch_size = 512
     config.pad_size = 128
-    config.num_train_steps = 130_000
+    config.num_train_steps = 250_000
     config.warmup_steps = 100
     config.log_every_steps = 10_000
     config.eval_every_steps = 24_999
@@ -29,10 +29,10 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-2
     config.dataset = "ramirez"
-    config.checkpoint = None
+    config.checkpoint = "model8_2_2-epoch=31249-mape_den=0.0172.ckpt"
 
     # GNN hyperparameters.
-    config.model_name = "model8_0"
+    config.model_name = "model8_2_2"
     config.model = "PNAL"
     config.propagation_depth = 3
     config.hidden_dim = 64
