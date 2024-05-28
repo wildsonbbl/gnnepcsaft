@@ -9,9 +9,9 @@ def get_config():
     config.job_type = "train"
 
     # Optimizer.
-    config.optimizer = "sgd"
-    config.learning_rate = 1.0e-9
-    config.change_opt = True
+    config.optimizer = "adam"
+    config.learning_rate = 1.0e-3
+    config.change_opt = False
     config.change_sch = False
 
     # Training hyperparameters.
@@ -34,12 +34,12 @@ def get_config():
     # GNN hyperparameters.
     config.model_name = "model8_2_2"
     config.model = "PNAL"
-    config.propagation_depth = 3
+    config.propagation_depth = 6
     config.hidden_dim = 64
-    config.pre_layers = 2
+    config.pre_layers = 1
     config.post_layers = 1
     config.dropout_rate = 0.0
-    config.num_mlp_layers = 0
+    config.num_mlp_layers = 1
     config.num_para = 3
     config.skip_connections = True
     config.add_self_loops = True
