@@ -9,7 +9,7 @@ def get_config():
     config.job_type = "train"
 
     # Optimizer.
-    config.optimizer = "sgd"
+    config.optimizer = "adam"
     config.learning_rate = 1.0e-3
     config.change_opt = False
     config.change_sch = False
@@ -29,10 +29,10 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-2
     config.dataset = "ramirez"
-    config.checkpoint = None
+    config.checkpoint = "model8_2_2-epoch=31249-mape_den=0.0172.ckpt"
 
     # GNN hyperparameters.
-    config.model_name = "model9"
+    config.model_name = "model8_2_2"
     config.model = "PNAL"
     config.propagation_depth = 6
     config.hidden_dim = 64
