@@ -478,7 +478,6 @@ def torch_trainer_config(
                     "gnn-pc-saft",
                     dataset,
                     tags=["tuning", dataset] + tags,
-                    config=config.to_dict(),
                 )
             ]
             if config.job_type == "tuning"
