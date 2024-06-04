@@ -138,7 +138,6 @@ def main(argv):
             trainable,
             param_space={
                 "train_loop_config": search_space,
-                "default": config.to_dict(),
             },
             tune_config=tune.TuneConfig(
                 search_alg=search_alg,
