@@ -8,7 +8,7 @@ Currently, the model takes in account only the hard-chain and dispersive terms o
 
 Code is being developed mainly in Pytorch (PYG) and secondarily in JAX (JRAPH).
 
-You can find the model deployed at [GNNePCSAFT app](https://gnnepcsaft.online/).
+You can find the model deployed at [GNNePCSAFT app](https://gnnepcsaft.wildsonbbl.com/).
 
 Use cases of this package are demonstrated in Jupyter Notebooks:
 

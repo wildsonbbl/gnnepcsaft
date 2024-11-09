@@ -1,6 +1,8 @@
 """Module for functions used in model demonstration."""
+
 import os
 import os.path as osp
+from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +13,7 @@ from rdkit import Chem
 from ..configs.default import get_config
 from ..data.graph import from_InChI, from_smiles
 from ..data.graphdataset import Ramirez, ThermoMLDataset
-from ..train.models import PNAPCSAFT
+from ..train.models import PNAPCSAFT, PNApcsaftL
 from ..train.utils import mape, rhovp_data
 
 sns.set_theme(style="ticks")
@@ -37,12 +39,12 @@ testloader = ThermoMLDataset(osp.join(real_path, "../data/thermoml"))
 device = torch.device("cpu")
 
 
-def loadckp(ckp_path: str, model: PNAPCSAFT):
+def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
     """Loads save checkpoint."""
     if osp.exists(ckp_path):
+        state = "model_state_dict" if isinstance(model, PNAPCSAFT) else "state_dict"
         checkpoint = torch.load(ckp_path, map_location=torch.device("cpu"))
-        model.load_state_dict(checkpoint["model_state_dict"])
-        print(f"model checkpoint step {checkpoint['step']}")
+        model.load_state_dict(checkpoint[state])
         del checkpoint
 
 
@@ -103,7 +105,7 @@ def pltline(x, y):
 
 def pltscatter(x, y):
     "Scatter plot."
-    return plt.scatter(x, y, marker="x", s=10)
+    return plt.scatter(x, y, marker="x", s=10, c="black")
 
 
 def plterr(x, y, m):
@@ -123,9 +125,9 @@ def pltcustom(ra, scale="linear", ylabel="", n=2):
     plt.xlabel("T (K)")
     plt.ylabel(ylabel)
     plt.title("")
-    legend = ["Pontos experimentais"]
+    legend = ["ThermoML Archive"]
     for i in range(1, n + 1):
-        legend += [f"Modelo {i}"]
+        legend += [f"GNNePCSAFT {i}"]
     if ra:
         legend += ["Ramírez-Vélez et al. (2022)"]
     plt.legend(legend, loc=(1.01, 0.75))
@@ -193,7 +195,7 @@ def plotden(inchi, molecule_name, models, data):
                 # plterr(x, y, mden_ra)
 
             # Customize the plot appearance
-            pltcustom(inchi in ra_para, "linear", "Densidade (mol / m³)", len(models))
+            pltcustom(inchi in ra_para, "linear", "Density (mol / m³)", len(models))
             img_path = osp.join("images", "den_" + molecule_name + ".png")
             plt.savefig(
                 img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
@@ -223,7 +225,7 @@ def plotvp(inchi, molecule_name, models, data):
             # plterr(x, y * 1.01, mvp_ra)
 
         # Customize the plot appearance
-        pltcustom(inchi in ra_para, "log", "Pressão de vapor (bar)", len(models))
+        pltcustom(inchi in ra_para, "log", "Vapor pressure (bar)", len(models))
 
         # Save the plot as a high-quality image file
         img_path = osp.join("images", "vp_" + molecule_name + ".png")

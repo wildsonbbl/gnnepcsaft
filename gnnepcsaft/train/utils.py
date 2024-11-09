@@ -1,6 +1,9 @@
 """Model with important functions to help model training"""
+
 import os.path as osp
 import time
+from tempfile import TemporaryDirectory
+from typing import Any
 
 import ml_collections
 import numpy as np
@@ -13,8 +16,11 @@ from pcsaft import (  # pylint: disable = no-name-in-module
     flashTQ,
     pcsaft_den,
 )
+from ray import train
+from ray.train import Checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch_geometric.loader import DataLoader
+from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
 from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
@@ -136,19 +142,16 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    m = parameters[0]
-    s = parameters[1]
-    e = parameters[2]
-    pred_mape = 0.0
-
+    params = {"m": parameters[0], "s": parameters[1], "e": parameters[2]}
+    x = np.asarray([1.0])
+    pred_mape = [0.0]
     if ~np.all(rho == np.zeros_like(rho)):
         pred_mape = []
         for state in rho:
-            x = np.asarray([1.0])
             t = state[0]
             p = state[1]
             phase = "liq" if state[2] == 1 else "vap"
-            params = {"m": m, "s": s, "e": e}
+
             den = pcsaft_den(t, p, x, params, phase=phase)
             pred_mape += [np.abs((state[-1] - den) / state[-1])]
 
@@ -156,18 +159,19 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if mean:
         den = den.mean()
 
-    pred_mape = 0.0
+    pred_mape = [0.0]
     if ~np.all(vp == np.zeros_like(vp)):
         pred_mape = []
         for state in vp:
-            x = np.asarray([1.0])
             t = state[0]
             p = state[1]
             phase = "liq" if state[2] == 1 else "vap"
-            params = {"m": m, "s": s, "e": e}
             try:
                 vp, _, _ = flashTQ(t, 0, x, params, p)
-                pred_mape += [np.abs((state[-1] - vp) / state[-1])]
+                mape_vp = np.abs((state[-1] - vp) / state[-1])
+                if mape_vp > 1:
+                    continue
+                pred_mape += [mape_vp]
             except SolutionError:
                 pass
 
@@ -271,9 +275,11 @@ def build_datasets_loaders(config, workdir, dataset):
     return train_loader, test_loader, para_data
 
 
-def build_test_dataset(workdir, train_dataset):
+def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
-    test_loader = ThermoMLDataset(osp.join(workdir, "data/thermoml"))
+    test_loader = ThermoMLDataset(
+        osp.join(workdir, "data/thermoml"), transform=transform
+    )
 
     para_data = {}
     for graph in train_dataset:
@@ -282,14 +288,14 @@ def build_test_dataset(workdir, train_dataset):
     return test_loader, para_data
 
 
-def build_train_dataset(workdir, dataset):
+def build_train_dataset(workdir, dataset, transform=None):
     "Builds train dataset."
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = Ramirez(path)
+        train_dataset = Ramirez(path, transform=transform)
     elif dataset == "thermoml":
         path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path)
+        train_dataset = ThermoMLpara(path, transform=transform)
     else:
         raise ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
@@ -349,3 +355,42 @@ class EpochTimer(Callback):
         logging.log_first_n(
             logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
         )
+
+
+# taking vp data off for performance boost
+# pylint: disable=R0903
+class VpOff(BaseTransform):
+    "take vp data off thermoml dataset"
+
+    def forward(self, data: Any) -> Any:
+
+        data.vp = torch.zeros(1, 5)
+        return data
+
+
+class CustomRayTrainReportCallback(Callback):
+    "Custom ray tuner checkpoint."
+
+    def on_validation_end(self, trainer, pl_module):
+
+        with TemporaryDirectory() as tmpdir:
+            # Fetch metrics
+            metrics = trainer.callback_metrics
+            metrics = {k: v.item() for k, v in metrics.items()}
+
+            # Add customized metrics
+            metrics["epoch"] = trainer.current_epoch
+            metrics["step"] = trainer.global_step
+
+            checkpoint = None
+            global_rank = train.get_context().get_world_rank()
+            trial_id = train.get_context().get_trial_id()
+            if global_rank == 0:
+                # Save model checkpoint file to tmpdir
+                ckpt_path = osp.join(tmpdir, f"{trial_id}.pt")
+                trainer.save_checkpoint(ckpt_path, weights_only=False)
+
+                checkpoint = Checkpoint.from_directory(tmpdir)
+
+            # Report to train session
+            train.report(metrics=metrics, checkpoint=checkpoint)

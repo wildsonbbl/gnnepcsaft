@@ -1,7 +1,9 @@
 """Module to be used for model training"""
+
 import os
 import os.path as osp
 import time
+from functools import partial
 
 import lightning as L
 import ml_collections
@@ -11,14 +13,23 @@ from absl import app, flags, logging
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from ml_collections import config_flags
+from ray import train
+from ray.air.integrations.wandb import WandbLoggerCallback
+from ray.train import Checkpoint
+from ray.train.lightning import RayDDPStrategy, RayLightningEnvironment, prepare_trainer
+from ray.train.torch import TorchTrainer
 from torch.nn import HuberLoss
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
+from ..configs.configs_parallel import get_configs
 from ..epcsaft import epcsaft_cython
+from . import models
 from .utils import (
+    CustomRayTrainReportCallback,
     EpochTimer,
+    VpOff,
     build_datasets_loaders,
     build_test_dataset,
     build_train_dataset,
@@ -240,12 +251,256 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
             break
 
 
+def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
+    """Execute model training and evaluation loop with lightning."""
+    job_type = config.job_type
+    # Dataset building
+    transform = None if job_type == "train" else VpOff()
+    train_dataset = build_train_dataset(workdir, dataset)
+    tml_dataset, para_data = build_test_dataset(
+        workdir, train_dataset, transform=transform
+    )
+    test_idx = []
+    val_idx = []
+    # separate test and val dataset
+    for idx, graph in enumerate(tml_dataset):
+        if graph.InChI in para_data:
+            val_idx.append(idx)
+        else:
+            test_idx.append(idx)
+    test_dataset = tml_dataset[test_idx]
+    val_dataset = tml_dataset[val_idx]
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        num_workers=os.cpu_count(),
+    )
+
+    # trainer callback and logger
+    callbacks = []
+
+    if job_type == "train":
+        # Checkpointing from val loss (mape_den) and train loss (train_mape)
+        checkpoint_mape_den = ModelCheckpoint(
+            dirpath=osp.join(workdir, "train/checkpoints"),
+            filename=config.model_name + "-{epoch}-{mape_den:.4f}",
+            save_last=False,
+            monitor="mape_den",
+            save_top_k=1,
+            every_n_train_steps=config.checkpoint_every_steps,
+            verbose=True,
+        )
+        callbacks.append(checkpoint_mape_den)
+
+        checkpoint_train_loss = ModelCheckpoint(
+            dirpath=osp.join(workdir, "train/checkpoints"),
+            filename=config.model_name + "-{epoch}-{train_mape:.4f}",
+            save_last=False,
+            monitor="train_mape",
+            save_top_k=1,
+            every_n_train_steps=config.log_every_steps,
+            verbose=True,
+            save_on_train_epoch_end=True,
+        )
+        callbacks.append(checkpoint_train_loss)
+
+        epoch_timer = EpochTimer()
+        callbacks.append(epoch_timer)
+
+        # Logging training results at wandb
+        logger = WandbLogger(
+            log_model=True,
+            # Set the project where this run will be logged
+            project="gnn-pc-saft",
+            # Track hyperparameters and run metadata
+            config=config.to_dict(),
+            group=dataset,
+            tags=[dataset, "train", config.model_name],
+            job_type="train",
+        )
+    else:
+        callbacks.append(CustomRayTrainReportCallback())
+        logger = None
+
+    # creating model from config
+    deg = calc_deg(dataset, workdir)
+    model: models.PNApcsaftL = create_model(config, deg)
+
+    # Trainer configs
+    if job_type == "train":
+        strategy = "auto"
+        plugins = None
+        enable_checkpointing = True
+    else:
+        strategy = RayDDPStrategy()
+        plugins = [RayLightningEnvironment()]
+        enable_checkpointing = False
+
+    # creating Lighting trainer function
+    trainer = L.Trainer(
+        devices="auto",
+        accelerator=config.accelerator,
+        strategy=strategy,
+        max_steps=config.num_train_steps,
+        log_every_n_steps=config.log_every_steps,
+        val_check_interval=config.eval_every_steps,
+        check_val_every_n_epoch=None,
+        num_sanity_val_steps=0,
+        callbacks=callbacks,
+        logger=logger,
+        plugins=plugins,
+        enable_progress_bar=False,
+        enable_checkpointing=enable_checkpointing,
+    )
+
+    ckpt_path = None
+    if job_type == "tuning":
+        trainer: L.Trainer = prepare_trainer(trainer)
+
+        checkpoint: Checkpoint = train.get_checkpoint()
+        trial_id = train.get_context().get_trial_id()
+
+        if checkpoint:
+            with checkpoint.as_directory() as ckpt_dir:
+                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.pt")
+    elif config.checkpoint:
+        ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
+        if config.change_opt:
+            # pylint: disable=E1120
+            ckpt = torch.load(ckpt_path)
+            model.load_state_dict(ckpt["state_dict"])
+            # pylint: enable=E1120
+            ckpt_path = None
+
+    # training run
+    logging.info("Training run!")
+    trainer.fit(
+        model,
+        train_loader,
+        val_dataset,
+        ckpt_path=ckpt_path,
+    )
+    if job_type == "train":
+        wandb.finish()
+
+        logging.info("Testing run!")
+        # Logging test results at wandb
+        trainer.logger = WandbLogger(
+            log_model=True,
+            # Set the project where this run will be logged
+            project="gnn-pc-saft",
+            # Track hyperparameters and run metadata
+            config=config.to_dict(),
+            group=dataset,
+            tags=[dataset, "eval", config.model_name],
+            job_type="eval",
+        )
+
+        trainer.test(model, test_dataset)
+        wandb.finish()
+
+
+def training_parallel(
+    train_loop_config: dict,
+    config: ml_collections.ConfigDict,
+    workdir: str,
+    dataset: str,
+):
+    """Execute model training and evaluation loop in parallel.
+
+    Args:
+      train_loop_config: Dict with hyperparameter configuration
+      for training and evaluation in each worker.
+    """
+
+    local_rank = str(train.get_context().get_local_rank())
+    train_config = train_loop_config[local_rank]
+    config.model_name = config.model_name + "_" + local_rank
+    # selected hyperparameters to test
+    training_updated(train_config, config, workdir, dataset)
+
+
+def training_updated(
+    train_config: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
+):
+    """Execute model training and evaluation loop with updated config.
+
+    Args:
+      train_config: Updated hyperparameter configuration for training and evaluation.
+
+    """
+
+    config.propagation_depth = train_config["propagation_depth"]
+    config.hidden_dim = train_config["hidden_dim"]
+    config.num_mlp_layers = train_config["num_mlp_layers"]
+    config.pre_layers = train_config["pre_layers"]
+    config.post_layers = train_config["post_layers"]
+    config.skip_connections = train_config["skip_connections"]
+    config.add_self_loops = train_config["add_self_loops"]
+
+    ltrain_and_evaluate(config, workdir, dataset)
+
+
+# pylint: disable=R0913
+def torch_trainer_config(
+    num_workers: int,
+    num_cpu: float,
+    num_gpus: float,
+    num_cpu_trainer: float,
+    verbose: int,
+    dataset: str,
+    config: ml_collections.ConfigDict,
+    tags: list,
+):
+    """
+    Builds torch trainer configs from ray train to run training in parallel.
+    """
+    scaling_config = train.ScalingConfig(
+        num_workers=num_workers,
+        use_gpu=True,
+        resources_per_worker={"CPU": num_cpu, "GPU": num_gpus},
+        trainer_resources={"CPU": num_cpu_trainer},
+    )
+    run_config = train.RunConfig(
+        name="gnnpcsaft",
+        storage_path=None,
+        verbose=verbose,
+        checkpoint_config=train.CheckpointConfig(
+            num_to_keep=1,
+        ),
+        progress_reporter=None,
+        log_to_file=True,
+        stop=None,
+        callbacks=(
+            [
+                WandbLoggerCallback(
+                    "gnn-pc-saft",
+                    dataset,
+                    tags=["tuning", dataset] + tags,
+                )
+            ]
+            if config.job_type == "tuning"
+            else None
+        ),
+    )
+
+    return scaling_config, run_config
+
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
 flags.DEFINE_string("dataset", None, "Dataset to train model on")
-flags.DEFINE_bool("lightning", False, "Training run with pytorch lighting.")
-flags.DEFINE_string("device", "gpu", "Device to run training.")
+flags.DEFINE_string(
+    "framework", "lightning", "Define framework to run: pytorch, lightning or ray."
+)
+flags.DEFINE_list("tags", [], "wandb tags")
+flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
+flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
+flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
+flags.DEFINE_integer("num_workers", 1, "number of workers")
+flags.DEFINE_integer("verbose", 0, "Ray train verbose")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -262,111 +517,40 @@ def main(argv):
     logging.info("Calling train and evaluate!")
     torch.set_float32_matmul_precision("medium")
 
-    if FLAGS.lightning:
-        ltrain_and_evaluate()
+    if FLAGS.framework == "lightning":
+        ltrain_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+    elif FLAGS.framework == "ray":
+        test_configs = get_configs()
+        train_loop_config = {
+            str(local_rank): test_configs[local_rank]
+            for local_rank in range(FLAGS.num_workers)
+        }
+        scaling_config, run_config = torch_trainer_config(
+            FLAGS.num_workers,
+            FLAGS.num_cpu,
+            FLAGS.num_gpus,
+            FLAGS.num_cpu_trainer,
+            FLAGS.verbose,
+            FLAGS.dataset,
+            FLAGS.config,
+            FLAGS.tags,
+        )
+        trainer = TorchTrainer(
+            partial(
+                training_parallel,
+                config=FLAGS.config,
+                workdir=FLAGS.workdir,
+                dataset=FLAGS.dataset,
+            ),
+            train_loop_config=train_loop_config,
+            scaling_config=scaling_config,
+            run_config=run_config,
+        )
+
+        result = trainer.fit()
+        print(result.metrics_dataframe)
     else:
         train_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
-
-
-def ltrain_and_evaluate():
-    """Execute model training and evaluation loop with lightning."""
-    train_dataset = build_train_dataset(FLAGS.workdir, FLAGS.dataset)
-    tml_dataset, para_data = build_test_dataset(FLAGS.workdir, train_dataset)
-    test_idx = []
-    val_idx = []
-    for idx, graph in enumerate(tml_dataset):
-        if graph.InChI in para_data:
-            val_idx.append(idx)
-        else:
-            test_idx.append(idx)
-    test_dataset = tml_dataset[test_idx]
-    val_dataset = tml_dataset[val_idx]
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=FLAGS.config.batch_size,
-        shuffle=True,
-        num_workers=os.cpu_count(),
-    )
-
-    checkpoint_mape_den = ModelCheckpoint(
-        dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-        filename=FLAGS.config.model_name + "-{epoch}-{mape_den:.4f}",
-        save_last=False,
-        monitor="mape_den",
-        save_top_k=1,
-        every_n_epochs=int(
-            FLAGS.config.checkpoint_every_steps
-            // (len(train_dataset) / FLAGS.config.batch_size)
-        ),
-        verbose=True,
-    )
-
-    checkpoint_train_loss = ModelCheckpoint(
-        dirpath=osp.join(FLAGS.workdir, "train/checkpoints"),
-        filename=FLAGS.config.model_name + "-{epoch}-{train_mape:.4f}",
-        save_last=False,
-        monitor="train_mape",
-        save_top_k=1,
-        every_n_train_steps=FLAGS.config.log_every_steps,
-        verbose=True,
-        save_on_train_epoch_end=True,
-    )
-
-    epoch_timer = EpochTimer()
-
-    logging.info("Training run!")
-    wandb_logger = WandbLogger(
-        log_model=True,
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=FLAGS.config.to_dict(),
-        group=FLAGS.dataset,
-        tags=[FLAGS.dataset, "train"],
-        job_type="train",
-    )
-
-    deg = calc_deg(FLAGS.dataset, FLAGS.workdir)
-    model = create_model(FLAGS.config, deg)
-
-    trainer = L.Trainer(
-        max_steps=FLAGS.config.num_train_steps,
-        log_every_n_steps=FLAGS.config.log_every_steps,
-        check_val_every_n_epoch=int(
-            FLAGS.config.eval_every_steps
-            // (len(train_dataset) / FLAGS.config.batch_size)
-        ),
-        callbacks=[checkpoint_mape_den, checkpoint_train_loss, epoch_timer],
-        logger=wandb_logger,
-        enable_progress_bar=False,
-    )
-
-    trainer.fit(
-        model,
-        train_loader,
-        val_dataset,
-        ckpt_path=osp.join(
-            FLAGS.workdir, f"train/checkpoints/{FLAGS.config.checkpoint}"
-        )
-        if FLAGS.config.checkpoint
-        else None,
-    )
-    wandb.finish()
-
-    logging.info("Testing run!")
-    trainer.logger = WandbLogger(
-        log_model=True,
-        # Set the project where this run will be logged
-        project="gnn-pc-saft",
-        # Track hyperparameters and run metadata
-        config=FLAGS.config.to_dict(),
-        group=FLAGS.dataset,
-        tags=[FLAGS.dataset, "eval"],
-        job_type="eval",
-    )
-
-    trainer.test(model, test_dataset)
-    wandb.finish()
 
 
 if __name__ == "__main__":

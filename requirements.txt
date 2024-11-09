@@ -1,4 +1,4 @@
-absl_py
+absl-py
 Cython
 jax
 matplotlib
@@ -7,7 +7,6 @@ ml_collections
 numpy
 ogb
 polars
-ray
 rdkit
 scipy
 torch
@@ -16,3 +15,8 @@ torchmetrics
 wandb
 lightning
 dvc-s3
+hpbandster
+ConfigSpace
+ray[train]
+ray[tune]
+wheel

@@ -1,4 +1,5 @@
 """Module for molecular graph dataset building."""
+
 import pickle
 
 import polars as pl
@@ -10,7 +11,6 @@ from .graph import from_InChI
 
 
 class ThermoMLDataset(InMemoryDataset):
-
     """
     Molecular Graph dataset creator/manipulator with `ThermoML Archive` experimental data.
     PARAMETERS
@@ -55,7 +55,9 @@ class ThermoMLDataset(InMemoryDataset):
         return ["tml_graph_data.pt"]
 
     def download(self):
-        return print("no url to download from")
+        raise ValueError(
+            f"No url to download from. Provide data at {self.raw_paths[0]}."
+        )
 
     def process(self):
         datalist = []
@@ -66,7 +68,8 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in data_dict:
             try:
                 graph = from_InChI(inchi)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
+                print(f"Error for InChI: {inchi}\n\n", e, "\n\n")
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
@@ -150,15 +153,13 @@ class ThermoMLPadded(ds):
         vp = sample.vp
         n = vp.shape[0]
         pad = _nearest_bigger_power_of_two(n)
-        if pad > self.pad:
-            pad = self.pad
+        pad = min(pad, self.pad)
         vp = get_padded_array(vp, pad)
 
         rho = sample.rho
         n = rho.shape[0]
         pad = _nearest_bigger_power_of_two(n)
-        if pad > self.pad:
-            pad = self.pad
+        pad = min(pad, self.pad)
         rho = get_padded_array(rho, pad)
 
         data = Data(
@@ -189,7 +190,6 @@ def _nearest_bigger_power_of_two(x: int) -> int:
 
 
 class Ramirez(InMemoryDataset):
-
     """
     Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
     `Ramírez-Vélez et al. (2022, doi: 10.1002/aic.17722)`.
@@ -228,7 +228,9 @@ class Ramirez(InMemoryDataset):
         return ["ra_graph_data.pt"]
 
     def download(self):
-        return print("no url to download from")
+        raise ValueError(
+            f"No url to download from. Provide data at {self.raw_paths[0]}."
+        )
 
     def process(self):
         datalist = []
@@ -239,7 +241,8 @@ class Ramirez(InMemoryDataset):
             para = row[3:6]
             try:
                 graph = from_InChI(inchi)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
+                print(f"Error for InChI: {inchi}\n\n", e, "\n\n")
                 continue
 
             graph.para = torch.tensor(para)
@@ -250,7 +253,6 @@ class Ramirez(InMemoryDataset):
 
 
 class ThermoMLpara(InMemoryDataset):
-
     """
     Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
     parametrisation with `ThermoML Archive` experimental data.
@@ -289,7 +291,9 @@ class ThermoMLpara(InMemoryDataset):
         return ["tml_para_graph_data.pt"]
 
     def download(self):
-        return print("no url to download from")
+        raise ValueError(
+            f"No url to download from. Provide data at {self.raw_paths[0]}."
+        )
 
     def process(self):
         datalist = []
