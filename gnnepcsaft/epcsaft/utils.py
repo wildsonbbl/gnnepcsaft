@@ -6,26 +6,27 @@ import teqp
 import torch
 
 # pylint: disable=I1101
-N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3
+N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3  # adjusted to angstron unit
 
 
 def pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     """Calcules pure component density with ePC-SAFT."""
 
-    t = state[0]  # Temperatue
+    t = state[0]  # Temperature, K
 
-    m = max(parameters[0], 1.0)
-    s = parameters[1]
-    e = parameters[2]
-    # pylint: disable=E1101,I1101,C0103
-    [Ttilde_crit, Ttilde_min] = PCSAFTsuperanc.get_Ttilde_crit_min(m=m)
-    Ttilde = t / e
-    Ttilde = min(max(Ttilde, Ttilde_min), Ttilde_crit)
-    [tilderhoL, tilderhoV] = PCSAFTsuperanc.PCSAFTsuperanc_rhoLV(Ttilde=Ttilde, m=m)
+    m = max(parameters[0], 1.0)  # units
+    s = parameters[1]  # Å
+    e = parameters[2]  # K
 
-    rhoL, rhoV = [tilderho / (N_A * s**3) for tilderho in [tilderhoL, tilderhoV]]
-
-    den = rhoL if state[2] == 1 else rhoV
+    # pylint: disable=I1101
+    # T tilde = T / (e / kB) https://teqp.readthedocs.io/en/latest/models/PCSAFT.html
+    [ttilde_crit, ttilde_min] = PCSAFTsuperanc.get_Ttilde_crit_min(m=m)
+    ttilde = t / e
+    ttilde = min(max(ttilde, ttilde_min), ttilde_crit)
+    # Rho tilde = RhoN * sigma ** 3 https://teqp.readthedocs.io/en/latest/models/PCSAFT.html
+    [tilderhol, tilderhov] = PCSAFTsuperanc.PCSAFTsuperanc_rhoLV(Ttilde=ttilde, m=m)
+    rhol, rhov = [tilderho / (N_A * s**3) for tilderho in [tilderhol, tilderhov]]
+    den = rhol if state[2] == 1 else rhov
 
     return den
 
@@ -33,12 +34,12 @@ def pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
 def pure_vp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     """Calculates pure component vapor pressure with ePC-SAFT."""
 
-    t = state[0]
+    t = state[0]  # Temperature, K
     z = np.array([1.0])
 
-    m = max(parameters[0], 1.0)
-    s = parameters[1]
-    e = parameters[2]
+    m = max(parameters[0], 1.0)  # units
+    s = parameters[1]  # Å
+    e = parameters[2]  # K
 
     # pylint: disable=E1101,I1101
     c = teqp.SAFTCoeffs()
@@ -51,6 +52,7 @@ def pure_vp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
 
     rho = pure_den(parameters, state)
 
+    # P = rho * R * T * (1 + Ar01) https://teqp.readthedocs.io/en/latest/derivs/derivs.html
     p = rho * model.get_R(z) * t * (1 + model.get_Ar01(t, rho, z))
 
     return p
