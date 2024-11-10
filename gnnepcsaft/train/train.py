@@ -442,7 +442,7 @@ def training_updated(
     ltrain_and_evaluate(config, workdir, dataset)
 
 
-# pylint: disable=R0913
+# pylint: disable=R0913,R0917
 def torch_trainer_config(
     num_workers: int,
     num_cpu: float,

@@ -5,12 +5,14 @@ import PCSAFTsuperanc
 import teqp
 import torch
 
+# pylint: disable=I1101
+N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3
+
 
 def pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     """Calcules pure component density with ePC-SAFT."""
 
     t = state[0]  # Temperatue
-    phase = "liq" if state[2] == 1 else "vap"
 
     m = max(parameters[0], 1.0)
     s = parameters[1]
@@ -20,11 +22,10 @@ def pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     Ttilde = t / e
     Ttilde = min(max(Ttilde, Ttilde_min), Ttilde_crit)
     [tilderhoL, tilderhoV] = PCSAFTsuperanc.PCSAFTsuperanc_rhoLV(Ttilde=Ttilde, m=m)
-    N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3
 
     rhoL, rhoV = [tilderho / (N_A * s**3) for tilderho in [tilderhoL, tilderhoV]]
 
-    den = rhoL if phase == "liq" else rhoV
+    den = rhoL if state[2] == 1 else rhoV
 
     return den
 
@@ -71,11 +72,7 @@ class DenFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            try:
-                den = pure_den(parameters, row)
-            # pylint: disable = broad-exception-caught
-            except Exception:
-                den = np.nan
+            den = pure_den(parameters, row)
             result[i] = den
         return torch.tensor(result)
 
@@ -100,11 +97,7 @@ class VpFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            try:
-                vp = pure_vp(parameters, row)
-            # pylint: disable = broad-exception-caught
-            except Exception:
-                vp = np.nan
+            vp = pure_vp(parameters, row)
             result[i] = vp
         return torch.tensor(result)
 

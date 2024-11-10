@@ -213,7 +213,7 @@ def create_schedulers(config, optimizer):
     return scheduler, scheduler2
 
 
-# pylint: disable= R0913
+# pylint: disable= R0913,R0917
 def load_checkpoint(config, workdir, model, optimizer, scaler, device):
     "Loads saved model checkpoints."
     ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
