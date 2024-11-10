@@ -20,3 +20,5 @@ ConfigSpace
 ray[train]
 ray[tune]
 wheel
+teqp
+PCSAFTsuperanc
