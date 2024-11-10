@@ -1,18 +1,18 @@
 """Module to be used for the ePC-SAFT parametrization"""
+
 import os.path as osp
 import pickle
 
 import numpy as np
 import torch
+import wandb
 from absl import app, flags, logging
-
-# pylint: disable = no-name-in-module
-from pcsaft import SolutionError, flashTQ, pcsaft_den
 from scipy.optimize import least_squares
 
-import wandb
-
 from ..data.graphdataset import ThermoMLDataset
+
+# pylint: disable = no-name-in-module
+from ..epcsaft.utils import pure_den, pure_vp
 from .utils import mape
 
 path = osp.join("data", "thermoml")
@@ -31,7 +31,6 @@ def parametrisation(weight_decay):
 
     def loss(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
         parameters = np.abs(parameters)
-        params = {"m": parameters[0], "s": parameters[1], "e": parameters[2]}
         loss = []
         x_scale = np.array([1.0, 1.0, 100.0])
         n = rho.shape[0] + vp.shape[0]
@@ -39,25 +38,13 @@ def parametrisation(weight_decay):
 
         if ~np.all(rho == np.zeros_like(rho)):
             for state in rho:
-                x = np.asarray([1.0])
-                t = state[0]
-                p = state[1]
-                phase = "liq" if state[2] == 1 else "vap"
-
-                den = pcsaft_den(t, p, x, params, phase=phase)
+                den = pure_den(parameters, state)
                 loss += [((state[-1] - den) / state[-1]) * np.sqrt(2)]
 
         if ~np.all(vp == np.zeros_like(vp)):
             for state in vp:
-                x = np.asarray([1.0])
-                t = state[0]
-                p = state[1]
-                phase = "liq" if state[2] == 1 else "vap"
-                try:
-                    vp, _, _ = flashTQ(t, 0, x, params, p)
-                    loss += [((state[-1] - vp) / state[-1]) * np.sqrt(3)]
-                except SolutionError:
-                    loss += [1e6]
+                vppred = pure_vp(parameters, state)
+                loss += [((state[-1] - vppred) / state[-1]) * np.sqrt(3)]
 
         loss = np.asarray(loss).flatten() + np.sqrt(l2penalty)
 
