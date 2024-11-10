@@ -24,7 +24,7 @@ from torch_geometric.nn import summary
 from torchmetrics import MeanAbsolutePercentageError
 
 from ..configs.configs_parallel import get_configs
-from ..epcsaft import epcsaft_cython
+from ..epcsaft import utils
 from . import models
 from .utils import (
     CustomRayTrainReportCallback,
@@ -88,8 +88,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset:
     model.to(device)
     wandb.watch(model, log="all", log_graph=True)
     # pylint: disable=no-member
-    pcsaft_den = epcsaft_cython.DenFromTensor.apply
-    pcsaft_vp = epcsaft_cython.VpFromTensor.apply
+    pcsaft_den = utils.DenFromTensor.apply
+    pcsaft_vp = utils.VpFromTensor.apply
     hloss = HuberLoss("mean")
     hloss.to(device)
     mape = MeanAbsolutePercentageError()

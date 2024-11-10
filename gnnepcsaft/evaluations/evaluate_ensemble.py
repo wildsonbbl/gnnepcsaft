@@ -2,18 +2,18 @@
 
 At `evalmodels.ipynb` a working example can be found.
 """
+
 import os.path as osp
 
 import ml_collections
 import torch
+import wandb
 from absl import app, flags, logging
 from ml_collections import config_flags
 from torch.nn import HuberLoss
 from torchmetrics import MeanAbsolutePercentageError
 
-import wandb
-
-from ..epcsaft import epcsaft_cython
+from ..epcsaft import utils
 from ..train.utils import (
     build_datasets_loaders,
     calc_deg,
@@ -25,8 +25,8 @@ device = torch.device("cpu")
 MODEL_DTYPE = torch.float64
 
 # pylint: disable=no-member
-pcsaft_den = epcsaft_cython.DenFromTensor.apply
-pcsaft_vp = epcsaft_cython.VpFromTensor.apply
+pcsaft_den = utils.DenFromTensor.apply
+pcsaft_vp = utils.VpFromTensor.apply
 hloss = HuberLoss("mean")
 mape = MeanAbsolutePercentageError()
 
