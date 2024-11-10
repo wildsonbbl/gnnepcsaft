@@ -19,7 +19,7 @@ from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
 from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
-from ..epcsaft.utils import pure_den, pure_vp
+from ..epcsaft.utils import pure_den_pcsaft, pure_vp_teqp
 from . import models
 
 
@@ -131,8 +131,11 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if ~np.all(rho == np.zeros_like(rho)):
         pred_mape = []
         for state in rho:
-            den = pure_den(parameters, state)
-            pred_mape += [np.abs((state[-1] - den) / state[-1])]
+            den = pure_den_pcsaft(parameters, state)
+            mape_den = np.abs((state[-1] - den) / state[-1])
+            if mape_den > 1:  # against algorithm fail
+                continue
+            pred_mape += [mape_den]
 
     den = np.asarray(pred_mape)
     if mean:
@@ -142,9 +145,9 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if ~np.all(vp == np.zeros_like(vp)):
         pred_mape = []
         for state in vp:
-            vp = pure_vp(parameters, state)
-            mape_vp = np.abs((state[-1] - vp) / state[-1])
-            if mape_vp > 1:
+            vp_pred = pure_vp_teqp(parameters, state)
+            mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
+            if mape_vp > 1:  # against algorithm fail
                 continue
             pred_mape += [mape_vp]
 
@@ -161,13 +164,13 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     den = []
     if ~np.all(rho == np.zeros_like(rho)):
         for state in rho:
-            den += [pure_den(parameters, state)]
+            den += [pure_den_pcsaft(parameters, state)]
     den = np.asarray(den)
 
     vpl = []
     if ~np.all(vp == np.zeros_like(vp)):
         for state in vp:
-            vpl += [pure_vp(parameters, state)]
+            vpl += [pure_vp_teqp(parameters, state)]
     vp = np.asarray(vpl)
 
     return den, vp

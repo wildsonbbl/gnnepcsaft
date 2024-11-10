@@ -12,7 +12,7 @@ from scipy.optimize import least_squares
 from ..data.graphdataset import ThermoMLDataset
 
 # pylint: disable = no-name-in-module
-from ..epcsaft.utils import pure_den, pure_vp
+from ..epcsaft.utils import pure_den_pcsaft, pure_vp_teqp
 from .utils import mape
 
 path = osp.join("data", "thermoml")
@@ -38,12 +38,12 @@ def parametrisation(weight_decay):
 
         if ~np.all(rho == np.zeros_like(rho)):
             for state in rho:
-                den = pure_den(parameters, state)
+                den = pure_den_pcsaft(parameters, state)
                 loss += [((state[-1] - den) / state[-1]) * np.sqrt(2)]
 
         if ~np.all(vp == np.zeros_like(vp)):
             for state in vp:
-                vppred = pure_vp(parameters, state)
+                vppred = pure_vp_teqp(parameters, state)
                 loss += [((state[-1] - vppred) / state[-1]) * np.sqrt(3)]
 
         loss = np.asarray(loss).flatten() + np.sqrt(l2penalty)
