@@ -1,60 +1,58 @@
 """Module for ePC-SAFT calculations. """
+
 import numpy as np
+import PCSAFTsuperanc
+import teqp
 import torch
-
-# pylint: disable = no-name-in-module
-from pcsaft import flashTQ, pcsaft_den, pcsaft_fugcoef
-
-
-def gamma(x, t, p, params):
-    """Calculates infinity activity coefficients"""
-
-    x1 = (x < 0.5) * 1.0
-
-    rho = pcsaft_den(t, p, x, params, phase="liq")
-
-    fungcoef = pcsaft_fugcoef(t, rho, x, params).T @ x1
-
-    rho = pcsaft_den(t, p, x1, params, phase="liq")
-
-    fungcoefpure = pcsaft_fugcoef(t, rho, x1, params).T @ x1
-
-    gamma1 = fungcoef / fungcoefpure
-
-    return gamma1.squeeze()
 
 
 def pure_den(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     """Calcules pure component density with ePC-SAFT."""
-    x = np.asarray([1.0])
-    t = state[0]
-    p = state[1]
-    phase = ["liq" if state[2] == 1 else "vap"][0]
 
-    m = parameters[0]
+    t = state[0]  # Temperatue
+    phase = "liq" if state[2] == 1 else "vap"
+
+    m = max(parameters[0], 1.0)
     s = parameters[1]
     e = parameters[2]
+    # pylint: disable=E1101,I1101,C0103
+    [Ttilde_crit, Ttilde_min] = PCSAFTsuperanc.get_Ttilde_crit_min(m=m)
+    Ttilde = t / e
+    Ttilde = min(max(Ttilde, Ttilde_min), Ttilde_crit)
+    [tilderhoL, tilderhoV] = PCSAFTsuperanc.PCSAFTsuperanc_rhoLV(Ttilde=Ttilde, m=m)
+    N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3
 
-    params = {"m": m, "s": s, "e": e}
+    rhoL, rhoV = [tilderho / (N_A * s**3) for tilderho in [tilderhoL, tilderhoV]]
 
-    den = pcsaft_den(t, p, x, params, phase=phase)
+    den = rhoL if phase == "liq" else rhoV
 
     return den
 
 
 def pure_vp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     """Calculates pure component vapor pressure with ePC-SAFT."""
-    x = np.asarray([1.0])
-    t = state[0]
 
-    m = parameters[0]
+    t = state[0]
+    z = np.array([1.0])
+
+    m = max(parameters[0], 1.0)
     s = parameters[1]
     e = parameters[2]
 
-    params = {"m": m, "s": s, "e": e}
-    vp, _, _ = flashTQ(t, 0, x, params)
+    # pylint: disable=E1101,I1101
+    c = teqp.SAFTCoeffs()
 
-    return vp
+    c.m = m
+    c.sigma_Angstrom = s
+    c.epsilon_over_k = e
+    coeffs = [c]
+    model = teqp.PCSAFTEOS(coeffs)
+
+    rho = pure_den(parameters, state)
+
+    p = rho * model.get_R(z) * t * (1 + model.get_Ar01(t, rho, z))
+
+    return p
 
 
 # pylint: disable = abstract-method
