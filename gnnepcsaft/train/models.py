@@ -15,13 +15,13 @@ from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
 from torchmetrics.functional import mean_absolute_percentage_error as mape
 
-from ..epcsaft import epcsaft_cython
+from ..epcsaft import utils
 
 # from typing import Any
 
 
-pcsaft_den = epcsaft_cython.DenFromTensor.apply
-pcsaft_vp = epcsaft_cython.VpFromTensor.apply
+pcsaft_den = utils.DenFromTensor.apply
+pcsaft_vp = utils.VpFromTensor.apply
 hloss = F.huber_loss
 
 

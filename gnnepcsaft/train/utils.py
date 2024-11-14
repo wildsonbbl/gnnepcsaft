@@ -11,11 +11,6 @@ import torch
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
-from pcsaft import (  # pylint: disable = no-name-in-module
-    SolutionError,
-    flashTQ,
-    pcsaft_den,
-)
 from ray import train
 from ray.train import Checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
@@ -24,6 +19,7 @@ from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
 from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
+from ..epcsaft.utils import pure_den_pcsaft, pure_vp_teqp
 from . import models
 
 
@@ -58,39 +54,28 @@ def create_model(
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
+    pna_params = models.PnaconvsParams(
+        propagation_depth=config.propagation_depth,
+        pre_layers=config.pre_layers,
+        post_layers=config.post_layers,
+        deg=deg,
+        skip_connections=config.skip_connections,
+        self_loops=config.add_self_loops,
+    )
+    mlp_params = models.ReadoutMLPParams(
+        num_mlp_layers=config.num_mlp_layers,
+        num_para=config.num_para,
+        dropout=config.dropout_rate,
+    )
+
     if config.model == "PNA":
-        pna_params = models.PnaconvsParams(
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            deg=deg,
-            skip_connections=config.skip_connections,
-            self_loops=config.add_self_loops,
-        )
-        mlp_params = models.ReadoutMLPParams(
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-            dropout=config.dropout_rate,
-        )
+
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             pna_params=pna_params,
             mlp_params=mlp_params,
         )
     if config.model == "PNAL":
-        pna_params = models.PnaconvsParams(
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            deg=deg,
-            skip_connections=config.skip_connections,
-            self_loops=config.add_self_loops,
-        )
-        mlp_params = models.ReadoutMLPParams(
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-            dropout=config.dropout_rate,
-        )
         return models.PNApcsaftL(
             pna_params=pna_params,
             mlp_params=mlp_params,
@@ -142,18 +127,15 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    params = {"m": parameters[0], "s": parameters[1], "e": parameters[2]}
-    x = np.asarray([1.0])
     pred_mape = [0.0]
     if ~np.all(rho == np.zeros_like(rho)):
         pred_mape = []
         for state in rho:
-            t = state[0]
-            p = state[1]
-            phase = "liq" if state[2] == 1 else "vap"
-
-            den = pcsaft_den(t, p, x, params, phase=phase)
-            pred_mape += [np.abs((state[-1] - den) / state[-1])]
+            den = pure_den_pcsaft(parameters, state)
+            mape_den = np.abs((state[-1] - den) / state[-1])
+            if mape_den > 1:  # against algorithm fail
+                continue
+            pred_mape += [mape_den]
 
     den = np.asarray(pred_mape)
     if mean:
@@ -163,17 +145,11 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if ~np.all(vp == np.zeros_like(vp)):
         pred_mape = []
         for state in vp:
-            t = state[0]
-            p = state[1]
-            phase = "liq" if state[2] == 1 else "vap"
-            try:
-                vp, _, _ = flashTQ(t, 0, x, params, p)
-                mape_vp = np.abs((state[-1] - vp) / state[-1])
-                if mape_vp > 1:
-                    continue
-                pred_mape += [mape_vp]
-            except SolutionError:
-                pass
+            vp_pred = pure_vp_teqp(parameters, state)
+            mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
+            if mape_vp > 1:  # against algorithm fail
+                continue
+            pred_mape += [mape_vp]
 
     vp = np.asarray(pred_mape)
     if mean:
@@ -185,36 +161,16 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
     parameters = np.abs(parameters)
-    m = parameters[0]
-    s = parameters[1]
-    e = parameters[2]
     den = []
-
     if ~np.all(rho == np.zeros_like(rho)):
         for state in rho:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
-            den += [pcsaft_den(t, p, x, params, phase=phase)]
-
+            den += [pure_den_pcsaft(parameters, state)]
     den = np.asarray(den)
 
     vpl = []
     if ~np.all(vp == np.zeros_like(vp)):
         for state in vp:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
-            try:
-                vp, _, _ = flashTQ(t, 0, x, params, p)
-                vpl += [vp]
-            except SolutionError:
-                vpl += [np.nan]
-
+            vpl += [pure_vp_teqp(parameters, state)]
     vp = np.asarray(vpl)
 
     return den, vp
@@ -249,7 +205,7 @@ def create_schedulers(config, optimizer):
     return scheduler, scheduler2
 
 
-# pylint: disable= R0913
+# pylint: disable= R0913,R0917
 def load_checkpoint(config, workdir, model, optimizer, scaler, device):
     "Loads saved model checkpoints."
     ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")

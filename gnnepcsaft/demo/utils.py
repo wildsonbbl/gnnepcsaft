@@ -43,7 +43,9 @@ def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
     """Loads save checkpoint."""
     if osp.exists(ckp_path):
         state = "model_state_dict" if isinstance(model, PNAPCSAFT) else "state_dict"
-        checkpoint = torch.load(ckp_path, map_location=torch.device("cpu"))
+        checkpoint = torch.load(
+            ckp_path, map_location=torch.device("cpu"), weights_only=False
+        )
         model.load_state_dict(checkpoint[state])
         del checkpoint
 

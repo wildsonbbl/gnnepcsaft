@@ -3,13 +3,12 @@ ePC-SAFT implementation with jax
 ---------------
 Code reference: `https://github.com/zmeri/PC-SAFT`
 """
+
 # @author: Wildson Lima
 
 import jax
 import jax.numpy as np
-from jax.config import config
 
-config.update("jax_enable_x64", True)
 KB = 1.380648465952442093e-23  # Boltzmann constant, J K^-1
 N_AV = 6.022140857e23  # Avogadro's number
 E_CHRG = 1.6021766208  # elementary charge, units of coulomb / 1e-19
@@ -408,9 +407,7 @@ def ares_ion(x, t, den, params):
     q = z * E_CHRG
     dielc = x.T @ dielc
     # the inverse Debye screening length. Equation 4 in Held et al. 2008.
-    kappa = np.sqrt(
-        den * E_CHRG**2 / kb / t / (dielc * PERM_VAC) * (x.T @ z**2) * P10
-    )
+    kappa = np.sqrt(den * E_CHRG**2 / kb / t / (dielc * PERM_VAC) * (x.T @ z**2) * P10)
     chi = (
         3.0
         / (kappa * s) ** 3
