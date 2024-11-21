@@ -22,3 +22,4 @@ ray[tune]
 wheel
 teqp
 PCSAFTsuperanc
+feos
