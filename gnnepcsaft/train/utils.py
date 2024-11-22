@@ -242,16 +242,31 @@ def build_datasets_loaders(config, workdir, dataset):
     return train_loader, test_loader, para_data
 
 
-def build_test_dataset(workdir, train_dataset, transform=None):
+class Munanb:
+    "To add mu, na, nb data to test dataset."
+
+    def __init__(self, para_data: dict) -> None:
+        self.para_data = para_data
+
+    def __call__(self, graph) -> Any:
+        if graph.InChI in self.para_data:
+            graph.munanb = self.para_data[graph.InChI]
+        else:
+            graph.munanb = torch.zeros(5)
+        return graph
+
+
+def build_test_dataset(workdir, train_dataset):
     "Builds test dataset."
-    test_loader = ThermoMLDataset(
-        osp.join(workdir, "data/thermoml"), transform=transform
-    )
 
     para_data = {}
-    for graph in train_dataset:
-        inchi, para = graph.InChI, graph.para.view(-1, 3)
-        para_data[inchi] = para
+    if isinstance(train_dataset, Esper):
+        for graph in train_dataset:
+            inchi, para = graph.InChI, graph.munanb
+            para_data[inchi] = para
+    test_loader = ThermoMLDataset(
+        osp.join(workdir, "data/thermoml"), transform=Munanb(para_data)
+    )
     return test_loader, para_data
 
 
