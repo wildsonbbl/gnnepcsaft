@@ -303,7 +303,7 @@ class Esper(InMemoryDataset):
 
             inchi = row[2]
             para = [value if value else 0.0 for value in row[8:11] + row[12:14]]
-            munbna = [value if value else 0.0 for value in row[11:12] + row[14:16]]
+            munanb = [value if value else 0.0 for value in row[11:12] + row[14:16]]
             try:
                 graph = from_InChI(inchi)
             except (TypeError, ValueError) as e:
@@ -311,7 +311,7 @@ class Esper(InMemoryDataset):
                 continue
 
             graph.para = torch.tensor(para, dtype=torch.float32)
-            graph.munbna = torch.tensor(munbna, dtype=torch.float32)
+            graph.munbna = torch.tensor(munanb, dtype=torch.float32)
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
