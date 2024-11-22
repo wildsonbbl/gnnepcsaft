@@ -242,18 +242,19 @@ def build_datasets_loaders(config, workdir, dataset):
     return train_loader, test_loader, para_data
 
 
-class Munanb:
+# pylint: disable=R0903
+class Munanb(BaseTransform):
     "To add mu, na, nb data to test dataset."
 
     def __init__(self, para_data: dict) -> None:
         self.para_data = para_data
 
-    def __call__(self, graph) -> Any:
-        if graph.InChI in self.para_data:
-            graph.munanb = self.para_data[graph.InChI]
+    def forward(self, data: Any) -> Any:
+        if data.InChI in self.para_data:
+            data.munanb = self.para_data[data.InChI]
         else:
-            graph.munanb = torch.zeros(5)
-        return graph
+            data.munanb = torch.zeros(5)
+        return data
 
 
 def build_test_dataset(workdir, train_dataset):
