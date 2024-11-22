@@ -209,6 +209,7 @@ class PNApcsaftL(L.LightningModule):
         metrics_dict = {}
 
         pred_para = self(graphs).squeeze().to(torch.float64)
+        pred_para = torch.hstack([pred_para, graphs.munanb])
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
             pred = pcsaft_den(pred_para, datapoints)
