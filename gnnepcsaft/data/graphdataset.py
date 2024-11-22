@@ -13,6 +13,7 @@ from .graph import from_InChI
 class ThermoMLDataset(InMemoryDataset):
     """
     Molecular Graph dataset creator/manipulator with `ThermoML Archive` experimental data.
+
     PARAMETERS
     ----------
     root (str, optional) – Root directory where the dataset should be saved. (optional: None).
@@ -311,7 +312,7 @@ class Esper(InMemoryDataset):
                 continue
 
             graph.para = torch.tensor(para, dtype=torch.float32)
-            graph.munbna = torch.tensor(munanb, dtype=torch.float32)
+            graph.munanb = torch.tensor(munanb, dtype=torch.float32)
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
