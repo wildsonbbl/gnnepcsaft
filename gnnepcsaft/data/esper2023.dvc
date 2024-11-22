@@ -1,0 +1,6 @@
+outs:
+- md5: 6aad8bcb2344745d07c19fc228c845a2.dir
+  size: 3405460
+  nfiles: 4
+  hash: md5
+  path: esper2023

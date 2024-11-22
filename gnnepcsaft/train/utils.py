@@ -11,11 +11,6 @@ import torch
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
-from pcsaft import (  # pylint: disable = no-name-in-module
-    SolutionError,
-    flashTQ,
-    pcsaft_den,
-)
 from ray import train
 from ray.train import Checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
@@ -23,7 +18,8 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
-from ..data.graphdataset import Ramirez, ThermoMLDataset, ThermoMLpara
+from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
+from ..epcsaft.utils import pure_den_feos, pure_vp_feos
 from . import models
 
 
@@ -32,9 +28,9 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path)
-    elif dataset == "thermoml":
-        path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path)
+    elif dataset == "esper":
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path)
     else:
         raise ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
@@ -58,39 +54,28 @@ def create_model(
 ) -> torch.nn.Module:
     """Creates a model, as specified by the config."""
 
+    pna_params = models.PnaconvsParams(
+        propagation_depth=config.propagation_depth,
+        pre_layers=config.pre_layers,
+        post_layers=config.post_layers,
+        deg=deg,
+        skip_connections=config.skip_connections,
+        self_loops=config.add_self_loops,
+    )
+    mlp_params = models.ReadoutMLPParams(
+        num_mlp_layers=config.num_mlp_layers,
+        num_para=config.num_para,
+        dropout=config.dropout_rate,
+    )
+
     if config.model == "PNA":
-        pna_params = models.PnaconvsParams(
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            deg=deg,
-            skip_connections=config.skip_connections,
-            self_loops=config.add_self_loops,
-        )
-        mlp_params = models.ReadoutMLPParams(
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-            dropout=config.dropout_rate,
-        )
+
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             pna_params=pna_params,
             mlp_params=mlp_params,
         )
     if config.model == "PNAL":
-        pna_params = models.PnaconvsParams(
-            propagation_depth=config.propagation_depth,
-            pre_layers=config.pre_layers,
-            post_layers=config.post_layers,
-            deg=deg,
-            skip_connections=config.skip_connections,
-            self_loops=config.add_self_loops,
-        )
-        mlp_params = models.ReadoutMLPParams(
-            num_mlp_layers=config.num_mlp_layers,
-            num_para=config.num_para,
-            dropout=config.dropout_rate,
-        )
         return models.PNApcsaftL(
             pna_params=pna_params,
             mlp_params=mlp_params,
@@ -142,18 +127,20 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    params = {"m": parameters[0], "s": parameters[1], "e": parameters[2]}
-    x = np.asarray([1.0])
+    if parameters.size < 8:
+        zeros = np.zeros(
+            5,
+        )
+        parameters = np.concatenate([parameters, zeros], axis=0)
     pred_mape = [0.0]
     if ~np.all(rho == np.zeros_like(rho)):
         pred_mape = []
         for state in rho:
-            t = state[0]
-            p = state[1]
-            phase = "liq" if state[2] == 1 else "vap"
-
-            den = pcsaft_den(t, p, x, params, phase=phase)
-            pred_mape += [np.abs((state[-1] - den) / state[-1])]
+            den = pure_den_feos(parameters, state)
+            mape_den = np.abs((state[-1] - den) / state[-1])
+            if mape_den > 1:  # against algorithm fail
+                continue
+            pred_mape += [mape_den]
 
     den = np.asarray(pred_mape)
     if mean:
@@ -163,17 +150,14 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if ~np.all(vp == np.zeros_like(vp)):
         pred_mape = []
         for state in vp:
-            t = state[0]
-            p = state[1]
-            phase = "liq" if state[2] == 1 else "vap"
             try:
-                vp, _, _ = flashTQ(t, 0, x, params, p)
-                mape_vp = np.abs((state[-1] - vp) / state[-1])
-                if mape_vp > 1:
-                    continue
-                pred_mape += [mape_vp]
-            except SolutionError:
-                pass
+                vp_pred = pure_vp_feos(parameters, state)
+                mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
+            except (AssertionError, RuntimeError):
+                continue
+            if mape_vp > 1:  # against algorithm fail
+                continue
+            pred_mape += [mape_vp]
 
     vp = np.asarray(pred_mape)
     if mean:
@@ -185,36 +169,19 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
     parameters = np.abs(parameters)
-    m = parameters[0]
-    s = parameters[1]
-    e = parameters[2]
     den = []
-
     if ~np.all(rho == np.zeros_like(rho)):
         for state in rho:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
-            den += [pcsaft_den(t, p, x, params, phase=phase)]
-
+            den += [pure_den_feos(parameters, state)]
     den = np.asarray(den)
 
     vpl = []
     if ~np.all(vp == np.zeros_like(vp)):
         for state in vp:
-            x = np.asarray([1.0])
-            t = state[0]
-            p = state[1]
-            phase = ["liq" if state[2] == 1 else "vap"][0]
-            params = {"m": m, "s": s, "e": e}
             try:
-                vp, _, _ = flashTQ(t, 0, x, params, p)
-                vpl += [vp]
-            except SolutionError:
-                vpl += [np.nan]
-
+                vpl += [pure_vp_feos(parameters, state)]
+            except (AssertionError, RuntimeError):
+                continue
     vp = np.asarray(vpl)
 
     return den, vp
@@ -249,7 +216,7 @@ def create_schedulers(config, optimizer):
     return scheduler, scheduler2
 
 
-# pylint: disable= R0913
+# pylint: disable= R0913,R0917
 def load_checkpoint(config, workdir, model, optimizer, scaler, device):
     "Loads saved model checkpoints."
     ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
@@ -275,16 +242,32 @@ def build_datasets_loaders(config, workdir, dataset):
     return train_loader, test_loader, para_data
 
 
-def build_test_dataset(workdir, train_dataset, transform=None):
+# pylint: disable=R0903
+class Munanb(BaseTransform):
+    "To add mu, na, nb data to test dataset."
+
+    def __init__(self, para_data: dict) -> None:
+        self.para_data = para_data
+
+    def forward(self, data: Any) -> Any:
+        if data.InChI in self.para_data:
+            data.munanb = self.para_data[data.InChI]
+        else:
+            data.munanb = torch.zeros(5)
+        return data
+
+
+def build_test_dataset(workdir, train_dataset):
     "Builds test dataset."
-    test_loader = ThermoMLDataset(
-        osp.join(workdir, "data/thermoml"), transform=transform
-    )
 
     para_data = {}
-    for graph in train_dataset:
-        inchi, para = graph.InChI, graph.para.view(-1, 3)
-        para_data[inchi] = para
+    if isinstance(train_dataset, Esper):
+        for graph in train_dataset:
+            inchi, para = graph.InChI, graph.munanb
+            para_data[inchi] = para
+    test_loader = ThermoMLDataset(
+        osp.join(workdir, "data/thermoml"), transform=Munanb(para_data)
+    )
     return test_loader, para_data
 
 
@@ -293,9 +276,9 @@ def build_train_dataset(workdir, dataset, transform=None):
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path, transform=transform)
-    elif dataset == "thermoml":
-        path = osp.join(workdir, "data/thermoml")
-        train_dataset = ThermoMLpara(path, transform=transform)
+    elif dataset == "esper":
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path, transform=transform)
     else:
         raise ValueError(
             f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"

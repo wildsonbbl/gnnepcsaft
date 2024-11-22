@@ -3,6 +3,7 @@
 import os
 from functools import partial
 
+import ml_collections
 import torch
 
 # import ray
@@ -81,7 +82,7 @@ def main(argv):
     logging.info("Calling tuner!")
     torch.set_float32_matmul_precision("medium")
 
-    config = FLAGS.config
+    config: ml_collections.ConfigDict = FLAGS.config
     # Hyperparameter search space
     search_space = get_search_space()
     max_t = config.num_train_steps // config.eval_every_steps
@@ -135,7 +136,9 @@ def main(argv):
     else:
         tuner = tune.Tuner(
             trainable,
-            param_space={"train_loop_config": search_space},
+            param_space={
+                "train_loop_config": search_space,
+            },
             tune_config=tune.TuneConfig(
                 search_alg=search_alg,
                 scheduler=scheduler,

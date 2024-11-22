@@ -15,13 +15,13 @@ from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
 from torchmetrics.functional import mean_absolute_percentage_error as mape
 
-from ..epcsaft import epcsaft_cython
+from ..epcsaft import utils
 
 # from typing import Any
 
 
-pcsaft_den = epcsaft_cython.DenFromTensor.apply
-pcsaft_vp = epcsaft_cython.VpFromTensor.apply
+pcsaft_den = utils.DenFromTensor.apply
+pcsaft_vp = utils.VpFromTensor.apply
 hloss = F.huber_loss
 
 
@@ -189,7 +189,7 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        target = graphs.para.view(-1, 3)
+        target = graphs.para.view(-1, self.config.num_para)
         pred = self(graphs)
         loss_mape = mape(pred, target)
         self.log(
@@ -209,6 +209,7 @@ class PNApcsaftL(L.LightningModule):
         metrics_dict = {}
 
         pred_para = self(graphs).squeeze().to(torch.float64)
+        pred_para = torch.hstack([pred_para, graphs.munanb])
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
             pred = pcsaft_den(pred_para, datapoints)

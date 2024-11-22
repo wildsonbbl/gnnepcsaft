@@ -13,6 +13,7 @@ from .graph import from_InChI
 class ThermoMLDataset(InMemoryDataset):
     """
     Molecular Graph dataset creator/manipulator with `ThermoML Archive` experimental data.
+
     PARAMETERS
     ----------
     root (str, optional) – Root directory where the dataset should be saved. (optional: None).
@@ -44,7 +45,7 @@ class ThermoMLDataset(InMemoryDataset):
         self.dtype = torch.float64
 
         super().__init__(root, transform, pre_transform, pre_filter)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
 
     @property
     def raw_file_names(self):
@@ -69,7 +70,7 @@ class ThermoMLDataset(InMemoryDataset):
             try:
                 graph = from_InChI(inchi)
             except (TypeError, ValueError) as e:
-                print(f"Error for InChI: {inchi}\n\n", e, "\n\n")
+                print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
             if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
                 states = [
@@ -217,7 +218,7 @@ class Ramirez(InMemoryDataset):
 
     def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
         super().__init__(root, transform, pre_transform, pre_filter)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
 
     @property
     def raw_file_names(self):
@@ -242,7 +243,7 @@ class Ramirez(InMemoryDataset):
             try:
                 graph = from_InChI(inchi)
             except (TypeError, ValueError) as e:
-                print(f"Error for InChI: {inchi}\n\n", e, "\n\n")
+                print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
 
             graph.para = torch.tensor(para)
@@ -252,10 +253,10 @@ class Ramirez(InMemoryDataset):
         torch.save(self.collate(datalist), self.processed_paths[0])
 
 
-class ThermoMLpara(InMemoryDataset):
+class Esper(InMemoryDataset):
     """
     Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
-    parametrisation with `ThermoML Archive` experimental data.
+    `Esper et al. (2023, doi: 10.1021/acs.iecr.3c02255)`.
 
     PARAMETERS
     ----------
@@ -280,15 +281,15 @@ class ThermoMLpara(InMemoryDataset):
 
     def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
         super().__init__(root, transform, pre_transform, pre_filter)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
 
     @property
     def raw_file_names(self):
-        return ["para3_fitted.pkl", "para_ramirez.parquet"]
+        return ["SI_pcp-saft_parameters.csv"]
 
     @property
     def processed_file_names(self):
-        return ["tml_para_graph_data.pt"]
+        return ["es_graph_data.pt"]
 
     def download(self):
         raise ValueError(
@@ -297,38 +298,21 @@ class ThermoMLpara(InMemoryDataset):
 
     def process(self):
         datalist = []
-        inchis = []
+        data = pl.read_csv(self.raw_paths[0], separator="	")
 
-        radata = pl.read_parquet(self.raw_paths[1])
-        print(f"ramirez dataset size: {radata.shape[0]}")
-        with open(self.raw_paths[0], "rb") as file:
-            fitted = pickle.load(file)
-        print(f"thermoml dataset size: {len(fitted)}")
+        for row in data.iter_rows():
 
-        for inchi in fitted:
-            para, mden, mvp = fitted[inchi]
-            if (mden > 3 / 100) or (mvp > 10 / 100):
-                continue
+            inchi = row[2]
+            para = [value if value else 0.0 for value in row[8:11] + row[12:14]]
+            munanb = [value if value else 0.0 for value in row[11:12] + row[14:16]]
             try:
                 graph = from_InChI(inchi)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
+                print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
 
-            graph.para = torch.tensor(para)
-            datalist.append(graph)
-            inchis.append(inchi)
-
-        for row in radata.iter_rows():
-            inchi = row[-1]
-            if inchi in inchis:
-                continue
-            para = row[3:6]
-            try:
-                graph = from_InChI(inchi)
-            except (TypeError, ValueError):
-                continue
-
-            graph.para = torch.tensor(para)
+            graph.para = torch.tensor(para, dtype=torch.float32)
+            graph.munanb = torch.tensor(munanb, dtype=torch.float32)
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])

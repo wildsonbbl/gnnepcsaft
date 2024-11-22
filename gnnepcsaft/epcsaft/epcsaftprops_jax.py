@@ -2,17 +2,16 @@
 ---------------
 Code reference: `https://github.com/zmeri/PC-SAFT`
 """
+
 # @author: Wildson Lima
 
 
 import jax
 import jax.numpy as np
-from jax.config import config
 
 from .epcsaft_jax import pcsaft_ares
 
-config.update("jax_enable_x64", True)
-
+# pylint: disable=C0103,E1102
 dares_drho = jax.jit(jax.jacfwd(pcsaft_ares, 5))
 
 
