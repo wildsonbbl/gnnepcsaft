@@ -1,6 +1,7 @@
 name: Training run on kaggle
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - experiments
