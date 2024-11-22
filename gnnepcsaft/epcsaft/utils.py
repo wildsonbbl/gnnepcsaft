@@ -6,7 +6,7 @@ import teqp
 import torch
 
 # pylint: disable = E0401,E0611
-from feos.eos import EquationOfState, PhaseDiagram, State
+from feos.eos import EquationOfState, PhaseEquilibrium, State
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
 from feos.si import KELVIN, METER, MOL, PASCAL
 
@@ -126,11 +126,11 @@ def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     )
     para = PcSaftParameters.from_model_records([record])
     eos = EquationOfState.pcsaft(para)
-    phase_diagram = PhaseDiagram.pure(eos, min_temperature=t * KELVIN, npoints=2)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
 
-    assert t == phase_diagram.vapor[0].temperature / KELVIN
+    assert t == vle.vapor.temperature / KELVIN
 
-    return phase_diagram.vapor[0].pressure() / PASCAL
+    return vle.vapor.pressure() / PASCAL
 
 
 def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:

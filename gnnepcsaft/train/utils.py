@@ -153,7 +153,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
             try:
                 vp_pred = pure_vp_feos(parameters, state)
                 mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
-            except AssertionError:
+            except (AssertionError, RuntimeError):
                 continue
             if mape_vp > 1:  # against algorithm fail
                 continue
@@ -180,7 +180,7 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
         for state in vp:
             try:
                 vpl += [pure_vp_feos(parameters, state)]
-            except AssertionError:
+            except (AssertionError, RuntimeError):
                 continue
     vp = np.asarray(vpl)
 
