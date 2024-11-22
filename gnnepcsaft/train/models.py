@@ -189,7 +189,7 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        target = graphs.para.view(-1, 3)
+        target = graphs.para.view(-1, self.config.num_para)
         pred = self(graphs)
         loss_mape = mape(pred, target)
         self.log(
