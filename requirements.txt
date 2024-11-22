@@ -14,7 +14,7 @@ torch_geometric
 torchmetrics
 wandb
 lightning
-dvc-s3
+dvc-gs
 hpbandster
 ConfigSpace
 ray[train]
