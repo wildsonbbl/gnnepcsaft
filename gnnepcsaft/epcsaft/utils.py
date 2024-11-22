@@ -1,10 +1,16 @@
 """Module for ePC-SAFT calculations. """
 
-# pylint: disable=I1101,E0611
 import numpy as np
 import PCSAFTsuperanc
 import teqp
 import torch
+
+# pylint: disable = E0401,E0611
+from feos.eos import EquationOfState, PhaseEquilibrium, State
+from feos.pcsaft import PcSaftParameters, PcSaftRecord
+from feos.si import KELVIN, METER, MOL, PASCAL
+
+# pylint: enable = E0401,E0611
 from pcsaft import flashTQ, pcsaft_den
 
 N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3  # adjusted to angstron unit
@@ -56,6 +62,75 @@ def pure_den_pcsaft(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     den = pcsaft_den(t, p, x, params, phase=phase)
 
     return den
+
+
+# pylint: disable=R0914
+def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+    """Calcules pure component density with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+
+    m = max(parameters[0], 1.0)  # units
+    s = parameters[1]  # Å
+    e = parameters[2]  # K
+    kappa_ab = parameters[3]
+    epsilon_k_ab = parameters[4]  # K
+    mu = parameters[5]  # Debye
+    na = parameters[6]
+    nb = parameters[7]
+
+    p = state[1]  # Pa
+
+    record = PcSaftRecord(
+        m=m,
+        sigma=s,
+        epsilon_k=e,
+        kappa_ab=kappa_ab,
+        epsilon_k_ab=epsilon_k_ab,
+        na=na,
+        nb=nb,
+        mu=mu,
+    )
+    para = PcSaftParameters.from_model_records([record])
+    eos = EquationOfState.pcsaft(para)
+    statenpt = State(eos, temperature=t * KELVIN, pressure=p * PASCAL)
+
+    den = statenpt.density * (METER**3) / MOL
+
+    return den
+
+
+def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+    """Calcules pure component density with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+
+    m = max(parameters[0], 1.0)  # units
+    s = parameters[1]  # Å
+    e = parameters[2]  # K
+    kappa_ab = parameters[3]
+    epsilon_k_ab = parameters[4]  # K
+    mu = parameters[5]  # Debye
+    na = parameters[6]
+    nb = parameters[7]
+
+    record = PcSaftRecord(
+        m=m,
+        sigma=s,
+        epsilon_k=e,
+        kappa_ab=kappa_ab,
+        epsilon_k_ab=epsilon_k_ab,
+        na=na,
+        nb=nb,
+        mu=mu,
+    )
+    para = PcSaftParameters.from_model_records([record])
+    eos = EquationOfState.pcsaft(para)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+
+    assert t == vle.vapor.temperature / KELVIN
+
+    return vle.vapor.pressure() / PASCAL
 
 
 def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
@@ -115,7 +190,7 @@ class DenFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            den = pure_den_pcsaft(parameters, row)
+            den = pure_den_feos(parameters, row)
             result[i] = den
         return torch.tensor(result)
 
@@ -140,7 +215,7 @@ class VpFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            vp = pure_vp_teqp(parameters, row)
+            vp = pure_vp_feos(parameters, row)
             result[i] = vp
         return torch.tensor(result)
 

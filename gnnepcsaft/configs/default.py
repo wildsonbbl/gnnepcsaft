@@ -28,11 +28,11 @@ def get_config():
     config.momentum = 0.9
     config.patience = 5
     config.weight_decay = 1e-2
-    config.dataset = "ramirez"
-    config.checkpoint = "model8_2_2-epoch=31249-mape_den=0.0172.ckpt"
+    config.dataset = "esper"
+    config.checkpoint = ""
 
     # GNN hyperparameters.
-    config.model_name = "model8_2_2"
+    config.model_name = "esper1"
     config.model = "PNAL"
     config.propagation_depth = 6
     config.hidden_dim = 64
@@ -40,7 +40,7 @@ def get_config():
     config.post_layers = 1
     config.dropout_rate = 0.0
     config.num_mlp_layers = 1
-    config.num_para = 3
+    config.num_para = 5
     config.skip_connections = True
     config.add_self_loops = True
     return config
