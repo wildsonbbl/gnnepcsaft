@@ -128,6 +128,8 @@ def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     eos = EquationOfState.pcsaft(para)
     phase_diagram = PhaseDiagram.pure(eos, min_temperature=t * KELVIN, npoints=2)
 
+    assert t == phase_diagram.vapor[0].temperature / KELVIN
+
     return phase_diagram.vapor[0].pressure() / PASCAL
 
 
