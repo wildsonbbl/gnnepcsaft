@@ -221,13 +221,13 @@ def training_updated(
 
     """
 
-    config.propagation_depth = train_config["propagation_depth"]
-    config.hidden_dim = train_config["hidden_dim"]
-    config.num_mlp_layers = train_config["num_mlp_layers"]
-    config.pre_layers = train_config["pre_layers"]
-    config.post_layers = train_config["post_layers"]
-    config.skip_connections = train_config["skip_connections"]
-    config.add_self_loops = train_config["add_self_loops"]
+    config.propagation_depth = int(train_config["propagation_depth"])
+    config.hidden_dim = int(train_config["hidden_dim"])
+    config.num_mlp_layers = int(train_config["num_mlp_layers"])
+    config.pre_layers = int(train_config["pre_layers"])
+    config.post_layers = int(train_config["post_layers"])
+    config.skip_connections = bool(train_config["skip_connections"])
+    config.add_self_loops = bool(train_config["add_self_loops"])
 
     ltrain_and_evaluate(config, workdir, dataset)
 
