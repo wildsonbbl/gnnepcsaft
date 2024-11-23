@@ -268,8 +268,7 @@ def build_test_dataset(workdir, train_dataset, transform=None):
             inchi, para = graph.InChI, graph.munanb
             para_data[inchi] = para
     if transform:
-        # pylint: disable=E1102
-        transform = T.compose([Munanb(para_data), transform])
+        transform = T.Compose([Munanb(para_data), transform])
     else:
         transform = Munanb(para_data)
     tml_dataset = ThermoMLDataset(
