@@ -24,6 +24,7 @@ from . import models
 from .utils import (
     CustomRayTrainReportCallback,
     EpochTimer,
+    VpOff,
     build_test_dataset,
     build_train_dataset,
     calc_deg,
@@ -55,12 +56,9 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     """
     job_type = config.job_type
     # Dataset building
-    # transform = None if job_type == "train" else VpOff()
+    transform = None if job_type == "train" else VpOff()
     train_dataset = build_train_dataset(workdir, dataset)
-    tml_dataset, para_data = build_test_dataset(
-        workdir,
-        train_dataset,
-    )
+    tml_dataset, para_data = build_test_dataset(workdir, train_dataset, transform)
     test_idx = []
     val_idx = []
     # separate test and val dataset
