@@ -28,7 +28,7 @@ def get_config():
     config.momentum = 0.9
     config.patience = 5
     config.weight_decay = 1e-2
-    config.dataset = "esper"
+    config.dataset = "esper_assoc"
     config.checkpoint = ""
 
     # GNN hyperparameters.
@@ -40,7 +40,7 @@ def get_config():
     config.post_layers = 1
     config.dropout_rate = 0.0
     config.num_mlp_layers = 1
-    config.num_para = 5
+    config.num_para = 2
     config.skip_connections = True
     config.add_self_loops = True
     return config
