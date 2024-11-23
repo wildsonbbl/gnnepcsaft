@@ -19,11 +19,11 @@ def get_config():
     config.accelerator = "gpu"
     config.batch_size = 512
     config.pad_size = 128
-    config.num_train_steps = 250_000
+    config.num_train_steps = 25_000
     config.warmup_steps = 100
-    config.log_every_steps = 10_000
-    config.eval_every_steps = 24_999
-    config.checkpoint_every_steps = 25000
+    config.log_every_steps = 4999
+    config.eval_every_steps = 4999
+    config.checkpoint_every_steps = 5000
     config.amp = False
     config.momentum = 0.9
     config.patience = 5
