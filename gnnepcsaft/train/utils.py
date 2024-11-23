@@ -8,6 +8,7 @@ from typing import Any
 import ml_collections
 import numpy as np
 import torch
+import torch_geometric.transforms as T
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
@@ -257,7 +258,7 @@ class Munanb(BaseTransform):
         return data
 
 
-def build_test_dataset(workdir, train_dataset):
+def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
 
     para_data = {}
@@ -265,8 +266,13 @@ def build_test_dataset(workdir, train_dataset):
         for graph in train_dataset:
             inchi, para = graph.InChI, graph.munanb
             para_data[inchi] = para
+    if transform:
+        # pylint: disable=E1102
+        transform = T.compose([Munanb(para_data), transform])
+    else:
+        transform = Munanb(para_data)
     test_loader = ThermoMLDataset(
-        osp.join(workdir, "data/thermoml"), transform=Munanb(para_data)
+        osp.join(workdir, "data/thermoml"), transform=transform
     )
     return test_loader, para_data
 
