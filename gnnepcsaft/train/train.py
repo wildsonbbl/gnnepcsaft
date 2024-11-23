@@ -58,17 +58,8 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     # Dataset building
     transform = None if job_type == "train" else VpOff()
     train_dataset = build_train_dataset(workdir, dataset)
-    tml_dataset, para_data = build_test_dataset(workdir, train_dataset, transform)
-    test_idx = []
-    val_idx = []
-    # separate test and val dataset
-    for idx, graph in enumerate(tml_dataset):
-        if graph.InChI in para_data:
-            val_idx.append(idx)
-        else:
-            test_idx.append(idx)
-    test_dataset = tml_dataset[test_idx]
-    val_dataset = tml_dataset[val_idx]
+    val_dataset, test_dataset = build_test_dataset(workdir, train_dataset, transform)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
