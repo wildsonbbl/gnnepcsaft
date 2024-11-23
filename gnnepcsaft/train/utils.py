@@ -287,17 +287,24 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     return val_dataset, test_dataset
 
 
-def build_train_dataset(workdir, dataset, transform=None):
+def build_train_dataset(workdir, dataset, transform=None) -> list[Esper | Ramirez]:
     "Builds train dataset."
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = Ramirez(path, transform=transform)
+        train_dataset = [Ramirez(path, transform=transform)]
     elif dataset == "esper":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
+        as_idx = []
+        for i, graph in enumerate(train_dataset):
+            if graph.para[4] != 0.0001:
+                as_idx.append(i)
+        train_dataset = [train_dataset] + [train_dataset[as_idx]] * round(
+            len(train_dataset) / len(as_idx)
+        )
     else:
         raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+            f"dataset is either ramirez or esper, got >>> {dataset} <<< instead"
         )
 
     return train_dataset

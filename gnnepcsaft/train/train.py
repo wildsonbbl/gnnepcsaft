@@ -57,11 +57,13 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     job_type = config.job_type
     # Dataset building
     transform = None if job_type == "train" else VpOff()
-    train_dataset = build_train_dataset(workdir, dataset)
-    val_dataset, test_dataset = build_test_dataset(workdir, train_dataset, transform)
+    train_datasets = build_train_dataset(workdir, dataset)
+    val_dataset, test_dataset = build_test_dataset(
+        workdir, train_datasets[0], transform
+    )
 
     train_loader = DataLoader(
-        train_dataset,
+        train_datasets,
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=os.cpu_count(),
