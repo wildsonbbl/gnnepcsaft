@@ -215,7 +215,10 @@ class VpFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            vp = pure_vp_feos(parameters, row)
+            try:
+                vp = pure_vp_feos(parameters, row)
+            except RuntimeError:
+                vp = np.nan
             result[i] = vp
         return torch.tensor(result)
 
