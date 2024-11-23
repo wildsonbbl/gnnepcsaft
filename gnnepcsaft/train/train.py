@@ -58,7 +58,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
     # Dataset building
     transform = None if job_type == "train" else VpOff()
     train_dataset = build_train_dataset(workdir, dataset)
-    val_dataset, test_dataset = build_test_dataset(workdir, train_dataset, transform)
+    val_dataset, _ = build_test_dataset(workdir, train_dataset, transform)
 
     train_loader = DataLoader(
         train_dataset,
@@ -171,24 +171,24 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         val_dataset,
         ckpt_path=ckpt_path,
     )
-    if job_type == "train":
-        wandb.finish()
+    # if job_type == "train":
+    #     wandb.finish()
 
-        logging.info("Testing run!")
-        # Logging test results at wandb
-        trainer.logger = WandbLogger(
-            log_model=True,
-            # Set the project where this run will be logged
-            project="gnn-pc-saft",
-            # Track hyperparameters and run metadata
-            config=config.to_dict(),
-            group=dataset,
-            tags=[dataset, "eval", config.model_name],
-            job_type="eval",
-        )
+    #     logging.info("Testing run!")
+    #     # Logging test results at wandb
+    #     trainer.logger = WandbLogger(
+    #         log_model=True,
+    #         # Set the project where this run will be logged
+    #         project="gnn-pc-saft",
+    #         # Track hyperparameters and run metadata
+    #         config=config.to_dict(),
+    #         group=dataset,
+    #         tags=[dataset, "eval", config.model_name],
+    #         job_type="eval",
+    #     )
 
-        trainer.test(model, test_dataset)
-        wandb.finish()
+    #     trainer.test(model, test_dataset)
+    #     wandb.finish()
 
 
 def training_parallel(

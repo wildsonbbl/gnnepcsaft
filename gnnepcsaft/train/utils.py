@@ -15,7 +15,6 @@ from lightning.pytorch.callbacks import Callback
 from ray import train
 from ray.train import Checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
-from torch.utils.data.dataset import ConcatDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
@@ -245,17 +244,21 @@ def build_datasets_loaders(config, workdir, dataset):
 
 
 # pylint: disable=R0903
-class Munanb(BaseTransform):
-    "To add mu, na, nb data to test dataset."
+class TransformParameters(BaseTransform):
+    "To add parameters to test dataset."
 
     def __init__(self, para_data: dict) -> None:
         self.para_data = para_data
 
     def forward(self, data: Any) -> Any:
         if data.InChI in self.para_data:
-            data.munanb = self.para_data[data.InChI]
+            data.para, data.assoc, data.munanb = self.para_data[data.InChI]
         else:
-            data.munanb = torch.zeros(5)
+            data.para, data.assoc, data.munanb = (
+                torch.zeros(3),
+                torch.zeros(2),
+                torch.zeros(3),
+            )
         return data
 
 
@@ -263,14 +266,19 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
 
     para_data = {}
-    if isinstance(train_dataset, ConcatDataset):
+    if isinstance(train_dataset, Esper):
         for graph in train_dataset:
-            inchi, para = graph.InChI, graph.munanb
-            para_data[inchi] = para
+            inchi, para, assoc, munanb = (
+                graph.InChI,
+                graph.para,
+                graph.assoc,
+                graph.munanb,
+            )
+            para_data[inchi] = (para, assoc, munanb)
     if transform:
-        transform = T.Compose([Munanb(para_data), transform])
+        transform = T.Compose([TransformParameters(para_data), transform])
     else:
-        transform = Munanb(para_data)
+        transform = TransformParameters(para_data)
     tml_dataset = ThermoMLDataset(
         osp.join(workdir, "data/thermoml"), transform=transform
     )
@@ -292,21 +300,12 @@ def build_train_dataset(workdir, dataset, transform=None) -> list[Esper | Ramire
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path, transform=transform)
-    elif dataset == "esper":
+    elif dataset in ("esper", "esper_assoc"):
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
-        as_idx = []
-        for i, graph in enumerate(train_dataset):
-            if graph.para[4] != 0.0001:
-                as_idx.append(i)
-        train_dataset = ConcatDataset(
-            [train_dataset]
-            + [train_dataset[as_idx]] * round(len(train_dataset) / len(as_idx))
-        )
-
     else:
         raise ValueError(
-            f"dataset is either ramirez or esper, got >>> {dataset} <<< instead"
+            f"dataset is either ramirez, esper or esper_assoc, got >>> {dataset} <<< instead"
         )
 
     return train_dataset
