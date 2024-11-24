@@ -46,15 +46,15 @@ def create_logger(config, dataset):
 
 
 # pylint: disable=R0914,R0915
-def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
+def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     """Execute model training and evaluation loop with lightning.
 
     Args:
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
-      dataset: Train dataset name (ramirez or esper).
     """
     job_type = config.job_type
+    dataset = config.dataset
     # Dataset building
     transform = None if job_type == "train" else VpOff()
     train_dataset = build_train_dataset(workdir, dataset)
@@ -195,7 +195,6 @@ def training_parallel(
     train_loop_config: dict,
     config: ml_collections.ConfigDict,
     workdir: str,
-    dataset: str,
 ):
     """Execute model training and evaluation loop in parallel with ray.
 
@@ -208,11 +207,13 @@ def training_parallel(
     train_config = train_loop_config[local_rank]
     config.model_name = config.model_name + "_" + local_rank
     # selected hyperparameters to test
-    training_updated(train_config, config, workdir, dataset)
+    training_updated(train_config, config, workdir)
 
 
 def training_updated(
-    train_config: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
+    train_config: dict,
+    config: ml_collections.ConfigDict,
+    workdir: str,
 ):
     """Execute model training and evaluation loop with updated config.
 
@@ -229,7 +230,7 @@ def training_updated(
     config.skip_connections = bool(train_config["skip_connections"])
     config.add_self_loops = bool(train_config["add_self_loops"])
 
-    ltrain_and_evaluate(config, workdir, dataset)
+    ltrain_and_evaluate(config, workdir)
 
 
 # pylint: disable=R0913,R0917
@@ -239,7 +240,6 @@ def torch_trainer_config(
     num_gpus: float,
     num_cpu_trainer: float,
     verbose: int,
-    dataset: str,
     config: ml_collections.ConfigDict,
     tags: list,
 ):
@@ -266,8 +266,8 @@ def torch_trainer_config(
             [
                 WandbLoggerCallback(
                     "gnn-pc-saft",
-                    dataset,
-                    tags=["tuning", dataset] + tags,
+                    config.dataset,
+                    tags=["tuning", config.dataset] + tags,
                 )
             ]
             if config.job_type == "tuning"
@@ -281,15 +281,16 @@ def torch_trainer_config(
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
-flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_string(
     "framework", "lightning", "Define framework to run: lightning or ray."
 )
 flags.DEFINE_list("tags", [], "wandb tags")
-flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
-flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
-flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
-flags.DEFINE_integer("num_workers", 1, "number of workers")
+flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial for ray")
+flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial for ray")
+flags.DEFINE_float(
+    "num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources for ray"
+)
+flags.DEFINE_integer("num_workers", 1, "Number of workers for ray")
 flags.DEFINE_integer("verbose", 0, "Ray train verbose")
 config_flags.DEFINE_config_file(
     "config",
@@ -308,7 +309,7 @@ def main(argv):
     torch.set_float32_matmul_precision("medium")
 
     if FLAGS.framework == "lightning":
-        ltrain_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+        ltrain_and_evaluate(FLAGS.config, FLAGS.workdir)
     elif FLAGS.framework == "ray":
         test_configs = get_configs()
         train_loop_config = {
@@ -321,7 +322,6 @@ def main(argv):
             FLAGS.num_gpus,
             FLAGS.num_cpu_trainer,
             FLAGS.verbose,
-            FLAGS.dataset,
             FLAGS.config,
             FLAGS.tags,
         )
@@ -330,7 +330,6 @@ def main(argv):
                 training_parallel,
                 config=FLAGS.config,
                 workdir=FLAGS.workdir,
-                dataset=FLAGS.dataset,
             ),
             train_loop_config=train_loop_config,
             scaling_config=scaling_config,
