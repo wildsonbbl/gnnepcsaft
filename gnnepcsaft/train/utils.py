@@ -309,7 +309,7 @@ def build_train_dataset(workdir, dataset, transform=None):
         train_dataset = Esper(path, transform=transform)
         as_idx = []
         for i, graph in enumerate(train_dataset):
-            if graph.para[4] != 0.0001:
+            if graph.assoc[1] != 0.0001:
                 as_idx.append(i)
         train_dataset = ConcatDataset(
             [train_dataset]
