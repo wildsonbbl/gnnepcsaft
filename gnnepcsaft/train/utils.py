@@ -15,6 +15,7 @@ from lightning.pytorch.callbacks import Callback
 from ray import train
 from ray.train import Checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
+from torch.utils.data import ConcatDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
@@ -266,7 +267,7 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
 
     para_data = {}
-    if isinstance(train_dataset, Esper):
+    if isinstance(train_dataset, (Esper, ConcatDataset)):
         for graph in train_dataset:
             inchi, para, assoc, munanb = (
                 graph.InChI,
@@ -300,9 +301,20 @@ def build_train_dataset(workdir, dataset, transform=None):
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path, transform=transform)
-    elif dataset in ("esper", "esper_assoc"):
+    elif dataset == "esper":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
+    elif dataset == "esper_assoc":
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path, transform=transform)
+        as_idx = []
+        for i, graph in enumerate(train_dataset):
+            if graph.para[4] != 0.0001:
+                as_idx.append(i)
+        train_dataset = ConcatDataset(
+            [train_dataset]
+            + [train_dataset[as_idx]] * round(len(train_dataset) / len(as_idx))
+        )
     else:
         raise ValueError(
             f"dataset is either ramirez, esper or esper_assoc, got >>> {dataset} <<< instead"
