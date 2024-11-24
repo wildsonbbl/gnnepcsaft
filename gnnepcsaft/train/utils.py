@@ -309,12 +309,9 @@ def build_train_dataset(workdir, dataset, transform=None):
         train_dataset = Esper(path, transform=transform)
         as_idx = []
         for i, graph in enumerate(train_dataset):
-            if graph.assoc[1] != 0.0001:
+            if graph.assoc[1] != 0.0:
                 as_idx.append(i)
-        train_dataset = ConcatDataset(
-            [train_dataset]
-            + [train_dataset[as_idx]] * round(len(train_dataset) / len(as_idx))
-        )
+        train_dataset = train_dataset[as_idx]
     else:
         raise ValueError(
             f"dataset is either ramirez, esper or esper_assoc, got >>> {dataset} <<< instead"
