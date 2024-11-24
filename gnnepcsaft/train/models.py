@@ -191,6 +191,7 @@ class PNApcsaftL(L.LightningModule):
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         if self.config.dataset == "esper_assoc":
             target = graphs.assoc.view(-1, self.config.num_para)
+            target[:, 1] = 1 / target[:, 1]
         else:
             target = graphs.para.view(-1, self.config.num_para)
         pred = self(graphs)
@@ -213,6 +214,7 @@ class PNApcsaftL(L.LightningModule):
 
         pred_para = self(graphs).squeeze().to(torch.float64)
         if self.config.dataset == "esper_assoc":
+            pred_para[1] = 1 / pred_para[1]
             pred_para = torch.hstack([graphs.para, pred_para, graphs.munanb])
         else:
             pred_para = torch.hstack([pred_para, graphs.assoc, graphs.munanb])
