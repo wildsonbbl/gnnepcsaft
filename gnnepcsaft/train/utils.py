@@ -263,6 +263,14 @@ class TransformParameters(BaseTransform):
         return data
 
 
+class InvAssoc(BaseTransform):
+    "Inverse eAB for training."
+
+    def forward(self, data: Any) -> Any:
+        data.assoc[1] = 1 / data.assoc[1]
+        return data
+
+
 def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
 
@@ -306,10 +314,10 @@ def build_train_dataset(workdir, dataset, transform=None):
         train_dataset = Esper(path, transform=transform)
     elif dataset == "esper_assoc":
         path = osp.join(workdir, "data/esper2023")
-        train_dataset = Esper(path, transform=transform)
+        train_dataset = Esper(path, transform=InvAssoc())
         as_idx = []
         for i, graph in enumerate(train_dataset):
-            if graph.assoc[1] != 0.0:
+            if graph.assoc[1] != 1 / 0.0001:
                 as_idx.append(i)
         train_dataset = train_dataset[as_idx]
     else:

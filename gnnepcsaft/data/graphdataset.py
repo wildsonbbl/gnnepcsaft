@@ -304,7 +304,7 @@ class Esper(InMemoryDataset):
 
             inchi = row[2]
             para = [value if value else 0.0001 for value in row[8:11]]
-            assoc = row[12:14] if all(row[12:14]) else [0.0, 0.0]
+            assoc = row[12:14] if all(row[12:14]) else [0.0001, 0.0001]
             munanb = [value if value else 0.0 for value in row[11:12] + row[14:16]]
             try:
                 graph = from_InChI(inchi)

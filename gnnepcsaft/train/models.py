@@ -191,7 +191,6 @@ class PNApcsaftL(L.LightningModule):
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         if self.config.dataset == "esper_assoc":
             target = graphs.assoc.view(-1, self.config.num_para)
-            target[:, 1] = 1 / target[:, 1]
         else:
             target = graphs.para.view(-1, self.config.num_para)
         pred = self(graphs)
