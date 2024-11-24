@@ -109,7 +109,6 @@ def main(argv):
         FLAGS.num_gpus,
         FLAGS.num_cpu_trainer,
         FLAGS.verbose,
-        FLAGS.dataset,
         FLAGS.config,
         FLAGS.tags,
     )
@@ -119,7 +118,6 @@ def main(argv):
             training_updated,
             config=FLAGS.config,
             workdir=FLAGS.workdir,
-            dataset=FLAGS.dataset,
         ),
         scaling_config=scaling_config,
         run_config=run_config,
@@ -172,5 +170,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["config", "workdir", "dataset"])
+    flags.mark_flags_as_required(["config", "workdir"])
     app.run(main)
