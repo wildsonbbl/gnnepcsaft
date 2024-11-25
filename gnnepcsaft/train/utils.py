@@ -327,7 +327,7 @@ def build_train_dataset(workdir, dataset, transform=None):
         train_dataset = Esper(path, transform=LogAssoc(workdir))
         as_idx = []
         for i, graph in enumerate(train_dataset):
-            if graph.assoc[1] != graph.assoc[0]:
+            if graph.assoc[0] != 4.0:
                 as_idx.append(i)
         train_dataset = train_dataset[as_idx]
     else:
