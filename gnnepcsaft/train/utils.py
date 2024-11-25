@@ -249,6 +249,7 @@ class TransformParameters(BaseTransform):
     "To add parameters to test dataset."
 
     def __init__(self, para_data: dict) -> None:
+        super().__init__()
         self.para_data = para_data
 
     def forward(self, data: Any) -> Any:
@@ -263,11 +264,20 @@ class TransformParameters(BaseTransform):
         return data
 
 
-class InvAssoc(BaseTransform):
-    "Inverse eAB for training."
+class LogAssoc(BaseTransform):
+    "Log10 assoc for training."
+
+    def __init__(self, workdir: str) -> None:
+        super().__init__()
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path)
+        eab_inv = {}
+        for graph in train_dataset:
+            eab_inv[graph.InChI] = torch.abs(torch.log10(graph.assoc))
+        self.eab_inv = eab_inv
 
     def forward(self, data: Any) -> Any:
-        data.assoc[1] = 1 / data.assoc[1]
+        data.assoc = self.eab_inv[data.InChI]
         return data
 
 
@@ -314,10 +324,10 @@ def build_train_dataset(workdir, dataset, transform=None):
         train_dataset = Esper(path, transform=transform)
     elif dataset == "esper_assoc":
         path = osp.join(workdir, "data/esper2023")
-        train_dataset = Esper(path, transform=InvAssoc())
+        train_dataset = Esper(path, transform=LogAssoc(workdir))
         as_idx = []
         for i, graph in enumerate(train_dataset):
-            if graph.assoc[1] != 1 / 0.0001:
+            if graph.assoc[1] != graph.assoc[0]:
                 as_idx.append(i)
         train_dataset = train_dataset[as_idx]
     else:
