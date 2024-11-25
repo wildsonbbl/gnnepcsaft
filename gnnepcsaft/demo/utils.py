@@ -54,7 +54,9 @@ def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
         del checkpoint
 
 
-def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
+def plotdata(
+    inchi: str, molecule_name: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT
+):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
     parameters"""
@@ -64,11 +66,11 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
     if not osp.exists("images"):
         os.mkdir("images")
 
-    if inchi in tml_para and inchi in es_para:
+    if inchi in tml_para:
         gh = tml_para[inchi]
     else:
         return
-    list_params = predparams(inchi, models)
+    list_params = predparams(inchi, models, model_msigmae)
 
     rho = gh.rho.view(-1, 5).to(torch.float64).numpy()
     vp = gh.vp.view(-1, 5).to(torch.float64).numpy()
@@ -76,6 +78,7 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
     pred_den_list, pred_vp_list = pred_rhovp(inchi, list_params, rho, vp)
 
     plotvp(
+        inchi,
         molecule_name,
         models,
         (
@@ -85,6 +88,7 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
     )
 
     plotden(
+        inchi,
         molecule_name,
         models,
         (
@@ -120,7 +124,7 @@ def plterr(x, y, m):
             plt.text(x[i], y[i], f"{maperror} %", ha="center", va="center", fontsize=8)
 
 
-def pltcustom(scale="linear", ylabel="", n=2):
+def pltcustom(inchi, scale="linear", ylabel="", n=2):
     """
     Add legend and lables for `plotdata`.
     """
@@ -128,50 +132,57 @@ def pltcustom(scale="linear", ylabel="", n=2):
     plt.ylabel(ylabel)
     plt.title("")
     legend = ["ThermoML Archive"]
-    legend += ["Ref."]
     for i in range(1, n + 1):
         legend += [f"GNNePCSAFT {i}"]
+    if inchi in es_para:
+        legend += ["Ref."]
     plt.legend(legend, loc=(1.01, 0.75))
     plt.grid(False)
     plt.yscale(scale)
     sns.despine(trim=True)
 
 
-def predparams(inchi, models):
+def predparams(inchi, models, model_msigmae):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
         gh = from_InChI(inchi)
-        msigmae, assoc, munanb = es_para[inchi]
         graphs = gh.to(device)
-        list_params = [np.hstack(es_para[inchi])]
+        list_params = []
         for model in models:
             model.eval()
             parameters = model(graphs)
             params = parameters.squeeze().to(torch.float64)
             if params.size(0) == 2:
+                if inchi in es_para:
+                    _, _, munanb = es_para[inchi]
+                else:
+                    munanb = torch.tensor([0.0, 1.0, 1.0])
+                msigmae = model_msigmae(graphs).squeeze().to(torch.float64)
                 params = torch.hstack(
                     (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
                 )
             elif params.size(0) == 3:
-                params = torch.hstack((params, assoc, munanb))
+                params = torch.hstack((params, torch.zeros(5)))
             list_params.append(params.numpy())
+        if inchi in es_para:
+            list_params.append(np.hstack(es_para[inchi]))
     return list_params
 
 
 def pred_rhovp(inchi, list_params, rho, vp):
     "Predicted density and vapor pressure with ePC-SAFT."
     pred_den_list, pred_vp_list = [], []
+    print(f"#### {inchi} ####")
     for i, params in enumerate(list_params):
         pred_den, pred_vp = rhovp_data(params, rho, vp)
         pred_den_list.append(pred_den)
         pred_vp_list.append(pred_vp)
-        print(inchi)
-        print(f"#### Parameters for model {i} ####")
+        print(f"#### Parameters for model {i+1} ####")
         print(params)
     return pred_den_list, pred_vp_list
 
 
-def plotden(molecule_name, models, data):
+def plotden(inchi, molecule_name, models, data):
     "Plot density data."
 
     rho, pred_den_list = data
@@ -192,7 +203,7 @@ def plotden(molecule_name, models, data):
                 # plterr(x, y, mden_model)
 
             # Customize the plot appearance
-            pltcustom("linear", "Density (mol / m³)", len(models))
+            pltcustom(inchi, "linear", "Density (mol / m³)", len(models))
             img_path = osp.join("images", "den_" + molecule_name + ".png")
             plt.savefig(
                 img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
@@ -200,7 +211,7 @@ def plotden(molecule_name, models, data):
             plt.show()
 
 
-def plotvp(molecule_name, models, data):
+def plotvp(inchi, molecule_name, models, data):
     "Plot vapor pressure data."
     vp, pred_vp_list = data
     if ~np.all(vp == np.zeros_like(vp)):
@@ -216,7 +227,7 @@ def plotvp(molecule_name, models, data):
             # plterr(x, y, mvp_model)
 
         # Customize the plot appearance
-        pltcustom("log", "Vapor pressure (bar)", len(models))
+        pltcustom(inchi, "log", "Vapor pressure (bar)", len(models))
 
         # Save the plot as a high-quality image file
         img_path = osp.join("images", "vp_" + molecule_name + ".png")
