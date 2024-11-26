@@ -271,13 +271,13 @@ class LogAssoc(BaseTransform):
         super().__init__()
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path)
-        eab_inv = {}
+        assoc = {}
         for graph in train_dataset:
-            eab_inv[graph.InChI] = torch.abs(torch.log10(graph.assoc))
-        self.eab_inv = eab_inv
+            assoc[graph.InChI] = torch.abs(torch.log10(graph.assoc))
+        self.assoc = assoc
 
     def forward(self, data: Any) -> Any:
-        data.assoc = self.eab_inv[data.InChI]
+        data.assoc = self.assoc[data.InChI]
         return data
 
 
