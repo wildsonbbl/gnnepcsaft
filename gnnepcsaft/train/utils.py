@@ -183,7 +183,7 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
             try:
                 vpl += [pure_vp_feos(parameters, state)]
             except (AssertionError, RuntimeError):
-                continue
+                vpl += [np.nan]
     vp = np.asarray(vpl)
 
     return den, vp
