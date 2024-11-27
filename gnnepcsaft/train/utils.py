@@ -130,17 +130,15 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    if parameters.size < 8:
-        zeros = np.zeros(
-            5,
-        )
-        parameters = np.concatenate([parameters, zeros], axis=0)
     pred_mape = [0.0]
     if ~np.all(rho == np.zeros_like(rho)):
         pred_mape = []
         for state in rho:
-            den = pure_den_feos(parameters, state)
-            mape_den = np.abs((state[-1] - den) / state[-1])
+            try:
+                den = pure_den_feos(parameters, state)
+                mape_den = np.abs((state[-1] - den) / state[-1])
+            except RuntimeError:
+                continue
             if mape_den > 1:  # against algorithm fail
                 continue
             pred_mape += [mape_den]
