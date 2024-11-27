@@ -184,7 +184,7 @@ def plotden(inchi, molecule_name, models, data):
 
     rho, pred_den_list = data
     if ~np.all(rho == np.zeros_like(rho)):
-        idx_p = abs(rho[:, 1] - 101325) < 15_000
+        idx_p = abs(rho[:, 1] - 101325) < 1_000
         rho = rho[idx_p]
         if rho.shape[0] != 0:
             idx = np.argsort(rho[:, 0], 0)
