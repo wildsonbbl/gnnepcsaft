@@ -234,7 +234,7 @@ def plotvp(inchi, molecule_name, models, data):
         plt.show()
 
 
-def model_para_fn(model: PNAPCSAFT):
+def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
     """Calculates density and/or vapor pressure mean absolute percentage error
     between ThermoML Archive experimental data and predicted data with ePC-SAFT
     using the model estimated parameters."""
@@ -245,7 +245,18 @@ def model_para_fn(model: PNAPCSAFT):
         for graphs in tml_loader:
             graphs = graphs.to(device)
             parameters = model(graphs)
-            params = parameters.squeeze().to(torch.float64).numpy()
+            params = parameters.squeeze().to(torch.float64)
+            if params.size(0) == 2:
+                munanb = torch.tensor(
+                    (0,) + assoc_number(graphs.InChI), dtype=torch.float32
+                )
+                msigmae = model_msigmae(graphs).squeeze().to(torch.float64)
+                params = torch.hstack(
+                    (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
+                )
+            elif params.size(0) == 3:
+                params = torch.hstack((params, torch.zeros(5)))
+            params = params.numpy()
             rho = graphs.rho.view(-1, 5).to(torch.float64).numpy()
             vp = graphs.vp.view(-1, 5).to(torch.float64).numpy()
             mden_array, mvp_array = mape(params, rho, vp, False)
