@@ -20,6 +20,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
+from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
 from . import models
@@ -256,10 +257,12 @@ class TransformParameters(BaseTransform):
         if data.InChI in self.para_data:
             data.para, data.assoc, data.munanb = self.para_data[data.InChI]
         else:
-            data.para, data.assoc, data.munanb = (
+            data.para, data.assoc = (
                 torch.zeros(3),
                 torch.zeros(2),
-                torch.zeros(3),
+            )
+            data.munanb = torch.tensor(
+                (0,) + assoc_number(data.InChI), dtype=torch.float32
             )
         return data
 

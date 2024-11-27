@@ -11,7 +11,7 @@ import torch
 from rdkit import Chem
 
 from ..configs.default import get_config
-from ..data.graph import from_InChI, from_smiles
+from ..data.graph import assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..train.models import PNAPCSAFT, PNApcsaftL
 from ..train.utils import mape, rhovp_data
@@ -153,10 +153,7 @@ def predparams(inchi, models, model_msigmae):
             parameters = model(graphs)
             params = parameters.squeeze().to(torch.float64)
             if params.size(0) == 2:
-                if inchi in es_para:
-                    _, _, munanb = es_para[inchi]
-                else:
-                    munanb = torch.tensor([0.0, 1.0, 1.0])
+                munanb = torch.tensor((0,) + assoc_number(inchi), dtype=torch.float32)
                 msigmae = model_msigmae(graphs).squeeze().to(torch.float64)
                 params = torch.hstack(
                     (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)

@@ -1,7 +1,9 @@
 """Module for molecular graph design."""
+
 import torch
 from ogb.utils.mol import smiles2graph
 from rdkit import Chem, RDLogger
+from rdkit.Chem.rdMolDescriptors import CalcNumHBA, CalcNumHBD
 from torch_geometric.data import Data
 
 
@@ -90,3 +92,21 @@ def from_smiles(smiles: str) -> Data:
         edge_index=torch.from_numpy(edge_index),
         smiles=smiles,
     )
+
+
+def assoc_number(inchi: str):
+    "Calculates the number of H-bond acceptors/donors"
+
+    exceptions = (
+        "InChI=1S/H2O/h1H2",
+        "InChI=1S/Cl2/c1-2",
+        "InChI=1S/F2/c1-2",
+    )  # From Esper et al. (2023) 10.1021/acs.iecr.3c02255
+    if inchi in exceptions:
+        return 1, 1
+    mol = Chem.MolFromInchi(inchi, removeHs=False)
+    mol = Chem.AddHs(mol)
+    na = CalcNumHBA(mol)
+    nb = CalcNumHBD(mol)
+
+    return na, nb
