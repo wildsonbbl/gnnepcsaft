@@ -3,6 +3,9 @@
 import torch
 from ogb.utils.mol import smiles2graph
 from rdkit import Chem, RDLogger
+
+# pylint: disable = no-name-in-module
+from rdkit.Chem.Fragments import fr_COO2, fr_Imine, fr_isocyan, fr_isothiocyan
 from rdkit.Chem.rdMolDescriptors import CalcNumHBA, CalcNumHBD
 from torch_geometric.data import Data
 
@@ -108,5 +111,27 @@ def assoc_number(inchi: str):
     mol = Chem.AddHs(mol)
     na = CalcNumHBA(mol)
     nb = CalcNumHBD(mol)
+    if na > 0:
+        n_coo = fr_COO2(mol)
+        n_Imine = fr_Imine(mol)
+        n_isocyanates = fr_isocyan(mol)
+        n_isothiocyanates = fr_isothiocyan(mol)
+        n_priamide = len(
+            mol.GetSubstructMatches(
+                Chem.AddHs(
+                    Chem.MolFromInchi("InChI=1S/CH3NO/c2-1-3/h1H,(H2,2,3)"),
+                    onlyOnAtoms=[1, 2],
+                )
+            )
+        )
+        n_sulfuro = len(
+            mol.GetSubstructMatches(
+                Chem.AddHs(Chem.MolFromSmiles("S(=O)(=O)O"), onlyOnAtoms=[3])
+            )
+        )
+
+        na -= (
+            n_coo + n_priamide + n_Imine - n_isocyanates - n_isothiocyanates + n_sulfuro
+        )
 
     return na, nb
