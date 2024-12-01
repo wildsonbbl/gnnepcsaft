@@ -273,9 +273,12 @@ class LogAssoc(BaseTransform):
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path)
         assoc = {}
+        msigmae = {}
         for graph in train_dataset:
             assoc[graph.InChI] = torch.abs(torch.log10(graph.assoc))
+            msigmae[graph.InChI] = torch.abs(torch.log10(graph.para))
         self.assoc = assoc
+        self.msigmae = msigmae
 
     def forward(self, data: Any) -> Any:
         data.assoc = self.assoc[data.InChI]
@@ -330,7 +333,7 @@ def build_train_dataset(workdir, dataset, transform=None):
         for i, graph in enumerate(train_dataset):
             if graph.assoc[0] != 4.0:
                 as_idx.append(i)
-        train_dataset = train_dataset[as_idx]
+        train_dataset = ConcatDataset([train_dataset[as_idx]] * 5 + [train_dataset])
     else:
         raise ValueError(
             f"dataset is either ramirez, esper or esper_assoc, got >>> {dataset} <<< instead"
