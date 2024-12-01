@@ -21,7 +21,7 @@ def get_config():
     config.pad_size = 128
     config.num_train_steps = 250_000
     config.warmup_steps = 100
-    config.log_every_steps = 10_000
+    config.log_every_steps = 1_000
     config.eval_every_steps = 24_999
     config.checkpoint_every_steps = 25_000
     config.amp = False
@@ -32,7 +32,7 @@ def get_config():
     config.checkpoint = ""
 
     # GNN hyperparameters.
-    config.model_name = "esper1"
+    config.model_name = "esper_assoc"
     config.model = "PNAL"
     config.propagation_depth = 6
     config.hidden_dim = 64
