@@ -213,7 +213,7 @@ class PNApcsaftL(L.LightningModule):
 
         pred_para = self(graphs).squeeze().to(torch.float64)
         if self.config.dataset == "esper_assoc":
-            pred_para = 10 ** (pred_para * torch.tensor(-1.0, 1.0))
+            pred_para = 10 ** (pred_para * torch.tensor([-1.0, 1.0]))
             pred_para = torch.hstack([graphs.para, pred_para, graphs.munanb])
         else:
             pred_para = torch.hstack([pred_para, graphs.assoc, graphs.munanb])
