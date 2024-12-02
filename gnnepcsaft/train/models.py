@@ -213,12 +213,16 @@ class PNApcsaftL(L.LightningModule):
 
         pred_para = self(graphs).squeeze().to(torch.float64)
         if self.config.dataset == "esper_assoc":
-            pred_para = 10 ** (
+            para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
-            pred_para = torch.hstack([graphs.para, pred_para, graphs.munanb])
+            para_msigmae = 10**graphs.para
         else:
-            pred_para = torch.hstack([pred_para, graphs.assoc, graphs.munanb])
+            para_assoc = 10 ** (
+                graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
+            )
+            para_msigmae = 10**pred_para
+        pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
             pred = pcsaft_den(pred_para, datapoints)
