@@ -217,12 +217,12 @@ class PNApcsaftL(L.LightningModule):
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
-            para_msigmae = 10**graphs.para
+            para_msigmae = graphs.para
         else:
             para_assoc = 10 ** (
                 graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
-            para_msigmae = 10**pred_para
+            para_msigmae = pred_para
         pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):

@@ -246,7 +246,7 @@ class Ramirez(InMemoryDataset):
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
 
-            graph.para = torch.tensor(para).log10().abs()
+            graph.para = torch.tensor(para)
             graph.critic = torch.tensor(row[1:3])
             datalist.append(graph)
 
@@ -312,7 +312,7 @@ class Esper(InMemoryDataset):
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
 
-            graph.para = torch.tensor(para, dtype=torch.float64).log10().abs()
+            graph.para = torch.tensor(para, dtype=torch.float64)
             graph.assoc = torch.tensor(assoc, dtype=torch.float64).log10().abs()
             graph.munanb = torch.tensor(munanb, dtype=torch.float64)
             datalist.append(graph)
