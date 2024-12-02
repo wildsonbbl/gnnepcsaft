@@ -282,6 +282,7 @@ class LogAssoc(BaseTransform):
 
     def forward(self, data: Any) -> Any:
         data.assoc = self.assoc[data.InChI]
+        data.para = self.msigmae[data.InChI]
         return data
 
 
@@ -328,7 +329,7 @@ def build_train_dataset(workdir, dataset, transform=None):
         train_dataset = Esper(path, transform=transform)
     elif dataset == "esper_assoc":
         path = osp.join(workdir, "data/esper2023")
-        train_dataset = Esper(path, transform=LogAssoc(workdir))
+        train_dataset = Esper(path, transform=transform)
         as_idx = []
         for i, graph in enumerate(train_dataset):
             if graph.assoc[0] != 4.0:
