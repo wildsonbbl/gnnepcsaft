@@ -15,10 +15,12 @@ from lightning.pytorch.callbacks import Callback
 from ray import train
 from ray.train import Checkpoint
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
+from torch.utils.data import ConcatDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
+from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
 from . import models
@@ -29,7 +31,7 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path)
-    elif dataset == "esper":
+    elif dataset in ("esper", "esper_assoc"):
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path)
     else:
@@ -128,17 +130,15 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    if parameters.size < 8:
-        zeros = np.zeros(
-            5,
-        )
-        parameters = np.concatenate([parameters, zeros], axis=0)
     pred_mape = [0.0]
     if ~np.all(rho == np.zeros_like(rho)):
         pred_mape = []
         for state in rho:
-            den = pure_den_feos(parameters, state)
-            mape_den = np.abs((state[-1] - den) / state[-1])
+            try:
+                den = pure_den_feos(parameters, state)
+                mape_den = np.abs((state[-1] - den) / state[-1])
+            except RuntimeError:
+                continue
             if mape_den > 1:  # against algorithm fail
                 continue
             pred_mape += [mape_den]
@@ -182,7 +182,7 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
             try:
                 vpl += [pure_vp_feos(parameters, state)]
             except (AssertionError, RuntimeError):
-                continue
+                vpl += [np.nan]
     vp = np.asarray(vpl)
 
     return den, vp
@@ -244,17 +244,44 @@ def build_datasets_loaders(config, workdir, dataset):
 
 
 # pylint: disable=R0903
-class Munanb(BaseTransform):
-    "To add mu, na, nb data to test dataset."
+class TransformParameters(BaseTransform):
+    "To add parameters to test dataset."
 
     def __init__(self, para_data: dict) -> None:
+        super().__init__()
         self.para_data = para_data
 
     def forward(self, data: Any) -> Any:
         if data.InChI in self.para_data:
-            data.munanb = self.para_data[data.InChI]
+            data.para, data.assoc, data.munanb = self.para_data[data.InChI]
         else:
-            data.munanb = torch.zeros(5)
+            data.para, data.assoc = (
+                torch.zeros(3),
+                torch.zeros(2),
+            )
+            data.munanb = torch.tensor(
+                (0,) + assoc_number(data.InChI), dtype=torch.float32
+            )
+        return data
+
+
+class LogAssoc(BaseTransform):
+    "Log10 assoc for training."
+
+    def __init__(self, workdir: str) -> None:
+        super().__init__()
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path)
+        assoc = {}
+        msigmae = {}
+        for graph in train_dataset:
+            assoc[graph.InChI] = torch.abs(torch.log10(graph.assoc))
+            msigmae[graph.InChI] = torch.abs(torch.log10(graph.para))
+        self.assoc = assoc
+        self.msigmae = msigmae
+
+    def forward(self, data: Any) -> Any:
+        data.assoc = self.assoc[data.InChI]
         return data
 
 
@@ -262,19 +289,33 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
 
     para_data = {}
-    if isinstance(train_dataset, Esper):
+    if isinstance(train_dataset, (Esper, ConcatDataset)):
         for graph in train_dataset:
-            inchi, para = graph.InChI, graph.munanb
-            para_data[inchi] = para
+            inchi, para, assoc, munanb = (
+                graph.InChI,
+                graph.para,
+                graph.assoc,
+                graph.munanb,
+            )
+            para_data[inchi] = (para, assoc, munanb)
     if transform:
-        # pylint: disable=E1102
-        transform = T.compose([Munanb(para_data), transform])
+        transform = T.Compose([TransformParameters(para_data), transform])
     else:
-        transform = Munanb(para_data)
-    test_loader = ThermoMLDataset(
+        transform = TransformParameters(para_data)
+    tml_dataset = ThermoMLDataset(
         osp.join(workdir, "data/thermoml"), transform=transform
     )
-    return test_loader, para_data
+    test_idx = []
+    val_idx = []
+    # separate test and val dataset
+    for idx, graph in enumerate(tml_dataset):
+        if graph.InChI in para_data:
+            val_idx.append(idx)
+        else:
+            test_idx.append(idx)
+    test_dataset = tml_dataset[test_idx]
+    val_dataset = tml_dataset[val_idx]
+    return val_dataset, test_dataset
 
 
 def build_train_dataset(workdir, dataset, transform=None):
@@ -285,9 +326,17 @@ def build_train_dataset(workdir, dataset, transform=None):
     elif dataset == "esper":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
+    elif dataset == "esper_assoc":
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path, transform=LogAssoc(workdir))
+        as_idx = []
+        for i, graph in enumerate(train_dataset):
+            if graph.assoc[0] != 4.0:
+                as_idx.append(i)
+        train_dataset = ConcatDataset([train_dataset[as_idx]] * 5 + [train_dataset])
     else:
         raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+            f"dataset is either ramirez, esper or esper_assoc, got >>> {dataset} <<< instead"
         )
 
     return train_dataset

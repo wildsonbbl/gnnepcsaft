@@ -189,7 +189,10 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        target = graphs.para.view(-1, self.config.num_para)
+        if self.config.dataset == "esper_assoc":
+            target = graphs.assoc.view(-1, self.config.num_para)
+        else:
+            target = graphs.para.view(-1, self.config.num_para)
         pred = self(graphs)
         loss_mape = mape(pred, target)
         self.log(
@@ -209,7 +212,11 @@ class PNApcsaftL(L.LightningModule):
         metrics_dict = {}
 
         pred_para = self(graphs).squeeze().to(torch.float64)
-        pred_para = torch.hstack([pred_para, graphs.munanb])
+        if self.config.dataset == "esper_assoc":
+            pred_para = 10 ** (pred_para * torch.tensor(-1.0, 1.0))
+            pred_para = torch.hstack([graphs.para, pred_para, graphs.munanb])
+        else:
+            pred_para = torch.hstack([pred_para, graphs.assoc, graphs.munanb])
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
         if ~torch.all(datapoints == torch.zeros_like(datapoints)):
             pred = pcsaft_den(pred_para, datapoints)
