@@ -40,7 +40,7 @@ def get_config():
     config.post_layers = 1
     config.dropout_rate = 0.0
     config.num_mlp_layers = 1
-    config.num_para = 2
+    config.num_para = 3
     config.skip_connections = True
     config.add_self_loops = True
     return config

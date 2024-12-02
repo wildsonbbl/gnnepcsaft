@@ -204,6 +204,7 @@ class PNApcsaftL(L.LightningModule):
         )
         return loss_mape
 
+    # pylint: disable=R0914
     def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         mape_den = 0.0
         huber_den = 0.0
