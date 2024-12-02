@@ -38,7 +38,11 @@ for graph in tml_loader:
 es_loader = Esper(osp.join(real_path, "../data/esper2023"))
 es_para = {}
 for graph in es_loader:
-    es_para[graph.InChI] = (graph.para, graph.assoc, graph.munanb)
+    es_para[graph.InChI] = (
+        10**graph.para,
+        10 ** (graph.assoc * torch.tensor([-1.0, 1.0])),
+        graph.munanb,
+    )
 
 device = torch.device("cpu")
 
