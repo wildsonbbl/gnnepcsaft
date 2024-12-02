@@ -28,11 +28,11 @@ def get_config():
     config.momentum = 0.9
     config.patience = 5
     config.weight_decay = 1e-2
-    config.dataset = "esper_assoc"
-    config.checkpoint = "esper_assoc-epoch=3285-train_mape=0.0074.ckpt"
+    config.dataset = "esper"
+    config.checkpoint = ""
 
     # GNN hyperparameters.
-    config.model_name = "esper_assoc"
+    config.model_name = "esper_msigmae_log10"
     config.model = "PNAL"
     config.propagation_depth = 6
     config.hidden_dim = 64
