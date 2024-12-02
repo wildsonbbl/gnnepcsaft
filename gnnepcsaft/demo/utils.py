@@ -153,7 +153,12 @@ def predparams(inchi, models, model_msigmae):
             parameters = model(graphs)
             params = parameters.squeeze().to(torch.float64)
             if params.size(0) == 2:
-                munanb = torch.tensor((0,) + assoc_number(inchi), dtype=torch.float32)
+                if inchi in es_para:
+                    munanb = es_para[inchi][2]
+                else:
+                    munanb = torch.tensor(
+                        (0,) + assoc_number(inchi), dtype=torch.float32
+                    )
                 msigmae = model_msigmae(graphs).squeeze().to(torch.float64)
                 params = torch.hstack(
                     (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
@@ -247,9 +252,12 @@ def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
             parameters = model(graphs)
             params = parameters.squeeze().to(torch.float64)
             if params.size(0) == 2:
-                munanb = torch.tensor(
-                    (0,) + assoc_number(graphs.InChI), dtype=torch.float32
-                )
+                if graphs.InChI in es_para:
+                    munanb = es_para[graphs.InChI][2]
+                else:
+                    munanb = torch.tensor(
+                        (0,) + assoc_number(graphs.InChI), dtype=torch.float32
+                    )
                 msigmae = model_msigmae(graphs).squeeze().to(torch.float64)
                 params = torch.hstack(
                     (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
