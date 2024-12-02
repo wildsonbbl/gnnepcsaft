@@ -29,7 +29,7 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-2
     config.dataset = "esper_assoc"
-    config.checkpoint = ""
+    config.checkpoint = "esper_assoc-epoch=3285-train_mape=0.0074.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "esper_assoc"
