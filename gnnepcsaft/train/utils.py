@@ -331,13 +331,27 @@ def build_train_dataset(workdir, dataset, transform=None):
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
         as_idx = []
+        non_as_idx = []
         for i, graph in enumerate(train_dataset):
-            if graph.assoc[0] != 4.0:
+            if all(graph.munanb[1:] > 0):
                 as_idx.append(i)
-        train_dataset = ConcatDataset([train_dataset[as_idx]] * 5 + [train_dataset])
+            if all(graph.munanb[1:] == 0):
+                non_as_idx.append(i)
+        train_dataset = ConcatDataset(
+            [train_dataset[as_idx], train_dataset[non_as_idx]]
+        )
+    elif dataset == "esper_assoc_only":
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path, transform=transform)
+        as_idx = []
+        for i, graph in enumerate(train_dataset):
+            if all(graph.munanb[1:] > 0):
+                as_idx.append(i)
+        train_dataset = train_dataset[as_idx]
     else:
         raise ValueError(
-            f"dataset is either ramirez, esper or esper_assoc, got >>> {dataset} <<< instead"
+            f"dataset is either ramirez, esper, esper_assoc \
+              or esper_assoc_only, got >>> {dataset} <<< instead"
         )
 
     return train_dataset
