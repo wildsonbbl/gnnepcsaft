@@ -189,7 +189,7 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        if self.config.dataset == "esper_assoc":
+        if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
             target = graphs.assoc.view(-1, self.config.num_para)
         else:
             target = graphs.para.view(-1, self.config.num_para)
@@ -213,7 +213,7 @@ class PNApcsaftL(L.LightningModule):
         metrics_dict = {}
 
         pred_para = self(graphs).squeeze().to(torch.float64)
-        if self.config.dataset == "esper_assoc":
+        if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )

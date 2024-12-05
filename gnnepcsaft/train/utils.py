@@ -31,7 +31,7 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path)
-    elif dataset in ("esper", "esper_assoc"):
+    elif dataset in ("esper", "esper_assoc", "esper_assoc_only"):
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path)
     else:
