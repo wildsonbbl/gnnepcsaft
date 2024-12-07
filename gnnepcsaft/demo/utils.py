@@ -1,5 +1,6 @@
 """Module for functions used in model demonstration."""
 
+import itertools
 import os
 import os.path as osp
 from typing import Union
@@ -19,6 +20,7 @@ from ..train.utils import mape, rhovp_data
 sns.set_theme(style="ticks")
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
+markers = itertools.cycle(("o", "v", "^", "<", ">", "*", "s", "p", "P", "D"))
 
 config = get_config()
 device = torch.device("cpu")
@@ -110,12 +112,12 @@ def plotdata(
 
 def pltline(x, y):
     "Line plot."
-    return plt.plot(x, y, linewidth=0.5)
+    return plt.plot(x, y, marker=next(iter(markers)), linewidth=0.5)
 
 
 def pltscatter(x, y):
     "Scatter plot."
-    return plt.scatter(x, y, marker="x", s=10, c="black")
+    return plt.scatter(x, y, marker="x", s=10, c="black", zorder=10)
 
 
 def plterr(x, y, m):
