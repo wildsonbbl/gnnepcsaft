@@ -257,7 +257,7 @@ def torch_trainer_config(
         storage_path=None,
         verbose=verbose,
         checkpoint_config=train.CheckpointConfig(
-            num_to_keep=1,
+            num_to_keep=None,
         ),
         progress_reporter=None,
         log_to_file=True,
