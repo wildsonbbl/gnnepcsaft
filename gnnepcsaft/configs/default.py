@@ -32,15 +32,15 @@ def get_config():
     config.checkpoint = ""
 
     # GNN hyperparameters.
-    config.model_name = "esper_msigmae_log10"
+    config.model_name = "esper_msigmae_1"
     config.model = "PNAL"
-    config.propagation_depth = 6
-    config.hidden_dim = 64
-    config.pre_layers = 1
-    config.post_layers = 1
+    config.propagation_depth = 4
+    config.hidden_dim = 256
+    config.pre_layers = 2
+    config.post_layers = 2
     config.dropout_rate = 0.0
-    config.num_mlp_layers = 1
+    config.num_mlp_layers = 0
     config.num_para = 3
-    config.skip_connections = True
+    config.skip_connections = False
     config.add_self_loops = True
     return config
