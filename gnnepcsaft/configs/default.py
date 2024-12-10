@@ -9,9 +9,9 @@ def get_config():
     config.job_type = "train"
 
     # Optimizer.
-    config.optimizer = "adam"
-    config.learning_rate = 1.0e-3
-    config.change_opt = False
+    config.optimizer = "sgd"
+    config.learning_rate = 1.0e-6
+    config.change_opt = True
     config.change_sch = False
 
     # Training hyperparameters.
@@ -29,10 +29,10 @@ def get_config():
     config.patience = 5
     config.weight_decay = 1e-2
     config.dataset = "esper"
-    config.checkpoint = ""
+    config.checkpoint = "esper_msigmae_2-epoch=36999-train_mape=0.0056.ckpt"
 
     # GNN hyperparameters.
-    config.model_name = "esper_msigmae_2"
+    config.model_name = "esper_msigmae_2.1"
     config.model = "PNAL"
     config.propagation_depth = 6
     config.hidden_dim = 64
