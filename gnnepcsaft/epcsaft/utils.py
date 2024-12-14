@@ -226,3 +226,27 @@ class VpFromTensor(torch.autograd.Function):
     def backward(ctx, dg1: torch.Tensor):
         grad_result = dg1
         return grad_result, None
+
+
+def parameters_gc_pcsaft(smiles: str) -> tuple:
+    "Calculates PC-SAFT parameters with Group Contribution method."
+    pure_record = (
+        PcSaftParameters.from_json_smiles(
+            [smiles],
+            "./gnnepcsaft/data/gc_pcsaft/sauer2014_smarts.json",
+            "./gnnepcsaft/data/gc_pcsaft/rehner2023_hetero.json",
+        )
+        .pure_records[0]
+        .model_record
+    )
+
+    m = pure_record.m
+    sigma = pure_record.sigma
+    e = pure_record.epsilon_k
+    mu = pure_record.mu if pure_record.mu else 0
+    kab = pure_record.kappa_ab if pure_record.kappa_ab else 0
+    eab = pure_record.epsilon_k_ab if pure_record.epsilon_k_ab else 0
+    na = pure_record.na if pure_record.na else 0
+    nb = pure_record.nb if pure_record.nb else 0
+
+    return (m, sigma, e, kab, eab, mu, na, nb)
