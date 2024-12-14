@@ -14,6 +14,7 @@ from rdkit import Chem
 from ..configs.default import get_config
 from ..data.graph import assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
+from ..epcsaft.utils import parameters_gc_pcsaft
 from ..train.models import PNAPCSAFT, PNApcsaftL
 from ..train.utils import mape, rhovp_data
 
@@ -142,6 +143,7 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
         legend += [f"GNNePCSAFT {i}"]
     if inchi in es_para:
         legend += ["Ref."]
+    legend += ["GC PCSAFT"]
     plt.legend(legend, loc=(1.01, 0.75))
     plt.grid(False)
     plt.yscale(scale)
@@ -171,9 +173,17 @@ def predparams(inchi, models, model_msigmae):
                 )
             elif params.size(0) == 3:
                 params = torch.hstack((params, torch.zeros(5)))
-            list_params.append(params.numpy())
+            list_params.append(params.numpy().round(decimals=4))
         if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]))
+            list_params.append(np.hstack(es_para[inchi]).round(decimals=4))
+        try:
+            list_params.append(
+                np.asarray(parameters_gc_pcsaft(gh.smiles)).round(decimals=4)
+            )
+        # pylint: disable=W0702
+        except:
+            pass
+
     return list_params
 
 
@@ -182,11 +192,11 @@ def pred_rhovp(inchi, list_params, rho, vp):
     pred_den_list, pred_vp_list = [], []
     print(f"#### {inchi} ####")
     for i, params in enumerate(list_params):
+        print(f"#### Parameters for model {i+1} ####")
+        print(params)
         pred_den, pred_vp = rhovp_data(params, rho, vp)
         pred_den_list.append(pred_den)
         pred_vp_list.append(pred_vp)
-        print(f"#### Parameters for model {i+1} ####")
-        print(params)
     return pred_den_list, pred_vp_list
 
 
