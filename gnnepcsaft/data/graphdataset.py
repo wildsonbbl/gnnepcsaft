@@ -1,7 +1,5 @@
 """Module for molecular graph dataset building."""
 
-import pickle
-
 import polars as pl
 import torch
 from torch.utils.data import Dataset as ds
@@ -49,7 +47,7 @@ class ThermoMLDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return ["pure.pkl"]
+        return ["pure.parquet"]
 
     @property
     def processed_file_names(self):
@@ -64,75 +62,28 @@ class ThermoMLDataset(InMemoryDataset):
         datalist = []
 
         with open(self.raw_paths[0], "rb") as f:
-            data_dict = pickle.load(f)
+            data = pl.read_parquet(f)
+        inchis = data.unique("inchi1")["inchi1"].to_list()
 
-        for inchi in data_dict:
+        for inchi in inchis:
             try:
                 graph = from_InChI(inchi)
             except (TypeError, ValueError) as e:
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
-            if (3 in data_dict[inchi]) & (1 not in data_dict[inchi]):
-                states = [
-                    torch.cat(
-                        [
-                            torch.tensor(state, dtype=self.dtype),
-                            torch.tensor([y], dtype=self.dtype),
-                        ]
-                    )[None, ...]
-                    for _, state, y in data_dict[inchi][3]
-                ]
 
-                states = torch.cat(states, 0)
+            graph.vp = (
+                data.filter(pl.col("inchi1") == inchi, pl.col("tp") == 3)
+                .select("TK", "PPa", "phase", "tp", "m")
+                .to_torch()
+            )
+            graph.rho = (
+                data.filter(pl.col("inchi1") == inchi, pl.col("tp") == 1)
+                .select("TK", "PPa", "phase", "tp", "m")
+                .to_torch()
+            )
 
-                graph.vp = states
-                graph.rho = torch.zeros((1, 5))
-
-                datalist.append(graph)
-            elif (3 in data_dict[inchi]) & (1 in data_dict[inchi]):
-                vp = [
-                    torch.cat(
-                        [
-                            torch.tensor(state, dtype=self.dtype),
-                            torch.tensor([y], dtype=self.dtype),
-                        ]
-                    )[None, ...]
-                    for _, state, y in data_dict[inchi][3]
-                ]
-
-                vp = torch.cat(vp, 0)
-                rho = [
-                    torch.cat(
-                        [
-                            torch.tensor(state, dtype=self.dtype),
-                            torch.tensor([y], dtype=self.dtype),
-                        ]
-                    )[None, ...]
-                    for _, state, y in data_dict[inchi][1]
-                ]
-
-                rho = torch.cat(rho, 0)
-
-                graph.vp = vp
-                graph.rho = rho
-
-                datalist.append(graph)
-            elif 1 in data_dict[inchi]:
-                rho = [
-                    torch.cat(
-                        [
-                            torch.tensor(state, dtype=self.dtype),
-                            torch.tensor([y], dtype=self.dtype),
-                        ]
-                    )[None, ...]
-                    for _, state, y in data_dict[inchi][1]
-                ]
-
-                rho = torch.cat(rho, 0)
-
-                graph.vp = torch.zeros((1, 5))
-                graph.rho = rho
-                datalist.append(graph)
+            datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
 
