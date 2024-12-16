@@ -131,7 +131,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     """
     parameters = np.abs(parameters)
     pred_mape = [0.0]
-    if ~np.all(rho == np.zeros_like(rho)):
+    if rho.shape[0] > 0:
         pred_mape = []
         for state in rho:
             try:
@@ -139,8 +139,8 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
                 mape_den = np.abs((state[-1] - den) / state[-1])
             except RuntimeError:
                 continue
-            if mape_den > 1:  # against algorithm fail
-                continue
+            # if mape_den > 1:  # against algorithm fail
+            #     continue
             pred_mape += [mape_den]
 
     den = np.asarray(pred_mape)
@@ -148,7 +148,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
         den = den.mean()
 
     pred_mape = [0.0]
-    if ~np.all(vp == np.zeros_like(vp)):
+    if vp.shape[0] > 0:
         pred_mape = []
         for state in vp:
             try:
@@ -156,8 +156,8 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
                 mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
             except (AssertionError, RuntimeError):
                 continue
-            if mape_vp > 1:  # against algorithm fail
-                continue
+            # if mape_vp > 1:  # against algorithm fail
+            #     continue
             pred_mape += [mape_vp]
 
     vp = np.asarray(pred_mape)
@@ -171,13 +171,13 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
     parameters = np.abs(parameters)
     den = []
-    if ~np.all(rho == np.zeros_like(rho)):
+    if rho.shape[0] > 0:
         for state in rho:
             den += [pure_den_feos(parameters, state)]
     den = np.asarray(den)
 
     vpl = []
-    if ~np.all(vp == np.zeros_like(vp)):
+    if vp.shape[0] > 0:
         for state in vp:
             try:
                 vpl += [pure_vp_feos(parameters, state)]

@@ -225,7 +225,7 @@ class PNApcsaftL(L.LightningModule):
             para_msigmae = pred_para
         pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
         datapoints = graphs.rho.to(torch.float64).view(-1, 5)
-        if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+        if datapoints.shape[0] > 0:
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1].cpu()
             # pylint: disable = not-callable
@@ -242,7 +242,7 @@ class PNApcsaftL(L.LightningModule):
             )
 
         datapoints = graphs.vp.to(torch.float64).view(-1, 5)
-        if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+        if datapoints.shape[0] > 0:
             pred = pcsaft_vp(pred_para, datapoints)
             target = datapoints[:, -1].cpu()
             result_filter = ~torch.isnan(pred)
