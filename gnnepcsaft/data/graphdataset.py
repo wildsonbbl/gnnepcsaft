@@ -6,6 +6,7 @@ from torch.utils.data import Dataset as ds
 from torch_geometric.data import Data, InMemoryDataset
 
 from .graph import from_InChI
+from .preprocess import mw
 
 
 class ThermoMLDataset(InMemoryDataset):
@@ -68,6 +69,7 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in inchis:
             try:
                 graph = from_InChI(inchi)
+                graph.mw = mw(inchi)
             except (TypeError, ValueError) as e:
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
@@ -82,6 +84,8 @@ class ThermoMLDataset(InMemoryDataset):
                 .select("TK", "PPa", "phase", "tp", "m")
                 .to_torch()
             )
+
+            graph.rho[:, -1] *= 1000 / graph.mw  # convert to mol/ m³
 
             datalist.append(graph)
 
