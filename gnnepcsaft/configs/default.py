@@ -28,10 +28,10 @@ def get_config():
     config.eval_every_steps = 100
     config.checkpoint_every_steps = 100
     config.dataset = "esper"
-    config.checkpoint = ""
+    config.checkpoint = "esper_msigmae_2-epoch=37499-mape_den=0.0112.ckpt"
 
     # GNN hyperparameters.
-    config.model_name = "esper_msigmae_2"
+    config.model_name = "esper_msigmae_2.1"
     config.model = "PNAL"
     config.propagation_depth = 6
     config.hidden_dim = 64
