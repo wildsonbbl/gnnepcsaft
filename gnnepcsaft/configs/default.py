@@ -9,9 +9,9 @@ def get_config():
     config.job_type = "train"
 
     # Optimizer.
-    config.optimizer = "sgd"
-    config.learning_rate = 1e-12
-    config.change_opt = True
+    config.optimizer = "adam"
+    config.learning_rate = 1e-3
+    config.change_opt = False
     config.change_sch = False
     config.weight_decay = 1e-2
     config.momentum = 0.9
@@ -21,24 +21,24 @@ def get_config():
     # Training hyperparameters.
 
     config.accelerator = "gpu"
-    config.batch_size = 1842
+    config.batch_size = 512
     config.pad_size = 128
-    config.num_train_steps = 1_000
-    config.log_every_steps = 100
-    config.eval_every_steps = 100
-    config.checkpoint_every_steps = 100
-    config.dataset = "esper"
-    config.checkpoint = "esper_msigmae_2-epoch=37499-mape_den=0.0112.ckpt"
+    config.num_train_steps = 150_000
+    config.log_every_steps = 10000
+    config.eval_every_steps = 24999
+    config.checkpoint_every_steps = 25000
+    config.dataset = "esper_assoc"
+    config.checkpoint = ""
 
     # GNN hyperparameters.
-    config.model_name = "esper_msigmae_2.1"
+    config.model_name = "esper_assoc_2"
     config.model = "PNAL"
     config.propagation_depth = 6
     config.hidden_dim = 64
     config.pre_layers = 2
     config.post_layers = 2
     config.num_mlp_layers = 2
-    config.num_para = 3
+    config.num_para = 2
     config.skip_connections = False
     config.add_self_loops = False
     config.dropout_rate = 0.0
