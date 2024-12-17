@@ -11,7 +11,7 @@ def get_config():
     # Optimizer.
     config.optimizer = "sgd"
     config.learning_rate = 1e-6
-    config.change_opt = True
+    config.change_opt = False
     config.change_sch = False
     config.weight_decay = 1e-2
     config.momentum = 0.9
@@ -23,12 +23,12 @@ def get_config():
     config.accelerator = "gpu"
     config.batch_size = 1133
     config.pad_size = 128
-    config.num_train_steps = 1_000
-    config.log_every_steps = 10
-    config.eval_every_steps = 99
-    config.checkpoint_every_steps = 100
+    config.num_train_steps = 150_000
+    config.log_every_steps = 1000
+    config.eval_every_steps = 9999
+    config.checkpoint_every_steps = 10000
     config.dataset = "esper_assoc"
-    config.checkpoint = "esper_assoc_2-epoch=33333-train_mape=0.0031.ckpt"
+    config.checkpoint = "esper_assoc_2.1-epoch=9999-train_mape=0.0058.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "esper_assoc_2.1"
