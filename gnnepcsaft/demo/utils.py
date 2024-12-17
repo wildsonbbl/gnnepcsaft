@@ -106,7 +106,6 @@ def plotdata(
 
     mol = Chem.MolFromInchi(inchi)
     img = Draw.MolToImage(mol, size=(600, 600))
-    img.show()
     img_path = osp.join("images", "mol_" + molecule_name + ".png")
     img.save(img_path, dpi=(300, 300), format="png", bitmap_format="png")
 

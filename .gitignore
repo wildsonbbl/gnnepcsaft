@@ -18,3 +18,4 @@ kaggle*
 /dist/
 *.pyc
 .env
+**/qmugs
