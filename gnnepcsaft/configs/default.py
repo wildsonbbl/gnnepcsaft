@@ -10,7 +10,7 @@ def get_config():
 
     # Optimizer.
     config.optimizer = "sgd"
-    config.learning_rate = 1e-15
+    config.learning_rate = 1e-6
     config.change_opt = True
     config.change_sch = False
     config.weight_decay = 1e-2
