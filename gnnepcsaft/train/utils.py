@@ -338,7 +338,7 @@ def build_train_dataset(workdir, dataset, transform=None):
             if all(graph.munanb[1:] == 0):
                 non_as_idx.append(i)
         train_dataset = ConcatDataset(
-            [train_dataset[as_idx], train_dataset[non_as_idx]]
+            [train_dataset[as_idx]] * 4 + [train_dataset[non_as_idx]]
         )
     elif dataset == "esper_assoc_only":
         path = osp.join(workdir, "data/esper2023")
