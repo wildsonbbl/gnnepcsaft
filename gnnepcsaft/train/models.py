@@ -52,6 +52,9 @@ class PNAPCSAFT(torch.nn.Module):
         self.pna_params = pna_params
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
+        self.lower_bounds = torch.tensor([1.0, 1.9, 50.0, 0.0001, 200.0])
+        self.upper_bounds = torch.tensor([25.0, 4.5, 550.0, 0.9, 5000.0])
+        self.num_para = num_para
 
         self.node_embed = AtomEncoder(hidden_dim)
         self.edge_embed = BondEncoder(hidden_dim)
@@ -107,6 +110,20 @@ class PNAPCSAFT(torch.nn.Module):
 
         x = global_add_pool(x, batch)
         x = self.mlp(x)
+        return x
+
+    def pred_with_bounds(self, data: Data):
+        """Forward pass of the model with bounds."""
+        x: torch.Tensor = self.forward(data)
+        upper_bounds = (
+            self.upper_bounds[:3] if self.num_para == 3 else self.upper_bounds[3:]
+        )
+        lower_bounds = (
+            self.lower_bounds[:3] if self.num_para == 3 else self.lower_bounds[3:]
+        )
+        x = torch.minimum(x, upper_bounds)
+        x = torch.maximum(x, lower_bounds)
+
         return x
 
 
@@ -187,7 +204,9 @@ class PNApcsaftL(L.LightningModule):
         huber_vp = 0.0
         metrics_dict = {}
 
-        pred_para: torch.Tensor = self(graphs).squeeze().to(torch.float64)
+        pred_para: torch.Tensor = (
+            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+        )
         if self.config.num_para == 2:
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
