@@ -61,7 +61,7 @@ def create_model(
         pre_layers=config.pre_layers,
         post_layers=config.post_layers,
         deg=deg,
-        dropout=config.dropout,
+        dropout=config.dropout_rate,
         self_loops=config.add_self_loops,
     )
 
