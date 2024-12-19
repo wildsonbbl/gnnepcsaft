@@ -80,6 +80,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             save_top_k=1,
             every_n_train_steps=config.checkpoint_every_steps,
             verbose=True,
+            save_on_train_epoch_end=False,
         )
         callbacks.append(checkpoint_mape_den)
 
