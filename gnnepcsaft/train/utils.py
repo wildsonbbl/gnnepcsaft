@@ -14,7 +14,6 @@ from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 from ray import train
 from ray.train import Checkpoint
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
 from torch.utils.data import ConcatDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
@@ -36,7 +35,7 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
         train_dataset = Esper(path)
     else:
         raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+            f"dataset is either ramirez or esper, got >>> {dataset} <<< instead"
         )
     # Compute the maximum in-degree in the training data.
     max_degree = -1
@@ -62,26 +61,19 @@ def create_model(
         pre_layers=config.pre_layers,
         post_layers=config.post_layers,
         deg=deg,
-        skip_connections=config.skip_connections,
+        dropout=config.dropout,
         self_loops=config.add_self_loops,
-    )
-    mlp_params = models.ReadoutMLPParams(
-        num_mlp_layers=config.num_mlp_layers,
-        num_para=config.num_para,
-        dropout=config.dropout_rate,
     )
 
     if config.model == "PNA":
-
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             pna_params=pna_params,
-            mlp_params=mlp_params,
+            num_para=config.num_para,
         )
     if config.model == "PNAL":
         return models.PNApcsaftL(
             pna_params=pna_params,
-            mlp_params=mlp_params,
             config=config,
         )
 
@@ -186,52 +178,6 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     vp = np.asarray(vpl)
 
     return den, vp
-
-
-def create_schedulers(config, optimizer):
-    "Creates lr schedulers."
-
-    class Noop:
-        """Dummy noop scheduler"""
-
-        def step(self, *args, **kwargs):
-            """Scheduler step"""
-
-        def __getattr__(self, _):
-            return self.step
-
-    if config.change_sch:
-        scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(
-            optimizer,
-            mode="min",
-            patience=config.patience,
-            verbose=True,
-            cooldown=config.patience,
-            min_lr=1e-15,
-            eps=1e-15,
-        )
-    else:
-        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-        scheduler2 = Noop()
-    return scheduler, scheduler2
-
-
-# pylint: disable= R0913,R0917
-def load_checkpoint(config, workdir, model, optimizer, scaler, device):
-    "Loads saved model checkpoints."
-    ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
-    initial_step = 1
-    if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path, map_location=device)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        if not config.change_opt:
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scaler.load_state_dict(checkpoint["scaler_state_dict"])
-        step = checkpoint["step"]
-        initial_step = int(step) + 1
-        del checkpoint
-    return ckp_path, initial_step
 
 
 def build_datasets_loaders(config, workdir, dataset):

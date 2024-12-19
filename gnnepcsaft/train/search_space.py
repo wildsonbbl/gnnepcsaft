@@ -7,11 +7,9 @@ from ray import tune
 def get_search_space():
     """Hyperparameter search space for tuning"""
     return {
-        "propagation_depth": tune.choice([3, 4, 5, 6]),
+        "propagation_depth": tune.choice([3, 4, 5, 6, 7, 8]),
         "hidden_dim": tune.choice([64, 128, 256]),
-        "num_mlp_layers": tune.choice([0, 1, 2]),
-        "pre_layers": tune.choice([1, 2]),
-        "post_layers": tune.choice([1, 2]),
-        "skip_connections": tune.choice([True, False]),
+        "pre_layers": tune.choice([1, 2, 3]),
+        "post_layers": tune.choice([1, 2, 3]),
         "add_self_loops": tune.choice([True, False]),
     }

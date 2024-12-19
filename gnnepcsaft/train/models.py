@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
-from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
+from torch.nn import Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.data import Data
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
@@ -33,16 +33,7 @@ class PnaconvsParams:
     post_layers: int
     deg: torch.Tensor
     dropout: float = 0.0
-    skip_connections: bool = False
     self_loops: bool = False
-
-
-@dataclasses.dataclass
-class ReadoutMLPParams:
-    "Parameters for the MLP layers."
-    num_mlp_layers: int
-    num_para: int
-    dropout: float = 0.0
 
 
 class PNAPCSAFT(torch.nn.Module):
@@ -52,7 +43,7 @@ class PNAPCSAFT(torch.nn.Module):
         self,
         hidden_dim: int,
         pna_params: PnaconvsParams,
-        mlp_params: ReadoutMLPParams,
+        num_para: int,
     ):
         super().__init__()
 
@@ -73,7 +64,7 @@ class PNAPCSAFT(torch.nn.Module):
                 scalers=scalers,
                 deg=pna_params.deg,
                 edge_dim=hidden_dim,
-                towers=2,
+                towers=8,
                 pre_layers=pna_params.pre_layers,
                 post_layers=pna_params.post_layers,
                 divide_input=False,
@@ -81,25 +72,12 @@ class PNAPCSAFT(torch.nn.Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(hidden_dim))
 
-        self.mlp = Sequential()
-        for _ in range(mlp_params.num_mlp_layers):
-            self.mlp.append(Linear(hidden_dim, hidden_dim))
-            self.mlp.append(BatchNorm1d(hidden_dim))
-            self.mlp.append(ReLU())
-            self.mlp.append(Dropout(p=mlp_params.dropout))
-
-        self.mlp.append(
-            Sequential(
-                Linear(hidden_dim, hidden_dim // 2),
-                BatchNorm1d(hidden_dim // 2),
-                ReLU(),
-                Dropout(p=mlp_params.dropout),
-                Linear(hidden_dim // 2, hidden_dim // 4),
-                BatchNorm1d(hidden_dim // 4),
-                ReLU(),
-                Dropout(p=mlp_params.dropout),
-                Linear(hidden_dim // 4, mlp_params.num_para),
-            )
+        self.mlp = Sequential(
+            Linear(hidden_dim, hidden_dim // 2),
+            ReLU(),
+            Linear(hidden_dim // 2, hidden_dim // 4),
+            ReLU(),
+            Linear(hidden_dim // 4, num_para),
         )
 
     def forward(
@@ -123,12 +101,9 @@ class PNAPCSAFT(torch.nn.Module):
         edge_attr = self.edge_embed(edge_attr)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            if self.pna_params.skip_connections:
-                x_previous = x
-            x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
+            h = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
+            x = h + x
             x = F.dropout(x, p=self.pna_params.dropout, training=self.training)
-            if self.pna_params.skip_connections:
-                x = x + x_previous
 
         x = global_add_pool(x, batch)
         x = self.mlp(x)
@@ -141,14 +116,14 @@ class PNApcsaftL(L.LightningModule):
     def __init__(
         self,
         pna_params: PnaconvsParams,
-        mlp_params: ReadoutMLPParams,
         config: ml_collections.ConfigDict,
     ):
         super().__init__()
+        self.save_hyperparameters()
         self.config = config
 
         self.model = PNAPCSAFT(
-            config.hidden_dim, pna_params=pna_params, mlp_params=mlp_params
+            config.hidden_dim, pna_params=pna_params, num_para=config.num_para
         )
 
     # pylint: disable=W0221
@@ -189,11 +164,11 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
-            target = graphs.assoc.view(-1, self.config.num_para)
+        if self.config.num_para == 2:
+            target: torch.Tensor = graphs.assoc.view(-1, self.config.num_para)
         else:
-            target = graphs.para.view(-1, self.config.num_para)
-        pred = self(graphs)
+            target: torch.Tensor = graphs.para.view(-1, self.config.num_para)
+        pred: torch.Tensor = self(graphs)
         loss_mape = mape(pred, target)
         self.log(
             "train_mape",
@@ -212,8 +187,8 @@ class PNApcsaftL(L.LightningModule):
         huber_vp = 0.0
         metrics_dict = {}
 
-        pred_para = self(graphs).squeeze().to(torch.float64)
-        if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
+        pred_para: torch.Tensor = self(graphs).squeeze().to(torch.float64)
+        if self.config.num_para == 2:
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
@@ -224,7 +199,7 @@ class PNApcsaftL(L.LightningModule):
             )
             para_msigmae = pred_para
         pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
-        datapoints = graphs.rho.to(torch.float64).view(-1, 5)
+        datapoints: torch.Tensor = graphs.rho.to(torch.float64).view(-1, 5)
         if datapoints.shape[0] > 0:
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1].cpu()
@@ -241,7 +216,7 @@ class PNApcsaftL(L.LightningModule):
                 }
             )
 
-        datapoints = graphs.vp.to(torch.float64).view(-1, 5)
+        datapoints: torch.Tensor = graphs.vp.to(torch.float64).view(-1, 5)
         if datapoints.shape[0] > 0:
             pred = pcsaft_vp(pred_para, datapoints)
             target = datapoints[:, -1].cpu()
