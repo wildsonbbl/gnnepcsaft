@@ -117,10 +117,10 @@ class PNAPCSAFT(torch.nn.Module):
         x: torch.Tensor = self.forward(data)
         upper_bounds = (
             self.upper_bounds[:3] if self.num_para == 3 else self.upper_bounds[3:]
-        )
+        ).to(device=x.device)
         lower_bounds = (
             self.lower_bounds[:3] if self.num_para == 3 else self.lower_bounds[3:]
-        )
+        ).to(device=x.device)
         x = torch.minimum(x, upper_bounds)
         x = torch.maximum(x, lower_bounds)
 
