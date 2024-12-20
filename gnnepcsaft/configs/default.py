@@ -32,11 +32,11 @@ def get_config():
     # GNN hyperparameters.
     config.model_name = "esper_msigmae_3"
     config.model = "PNAL"
-    config.propagation_depth = 6
-    config.hidden_dim = 64
+    config.propagation_depth = 5
+    config.hidden_dim = 128
     config.pre_layers = 2
-    config.post_layers = 2
+    config.post_layers = 1
     config.num_para = 3
-    config.add_self_loops = False
+    config.add_self_loops = True
     config.dropout_rate = 0.0
     return config
