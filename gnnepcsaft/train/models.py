@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
-from torch.nn import Linear, ModuleList, ReLU, Sequential
+from torch.nn import Dropout, Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.data import Data
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
@@ -58,6 +58,7 @@ class PNAPCSAFT(torch.nn.Module):
 
         self.node_embed = AtomEncoder(hidden_dim)
         self.edge_embed = BondEncoder(hidden_dim)
+        self.dropout = Dropout(p=pna_params.dropout)
 
         for _ in range(pna_params.propagation_depth):
             conv = PNAConv(
@@ -67,7 +68,7 @@ class PNAPCSAFT(torch.nn.Module):
                 scalers=scalers,
                 deg=pna_params.deg,
                 edge_dim=hidden_dim,
-                towers=8,
+                towers=1,
                 pre_layers=pna_params.pre_layers,
                 post_layers=pna_params.post_layers,
                 divide_input=False,
@@ -104,9 +105,8 @@ class PNAPCSAFT(torch.nn.Module):
         edge_attr = self.edge_embed(edge_attr)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            h = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
-            x = h + x
-            x = F.dropout(x, p=self.pna_params.dropout, training=self.training)
+            x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
+            x = self.dropout(x)
 
         x = global_add_pool(x, batch)
         x = self.mlp(x)
