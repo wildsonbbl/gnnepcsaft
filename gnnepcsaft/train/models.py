@@ -36,6 +36,7 @@ class PnaconvsParams:
     self_loops: bool = False
 
 
+# pylint: disable=R0902
 class PNAPCSAFT(torch.nn.Module):
     """Graph neural network to predict ePCSAFT parameters"""
 
