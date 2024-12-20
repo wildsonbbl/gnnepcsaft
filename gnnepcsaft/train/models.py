@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
-from torch.nn import Dropout, Linear, ModuleList, ReLU, Sequential
+from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.data import Data
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
@@ -79,8 +79,10 @@ class PNAPCSAFT(torch.nn.Module):
 
         self.mlp = Sequential(
             Linear(hidden_dim, hidden_dim // 2),
+            BatchNorm1d(hidden_dim // 2),
             ReLU(),
             Linear(hidden_dim // 2, hidden_dim // 4),
+            BatchNorm1d(hidden_dim // 4),
             ReLU(),
             Linear(hidden_dim // 4, num_para),
         )
