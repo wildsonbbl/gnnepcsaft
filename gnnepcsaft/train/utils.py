@@ -340,7 +340,7 @@ def output_artifacts(workdir: str):
 class EpochTimer(Callback):
     "Elapsed time counter."
 
-    start_time: float
+    start_time: float = time.time()
 
     def on_train_epoch_start(
         self, trainer: Trainer, pl_module: LightningModule
