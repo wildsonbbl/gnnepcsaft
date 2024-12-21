@@ -159,7 +159,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
         if config.change_opt:
             # pylint: disable=E1120
-            ckpt = torch.load(ckpt_path, weights_only=True)
+            ckpt = torch.load(ckpt_path, weights_only=False)
             model.load_state_dict(ckpt["state_dict"])
             # pylint: enable=E1120
             ckpt_path = None
