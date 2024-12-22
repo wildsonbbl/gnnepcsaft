@@ -184,7 +184,7 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        if self.config.num_para == 2:
+        if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
             target: torch.Tensor = graphs.assoc.view(-1, self.config.num_para)
         else:
             target: torch.Tensor = graphs.para.view(-1, self.config.num_para)
