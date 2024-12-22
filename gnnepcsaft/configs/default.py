@@ -21,16 +21,16 @@ def get_config():
     # Training hyperparameters.
 
     config.accelerator = "gpu"
-    config.batch_size = 512
+    config.batch_size = 387
     config.num_train_steps = 100_000
     config.log_every_steps = 1000
     config.eval_every_steps = 10000
     config.checkpoint_every_steps = 10001
-    config.dataset = "esper_assoc"
+    config.dataset = "esper_assoc_only"
     config.checkpoint = ""
 
     # GNN hyperparameters.
-    config.model_name = "esper_assoc_4"
+    config.model_name = "esper_assoc_5"
     config.model = "PNAL"
     config.propagation_depth = 5
     config.hidden_dim = 128
