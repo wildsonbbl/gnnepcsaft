@@ -264,7 +264,7 @@ def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
     with torch.no_grad():
         for graphs in tml_loader:
             graphs = graphs.to(device)
-            parameters = model(graphs)
+            parameters = model.pred_with_bounds(graphs)
             params = parameters.squeeze().to(torch.float64)
             if params.size(0) == 2:
                 if graphs.InChI in es_para:
@@ -273,7 +273,9 @@ def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
                     munanb = torch.tensor(
                         (0,) + assoc_number(graphs.InChI), dtype=torch.float32
                     )
-                msigmae = model_msigmae(graphs).squeeze().to(torch.float64)
+                msigmae = (
+                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+                )
                 params = torch.hstack(
                     (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
                 )
