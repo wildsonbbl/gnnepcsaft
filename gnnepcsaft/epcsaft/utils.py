@@ -190,7 +190,10 @@ class DenFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            den = pure_den_feos(parameters, row)
+            try:
+                den = pure_den_feos(parameters, row)
+            except RuntimeError:
+                den = np.nan
             result[i] = den
         return torch.tensor(result)
 

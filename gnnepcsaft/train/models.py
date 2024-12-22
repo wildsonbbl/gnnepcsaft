@@ -225,9 +225,10 @@ class PNApcsaftL(L.LightningModule):
         if datapoints.shape[0] > 0:
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1].cpu()
+            result_filter = ~torch.isnan(pred)
             # pylint: disable = not-callable
-            loss_mape = mape(pred, target)
-            loss_huber = hloss(pred, target, reduction="mean")
+            loss_mape = mape(pred[result_filter], target[result_filter])
+            loss_huber = hloss(pred[result_filter], target[result_filter])
             mape_den = loss_mape.item()
             huber_den = loss_huber.item()
             # self.log("mape_den", mape_den)
