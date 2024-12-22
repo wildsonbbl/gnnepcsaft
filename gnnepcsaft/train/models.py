@@ -1,6 +1,7 @@
 """Module with all available Graph Neural Network models developed and used in the project"""
 
 import dataclasses
+import math
 
 import lightning as L
 import ml_collections
@@ -53,8 +54,12 @@ class PNAPCSAFT(torch.nn.Module):
         self.pna_params = pna_params
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        self.lower_bounds = torch.tensor([1.0, 1.9, 50.0, 0.0001, 200.0])
-        self.upper_bounds = torch.tensor([25.0, 4.5, 550.0, 0.9, 5000.0])
+        self.lower_bounds = torch.tensor(
+            [1.0, 1.9, 50.0, -1 * math.log10(0.9), math.log10(200.0)]
+        )
+        self.upper_bounds = torch.tensor(
+            [25.0, 4.5, 550.0, -1 * math.log10(0.0001), math.log10(5000.0)]
+        )
         self.num_para = num_para
 
         self.node_embed = AtomEncoder(hidden_dim)
