@@ -21,7 +21,7 @@ def get_config():
     # Training hyperparameters.
 
     config.accelerator = "gpu"
-    config.batch_size = 64
+    config.batch_size = 387
     config.num_train_steps = 100_000
     config.log_every_steps = 1000
     config.eval_every_steps = 10000
@@ -38,5 +38,5 @@ def get_config():
     config.post_layers = 1
     config.num_para = 2
     config.add_self_loops = True
-    config.dropout_rate = 0.0
+    config.dropout_rate = 0.1
     return config
