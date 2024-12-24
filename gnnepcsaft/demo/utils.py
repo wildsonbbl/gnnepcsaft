@@ -149,7 +149,7 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def predparams(inchi, models, model_msigmae):
+def predparams(inchi: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
         gh = from_InChI(inchi)
@@ -157,7 +157,7 @@ def predparams(inchi, models, model_msigmae):
         list_params = []
         for model in models:
             model.eval()
-            parameters = model(graphs)
+            parameters = model.pred_with_bounds(graphs)
             params = parameters.squeeze().to(torch.float64)
             if params.size(0) == 2:
                 if inchi in es_para:
@@ -166,7 +166,9 @@ def predparams(inchi, models, model_msigmae):
                     munanb = torch.tensor(
                         (0,) + assoc_number(inchi), dtype=torch.float32
                     )
-                msigmae = model_msigmae(graphs).squeeze().to(torch.float64)
+                msigmae = (
+                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+                )
                 params = torch.hstack(
                     (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
                 )
