@@ -93,7 +93,12 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     )
     para = PcSaftParameters.from_model_records([record])
     eos = EquationOfState.pcsaft(para)
-    statenpt = State(eos, temperature=t * KELVIN, pressure=p * PASCAL)
+    statenpt = State(
+        eos,
+        temperature=t * KELVIN,
+        pressure=p * PASCAL,
+        density_initialization="liquid",
+    )
 
     den = statenpt.density * (METER**3) / MOL
 
@@ -128,9 +133,9 @@ def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     eos = EquationOfState.pcsaft(para)
     vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
 
-    assert t == vle.vapor.temperature / KELVIN
+    assert t == vle.liquid.temperature / KELVIN
 
-    return vle.vapor.pressure() / PASCAL
+    return vle.liquid.pressure() / PASCAL
 
 
 def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
