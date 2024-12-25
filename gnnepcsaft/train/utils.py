@@ -363,7 +363,7 @@ class VpOff(BaseTransform):
 
     def forward(self, data: Any) -> Any:
 
-        data.vp = torch.zeros(1, 5)
+        data.vp = torch.tensor([])
         return data
 
 
