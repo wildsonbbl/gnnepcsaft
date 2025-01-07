@@ -38,5 +38,5 @@ def get_config():
     config.pre_layers = 2
     config.num_para = 3
     config.add_self_loops = True
-    config.dropout_rate = 0.1
+    config.dropout_rate = 0.0
     return config
