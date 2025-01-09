@@ -8,10 +8,10 @@ import torch
 # pylint: disable = E0401,E0611
 from feos.eos import EquationOfState, PhaseEquilibrium, State
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
-from feos.si import KELVIN, METER, MOL, PASCAL
 
 # pylint: enable = E0401,E0611
 from pcsaft import flashTQ, pcsaft_den
+from si_units import KELVIN, METER, MOL, PASCAL
 
 N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3  # adjusted to angstron unit
 
