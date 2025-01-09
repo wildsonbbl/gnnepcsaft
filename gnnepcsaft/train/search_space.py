@@ -11,5 +11,4 @@ def get_search_space():
         "hidden_dim": tune.choice([64, 128, 256]),
         "pre_layers": tune.choice([1, 2, 3]),
         "post_layers": tune.choice([1, 2, 3]),
-        "add_self_loops": tune.choice([True, False]),
     }

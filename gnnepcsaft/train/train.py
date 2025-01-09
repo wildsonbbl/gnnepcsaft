@@ -227,7 +227,6 @@ def training_updated(
     config.hidden_dim = int(train_config["hidden_dim"])
     config.pre_layers = int(train_config["pre_layers"])
     config.post_layers = int(train_config["post_layers"])
-    config.add_self_loops = bool(train_config["add_self_loops"])
 
     ltrain_and_evaluate(config, workdir)
 
