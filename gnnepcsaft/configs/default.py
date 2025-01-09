@@ -6,7 +6,7 @@ import ml_collections
 def get_config():
     """Get the default hyperparameter configuration."""
     config = ml_collections.ConfigDict()
-    config.job_type = "train"
+    config.job_type = "tuning"
 
     # Optimizer.
     config.optimizer = "adam"
@@ -22,10 +22,10 @@ def get_config():
 
     config.accelerator = "gpu"
     config.batch_size = 512
-    config.num_train_steps = 50_000
+    config.num_train_steps = 25_000
     config.log_every_steps = 5000
-    config.eval_every_steps = 10000
-    config.checkpoint_every_steps = 10001
+    config.eval_every_steps = 5000
+    config.checkpoint_every_steps = 5000
     config.dataset = "esper"
     config.checkpoint = ""
 
@@ -38,5 +38,5 @@ def get_config():
     config.pre_layers = 2
     config.num_para = 3
     config.add_self_loops = True
-    config.dropout_rate = 0.0
+    config.dropout_rate = 0.1
     return config

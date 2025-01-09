@@ -256,10 +256,10 @@ def torch_trainer_config(
         storage_path=None,
         verbose=verbose,
         checkpoint_config=train.CheckpointConfig(
-            num_to_keep=None,
+            num_to_keep=1,
         ),
         progress_reporter=None,
-        log_to_file=True,
+        log_to_file="run_output.txt",
         stop=None,
         callbacks=(
             [
