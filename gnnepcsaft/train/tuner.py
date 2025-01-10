@@ -87,11 +87,12 @@ def main(argv):
     search_space = get_search_space()
     max_t = config.num_train_steps // config.eval_every_steps
     # BOHB search algorithm
-    search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77)
+    search_alg = TuneBOHB(
+        metric="mape_den", mode="min", seed=77, max_concurrent=FLAGS.max_concurrent
+    )
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
         search_space = None
-    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
     # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
         metric="mape_den",
@@ -142,7 +143,7 @@ def main(argv):
                 scheduler=scheduler,
                 num_samples=FLAGS.num_samples,
                 time_budget_s=FLAGS.time_budget_s,
-                reuse_actors=True,
+                reuse_actors=False,
             ),
         )
 
