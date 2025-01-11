@@ -136,7 +136,7 @@ def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     coeffs = [c]
     model = teqp.PCSAFTEOS(coeffs)
 
-    rho = pure_den_pcsaft(parameters, state)
+    rho = pure_den_teqp(parameters, state)
 
     # P = rho * R * T * (1 + Ar01) https://teqp.readthedocs.io/en/latest/derivs/derivs.html
     p = rho * model.get_R(x) * t * (1 + model.get_Ar01(t, rho, x))
