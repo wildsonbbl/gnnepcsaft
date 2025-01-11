@@ -258,7 +258,7 @@ def torch_trainer_config(
             num_to_keep=1,
         ),
         progress_reporter=None,
-        log_to_file="run_output.txt",
+        log_to_file=False,
         stop=None,
         callbacks=(
             [
