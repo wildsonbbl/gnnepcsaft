@@ -10,7 +10,6 @@ from feos.eos import EquationOfState, PhaseEquilibrium, State
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
 
 # pylint: enable = E0401,E0611
-from pcsaft import flashTQ, pcsaft_den
 from si_units import KELVIN, METER, MOL, PASCAL
 
 N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3  # adjusted to angstron unit
@@ -41,25 +40,6 @@ def pure_den_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
 
     rhol, rhov = model.pure_VLE_T(t, rhol_guess * 0.98, rhov_guess * 1.02, 10)
     den = rhol if state[2] == 1 else rhov
-
-    return den
-
-
-def pure_den_pcsaft(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calcules pure component density with ePC-SAFT."""
-
-    x = np.asarray([1.0])
-    phase = ["liq" if state[2] == 1 else "vap"][0]
-    t = state[0]  # Temperature, K
-
-    m = np.asarray(max(parameters[0], 1.0))  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-    p = state[1]
-
-    params = {"m": m, "s": s, "e": e}
-
-    den = pcsaft_den(t, p, x, params, phase=phase)
 
     return den
 
@@ -160,21 +140,6 @@ def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
 
     # P = rho * R * T * (1 + Ar01) https://teqp.readthedocs.io/en/latest/derivs/derivs.html
     p = rho * model.get_R(x) * t * (1 + model.get_Ar01(t, rho, x))
-
-    return p
-
-
-def pure_vp_pcsaft(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calculates pure component vapor pressure with ePC-SAFT."""
-    x = np.asarray([1.0])
-    t = state[0]  # Temperature, K
-
-    m = np.asarray(max(parameters[0], 1.0))  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-
-    params = {"m": m, "s": s, "e": e}
-    p, _, _ = flashTQ(t, 0, x, params)
 
     return p
 
