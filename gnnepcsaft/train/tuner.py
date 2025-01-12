@@ -12,6 +12,7 @@ from ray import tune
 from ray.train.torch import TorchTrainer
 from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import HyperBandForBOHB
+from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 
 from .search_space import get_search_space
@@ -89,6 +90,7 @@ def main(argv):
     search_alg = TuneBOHB(
         metric="mape_den", mode="min", seed=77, max_concurrent=FLAGS.max_concurrent
     )
+    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
         search_space = None
