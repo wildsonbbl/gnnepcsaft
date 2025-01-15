@@ -258,7 +258,7 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     for idx, graph in enumerate(tml_dataset):
         if graph.InChI in para_data:
             val_idx.append(idx)
-        else:
+        elif graph.munanb[-1] == 0:
             test_idx.append(idx)
     test_dataset = tml_dataset[test_idx]
     val_dataset = tml_dataset[val_idx]
