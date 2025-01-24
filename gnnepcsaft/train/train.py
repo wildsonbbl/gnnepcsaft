@@ -58,7 +58,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Dataset building
     transform = None if job_type == "train" else VpOff()
     train_dataset = build_train_dataset(workdir, dataset)
-    val_dataset, test_dataset = build_test_dataset(workdir, train_dataset, transform)
+    val_dataset, _ = build_test_dataset(workdir, train_dataset, transform)
 
     train_loader = DataLoader(
         train_dataset,
@@ -169,7 +169,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     trainer.fit(
         model,
         train_loader,
-        [val_dataset, test_dataset] if dataset == "esper" else val_dataset,
+        val_dataset,
         ckpt_path=ckpt_path,
     )
     # if job_type == "train":
