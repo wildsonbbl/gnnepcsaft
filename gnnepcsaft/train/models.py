@@ -172,9 +172,9 @@ class PNApcsaftL(L.LightningModule):
             opt = torch.optim.SGD(
                 self.parameters(),
                 lr=self.config.learning_rate,
-                momentum=self.config.momentum,
-                weight_decay=self.config.weight_decay,
-                nesterov=True,
+                momentum=0.0,
+                weight_decay=0.0,
+                nesterov=False,
             )
         else:
             raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
