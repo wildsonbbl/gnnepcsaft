@@ -10,6 +10,6 @@ setup(
     author_email="wil_bbl@hotmail.com",
     license="GNU",
     packages=find_packages(),
-    requires=["torch", "torch_geometric", "lightning"],
+    requires=["torch", "torch_geometric", "lightning", "rdkit", "ogb"],
     zip_safe=False,
 )
