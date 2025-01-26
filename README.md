@@ -16,6 +16,8 @@ A CLI to use the model can be found at [GNNePCSAFT CLI](https://github.com/wilds
 pipx install gnnepcsaftcli
 ```
 
+Checkpoints can be found at [Hugging Face](https://huggingface.co/wildsonbbl/gnnepcsaft).
+
 Use cases of this package are demonstrated in Jupyter Notebooks:
 
 - `compare.ipynb`: comparison of the performance between two or more trained models
