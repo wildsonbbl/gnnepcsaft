@@ -6,21 +6,24 @@ The motivation of this work is to be able to use a robust Equation of State, ePC
 
 Currently, the model takes in account only the hard-chain and dispersive terms of ePC-SAFT. Future work on associative, polar and ionic terms are being studied.
 
-Code is being developed mainly in Pytorch (PYG) and secondarily in JAX (JRAPH).
+Code is being developed mainly in Pytorch (PYG).
 
-You can find the model deployed at [GNNePCSAFT app](https://gnnepcsaft.wildsonbbl.com/).
+You can find the model deployed at [GNNePCSAFT Webapp](https://gnnepcsaft.wildsonbbl.com/).
+
+A CLI to use the model can be found at [GNNePCSAFT CLI](https://github.com/wildsonbbl/gnnepcsaftcli) and installed with `pipx`:
+
+```bash
+pipx install gnnepcsaftcli
+```
 
 Use cases of this package are demonstrated in Jupyter Notebooks:
 
 - `compare.ipynb`: comparison of the performance between two or more trained models
 - `demo.ipynb`: pt-br demonstration of the models capabilities
-- `evalmodels.ipynb`: code to evaluate all saved models in `train/checkpoints` folder at once
-- `evalref.ipynb`: code to evaluate perfomance of reference parameter data on experimental data
 - `moleculargraphs.ipynb`: code to build all datasets used
-- `training.ipynb`:  Code for model training
+- `training.ipynb`: Code for model training
 - `tuning.ipynb`: code for hyperparameter tuning
 
---------------
+---
+
 Work in progess.
-
-
