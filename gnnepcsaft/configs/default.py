@@ -10,37 +10,33 @@ def get_config():
 
     # Optimizer.
     config.optimizer = "adam"
-    config.learning_rate = 1.0e-3
+    config.learning_rate = 1e-3
     config.change_opt = False
     config.change_sch = False
+    config.weight_decay = 1e-2
+    config.momentum = 0.9
+    config.patience = 5
+    config.warmup_steps = 100
 
     # Training hyperparameters.
 
     config.accelerator = "gpu"
     config.batch_size = 512
-    config.pad_size = 128
-    config.num_train_steps = 250_000
-    config.warmup_steps = 100
-    config.log_every_steps = 10_000
-    config.eval_every_steps = 24_999
-    config.checkpoint_every_steps = 25000
-    config.amp = False
-    config.momentum = 0.9
-    config.patience = 5
-    config.weight_decay = 1e-2
+    config.num_train_steps = 900_000
+    config.log_every_steps = 5000
+    config.eval_every_steps = 9999
+    config.checkpoint_every_steps = 10000
     config.dataset = "esper"
-    config.checkpoint = ""
+    config.checkpoint = "esper_msigmae_5.2-epoch=142499-train_mape=0.0110.ckpt"
 
     # GNN hyperparameters.
-    config.model_name = "esper1"
+    config.model_name = "esper_msigmae_5.2"
     config.model = "PNAL"
     config.propagation_depth = 6
-    config.hidden_dim = 64
-    config.pre_layers = 1
+    config.hidden_dim = 128
     config.post_layers = 1
-    config.dropout_rate = 0.0
-    config.num_mlp_layers = 1
-    config.num_para = 5
-    config.skip_connections = True
+    config.pre_layers = 3
+    config.num_para = 3
     config.add_self_loops = True
+    config.dropout_rate = 0.25
     return config

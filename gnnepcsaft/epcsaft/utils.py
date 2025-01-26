@@ -8,10 +8,9 @@ import torch
 # pylint: disable = E0401,E0611
 from feos.eos import EquationOfState, PhaseEquilibrium, State
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
-from feos.si import KELVIN, METER, MOL, PASCAL
 
 # pylint: enable = E0401,E0611
-from pcsaft import flashTQ, pcsaft_den
+from si_units import KELVIN, METER, MOL, PASCAL
 
 N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3  # adjusted to angstron unit
 
@@ -45,25 +44,6 @@ def pure_den_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     return den
 
 
-def pure_den_pcsaft(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calcules pure component density with ePC-SAFT."""
-
-    x = np.asarray([1.0])
-    phase = ["liq" if state[2] == 1 else "vap"][0]
-    t = state[0]  # Temperature, K
-
-    m = np.asarray(max(parameters[0], 1.0))  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-    p = state[1]
-
-    params = {"m": m, "s": s, "e": e}
-
-    den = pcsaft_den(t, p, x, params, phase=phase)
-
-    return den
-
-
 # pylint: disable=R0914
 def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     """Calcules pure component density with ePC-SAFT."""
@@ -93,7 +73,12 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     )
     para = PcSaftParameters.from_model_records([record])
     eos = EquationOfState.pcsaft(para)
-    statenpt = State(eos, temperature=t * KELVIN, pressure=p * PASCAL)
+    statenpt = State(
+        eos,
+        temperature=t * KELVIN,
+        pressure=p * PASCAL,
+        density_initialization="liquid",
+    )
 
     den = statenpt.density * (METER**3) / MOL
 
@@ -128,9 +113,9 @@ def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     eos = EquationOfState.pcsaft(para)
     vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
 
-    assert t == vle.vapor.temperature / KELVIN
+    assert t == vle.liquid.temperature / KELVIN
 
-    return vle.vapor.pressure() / PASCAL
+    return vle.liquid.pressure() / PASCAL
 
 
 def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
@@ -151,25 +136,10 @@ def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     coeffs = [c]
     model = teqp.PCSAFTEOS(coeffs)
 
-    rho = pure_den_pcsaft(parameters, state)
+    rho = pure_den_teqp(parameters, state)
 
     # P = rho * R * T * (1 + Ar01) https://teqp.readthedocs.io/en/latest/derivs/derivs.html
     p = rho * model.get_R(x) * t * (1 + model.get_Ar01(t, rho, x))
-
-    return p
-
-
-def pure_vp_pcsaft(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calculates pure component vapor pressure with ePC-SAFT."""
-    x = np.asarray([1.0])
-    t = state[0]  # Temperature, K
-
-    m = np.asarray(max(parameters[0], 1.0))  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-
-    params = {"m": m, "s": s, "e": e}
-    p, _, _ = flashTQ(t, 0, x, params)
 
     return p
 
@@ -190,7 +160,10 @@ class DenFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            den = pure_den_feos(parameters, row)
+            try:
+                den = pure_den_feos(parameters, row)
+            except RuntimeError:
+                den = np.nan
             result[i] = den
         return torch.tensor(result)
 
@@ -215,7 +188,10 @@ class VpFromTensor(torch.autograd.Function):
         result = np.zeros(state.shape[0])
 
         for i, row in enumerate(state):
-            vp = pure_vp_feos(parameters, row)
+            try:
+                vp = pure_vp_feos(parameters, row)
+            except RuntimeError:
+                vp = np.nan
             result[i] = vp
         return torch.tensor(result)
 
@@ -223,3 +199,27 @@ class VpFromTensor(torch.autograd.Function):
     def backward(ctx, dg1: torch.Tensor):
         grad_result = dg1
         return grad_result, None
+
+
+def parameters_gc_pcsaft(smiles: str) -> tuple:
+    "Calculates PC-SAFT parameters with Group Contribution method."
+    pure_record = (
+        PcSaftParameters.from_json_smiles(
+            [smiles],
+            "./gnnepcsaft/data/gc_pcsaft/sauer2014_smarts.json",
+            "./gnnepcsaft/data/gc_pcsaft/rehner2023_hetero.json",
+        )
+        .pure_records[0]
+        .model_record
+    )
+
+    m = pure_record.m
+    sigma = pure_record.sigma
+    e = pure_record.epsilon_k
+    mu = pure_record.mu if pure_record.mu else 0
+    kab = pure_record.kappa_ab if pure_record.kappa_ab else 0
+    eab = pure_record.epsilon_k_ab if pure_record.epsilon_k_ab else 0
+    na = pure_record.na if pure_record.na else 0
+    nb = pure_record.nb if pure_record.nb else 0
+
+    return (m, sigma, e, kab, eab, mu, na, nb)

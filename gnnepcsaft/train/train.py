@@ -24,6 +24,7 @@ from . import models
 from .utils import (
     CustomRayTrainReportCallback,
     EpochTimer,
+    VpOff,
     build_test_dataset,
     build_train_dataset,
     calc_deg,
@@ -45,32 +46,20 @@ def create_logger(config, dataset):
 
 
 # pylint: disable=R0914,R0915
-def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset: str):
+def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     """Execute model training and evaluation loop with lightning.
 
     Args:
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
-      dataset: Train dataset name (ramirez or esper).
     """
     job_type = config.job_type
+    dataset = config.dataset
     # Dataset building
-    # transform = None if job_type == "train" else VpOff()
+    transform = None if job_type == "train" else VpOff()
     train_dataset = build_train_dataset(workdir, dataset)
-    tml_dataset, para_data = build_test_dataset(
-        workdir,
-        train_dataset,
-    )
-    test_idx = []
-    val_idx = []
-    # separate test and val dataset
-    for idx, graph in enumerate(tml_dataset):
-        if graph.InChI in para_data:
-            val_idx.append(idx)
-        else:
-            test_idx.append(idx)
-    test_dataset = tml_dataset[test_idx]
-    val_dataset = tml_dataset[val_idx]
+    val_dataset, _ = build_test_dataset(workdir, train_dataset, transform)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
@@ -91,6 +80,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
             save_top_k=1,
             every_n_train_steps=config.checkpoint_every_steps,
             verbose=True,
+            save_on_train_epoch_end=False,
         )
         callbacks.append(checkpoint_mape_den)
 
@@ -169,7 +159,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
         if config.change_opt:
             # pylint: disable=E1120
-            ckpt = torch.load(ckpt_path)
+            ckpt = torch.load(ckpt_path, weights_only=False)
             model.load_state_dict(ckpt["state_dict"])
             # pylint: enable=E1120
             ckpt_path = None
@@ -182,31 +172,30 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str, dataset
         val_dataset,
         ckpt_path=ckpt_path,
     )
-    if job_type == "train":
-        wandb.finish()
+    # if job_type == "train":
+    #     wandb.finish()
 
-        logging.info("Testing run!")
-        # Logging test results at wandb
-        trainer.logger = WandbLogger(
-            log_model=True,
-            # Set the project where this run will be logged
-            project="gnn-pc-saft",
-            # Track hyperparameters and run metadata
-            config=config.to_dict(),
-            group=dataset,
-            tags=[dataset, "eval", config.model_name],
-            job_type="eval",
-        )
+    #     logging.info("Testing run!")
+    #     # Logging test results at wandb
+    #     trainer.logger = WandbLogger(
+    #         log_model=True,
+    #         # Set the project where this run will be logged
+    #         project="gnn-pc-saft",
+    #         # Track hyperparameters and run metadata
+    #         config=config.to_dict(),
+    #         group=dataset,
+    #         tags=[dataset, "eval", config.model_name],
+    #         job_type="eval",
+    #     )
 
-        trainer.test(model, test_dataset)
-        wandb.finish()
+    #     trainer.test(model, test_dataset)
+    #     wandb.finish()
 
 
 def training_parallel(
     train_loop_config: dict,
     config: ml_collections.ConfigDict,
     workdir: str,
-    dataset: str,
 ):
     """Execute model training and evaluation loop in parallel with ray.
 
@@ -219,11 +208,13 @@ def training_parallel(
     train_config = train_loop_config[local_rank]
     config.model_name = config.model_name + "_" + local_rank
     # selected hyperparameters to test
-    training_updated(train_config, config, workdir, dataset)
+    training_updated(train_config, config, workdir)
 
 
 def training_updated(
-    train_config: dict, config: ml_collections.ConfigDict, workdir: str, dataset: str
+    train_config: dict,
+    config: ml_collections.ConfigDict,
+    workdir: str,
 ):
     """Execute model training and evaluation loop with updated config.
 
@@ -232,15 +223,12 @@ def training_updated(
 
     """
 
-    config.propagation_depth = train_config["propagation_depth"]
-    config.hidden_dim = train_config["hidden_dim"]
-    config.num_mlp_layers = train_config["num_mlp_layers"]
-    config.pre_layers = train_config["pre_layers"]
-    config.post_layers = train_config["post_layers"]
-    config.skip_connections = train_config["skip_connections"]
-    config.add_self_loops = train_config["add_self_loops"]
+    config.propagation_depth = int(train_config["propagation_depth"])
+    config.hidden_dim = int(train_config["hidden_dim"])
+    config.pre_layers = int(train_config["pre_layers"])
+    config.post_layers = int(train_config["post_layers"])
 
-    ltrain_and_evaluate(config, workdir, dataset)
+    ltrain_and_evaluate(config, workdir)
 
 
 # pylint: disable=R0913,R0917
@@ -250,7 +238,6 @@ def torch_trainer_config(
     num_gpus: float,
     num_cpu_trainer: float,
     verbose: int,
-    dataset: str,
     config: ml_collections.ConfigDict,
     tags: list,
 ):
@@ -271,14 +258,14 @@ def torch_trainer_config(
             num_to_keep=1,
         ),
         progress_reporter=None,
-        log_to_file=True,
+        log_to_file=False,
         stop=None,
         callbacks=(
             [
                 WandbLoggerCallback(
                     "gnn-pc-saft",
-                    dataset,
-                    tags=["tuning", dataset] + tags,
+                    config.dataset,
+                    tags=["tuning", config.dataset] + tags,
                 )
             ]
             if config.job_type == "tuning"
@@ -292,15 +279,16 @@ def torch_trainer_config(
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
-flags.DEFINE_string("dataset", None, "Dataset to train model on")
 flags.DEFINE_string(
     "framework", "lightning", "Define framework to run: lightning or ray."
 )
 flags.DEFINE_list("tags", [], "wandb tags")
-flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial")
-flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial")
-flags.DEFINE_float("num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources")
-flags.DEFINE_integer("num_workers", 1, "number of workers")
+flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial for ray")
+flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial for ray")
+flags.DEFINE_float(
+    "num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources for ray"
+)
+flags.DEFINE_integer("num_workers", 1, "Number of workers for ray")
 flags.DEFINE_integer("verbose", 0, "Ray train verbose")
 config_flags.DEFINE_config_file(
     "config",
@@ -319,7 +307,7 @@ def main(argv):
     torch.set_float32_matmul_precision("medium")
 
     if FLAGS.framework == "lightning":
-        ltrain_and_evaluate(FLAGS.config, FLAGS.workdir, FLAGS.dataset)
+        ltrain_and_evaluate(FLAGS.config, FLAGS.workdir)
     elif FLAGS.framework == "ray":
         test_configs = get_configs()
         train_loop_config = {
@@ -332,7 +320,6 @@ def main(argv):
             FLAGS.num_gpus,
             FLAGS.num_cpu_trainer,
             FLAGS.verbose,
-            FLAGS.dataset,
             FLAGS.config,
             FLAGS.tags,
         )
@@ -341,7 +328,6 @@ def main(argv):
                 training_parallel,
                 config=FLAGS.config,
                 workdir=FLAGS.workdir,
-                dataset=FLAGS.dataset,
             ),
             train_loop_config=train_loop_config,
             scaling_config=scaling_config,
@@ -353,5 +339,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    flags.mark_flags_as_required(["config", "workdir", "dataset"])
+    flags.mark_flags_as_required(["config", "workdir"])
     app.run(main)

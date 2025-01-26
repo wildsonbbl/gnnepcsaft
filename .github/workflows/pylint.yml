@@ -24,14 +24,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install pylint
           python -m pip install -r requirements.txt
-          curl -O -L https://gitlab.com/libeigen/eigen/-/archive/master/eigen-master.zip
-          curl -O -L https://github.com/zmeri/PC-SAFT/archive/refs/tags/v1.5.0.zip
-          unzip -q eigen-master.zip
-          unzip -q v1.5.0.zip
-          sed -i "s/np.float_/np.float64/g" PC-SAFT-1.5.0/pcsaft.pyx 
-          cp -rf eigen-master/. PC-SAFT-1.5.0/externals/eigen
-          pip install ./PC-SAFT-1.5.0
-          rm -rf PC-SAFT* eigen-master* v1.5.0.zip
       - name: Analysing the code with pylint
         run: |
           pylint $(git ls-files '*.py') --rcfile=.pylintrc

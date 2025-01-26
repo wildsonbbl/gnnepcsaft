@@ -1,6 +1,7 @@
 """Module with all available Graph Neural Network models developed and used in the project"""
 
 import dataclasses
+import math
 
 import lightning as L
 import ml_collections
@@ -33,18 +34,10 @@ class PnaconvsParams:
     post_layers: int
     deg: torch.Tensor
     dropout: float = 0.0
-    skip_connections: bool = False
     self_loops: bool = False
 
 
-@dataclasses.dataclass
-class ReadoutMLPParams:
-    "Parameters for the MLP layers."
-    num_mlp_layers: int
-    num_para: int
-    dropout: float = 0.0
-
-
+# pylint: disable=R0902
 class PNAPCSAFT(torch.nn.Module):
     """Graph neural network to predict ePCSAFT parameters"""
 
@@ -52,7 +45,7 @@ class PNAPCSAFT(torch.nn.Module):
         self,
         hidden_dim: int,
         pna_params: PnaconvsParams,
-        mlp_params: ReadoutMLPParams,
+        num_para: int,
     ):
         super().__init__()
 
@@ -61,9 +54,17 @@ class PNAPCSAFT(torch.nn.Module):
         self.pna_params = pna_params
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
+        self.lower_bounds = torch.tensor(
+            [1.0, 1.9, 50.0, -1 * math.log10(0.9), math.log10(200.0)]
+        )
+        self.upper_bounds = torch.tensor(
+            [25.0, 4.5, 550.0, -1 * math.log10(0.0001), math.log10(5000.0)]
+        )
+        self.num_para = num_para
 
         self.node_embed = AtomEncoder(hidden_dim)
         self.edge_embed = BondEncoder(hidden_dim)
+        self.dropout = Dropout(p=pna_params.dropout)
 
         for _ in range(pna_params.propagation_depth):
             conv = PNAConv(
@@ -73,7 +74,7 @@ class PNAPCSAFT(torch.nn.Module):
                 scalers=scalers,
                 deg=pna_params.deg,
                 edge_dim=hidden_dim,
-                towers=2,
+                towers=1,
                 pre_layers=pna_params.pre_layers,
                 post_layers=pna_params.post_layers,
                 divide_input=False,
@@ -81,25 +82,14 @@ class PNAPCSAFT(torch.nn.Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(hidden_dim))
 
-        self.mlp = Sequential()
-        for _ in range(mlp_params.num_mlp_layers):
-            self.mlp.append(Linear(hidden_dim, hidden_dim))
-            self.mlp.append(BatchNorm1d(hidden_dim))
-            self.mlp.append(ReLU())
-            self.mlp.append(Dropout(p=mlp_params.dropout))
-
-        self.mlp.append(
-            Sequential(
-                Linear(hidden_dim, hidden_dim // 2),
-                BatchNorm1d(hidden_dim // 2),
-                ReLU(),
-                Dropout(p=mlp_params.dropout),
-                Linear(hidden_dim // 2, hidden_dim // 4),
-                BatchNorm1d(hidden_dim // 4),
-                ReLU(),
-                Dropout(p=mlp_params.dropout),
-                Linear(hidden_dim // 4, mlp_params.num_para),
-            )
+        self.mlp = Sequential(
+            Linear(hidden_dim, hidden_dim // 2),
+            BatchNorm1d(hidden_dim // 2),
+            ReLU(),
+            Linear(hidden_dim // 2, hidden_dim // 4),
+            BatchNorm1d(hidden_dim // 4),
+            ReLU(),
+            Linear(hidden_dim // 4, num_para),
         )
 
     def forward(
@@ -123,15 +113,25 @@ class PNAPCSAFT(torch.nn.Module):
         edge_attr = self.edge_embed(edge_attr)
 
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            if self.pna_params.skip_connections:
-                x_previous = x
             x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
-            x = F.dropout(x, p=self.pna_params.dropout, training=self.training)
-            if self.pna_params.skip_connections:
-                x = x + x_previous
+            x = self.dropout(x)
 
         x = global_add_pool(x, batch)
         x = self.mlp(x)
+        return x
+
+    def pred_with_bounds(self, data: Data):
+        """Forward pass of the model with bounds."""
+        x: torch.Tensor = self.forward(data)
+        upper_bounds = (
+            self.upper_bounds[:3] if self.num_para == 3 else self.upper_bounds[3:]
+        ).to(device=x.device)
+        lower_bounds = (
+            self.lower_bounds[:3] if self.num_para == 3 else self.lower_bounds[3:]
+        ).to(device=x.device)
+        x = torch.minimum(x, upper_bounds)
+        x = torch.maximum(x, lower_bounds)
+
         return x
 
 
@@ -141,14 +141,14 @@ class PNApcsaftL(L.LightningModule):
     def __init__(
         self,
         pna_params: PnaconvsParams,
-        mlp_params: ReadoutMLPParams,
         config: ml_collections.ConfigDict,
     ):
         super().__init__()
+        self.save_hyperparameters()
         self.config = config
 
         self.model = PNAPCSAFT(
-            config.hidden_dim, pna_params=pna_params, mlp_params=mlp_params
+            config.hidden_dim, pna_params=pna_params, num_para=config.num_para
         )
 
     # pylint: disable=W0221
@@ -172,9 +172,9 @@ class PNApcsaftL(L.LightningModule):
             opt = torch.optim.SGD(
                 self.parameters(),
                 lr=self.config.learning_rate,
-                momentum=self.config.momentum,
-                weight_decay=self.config.weight_decay,
-                nesterov=True,
+                momentum=0.0,
+                weight_decay=0.0,
+                nesterov=False,
             )
         else:
             raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
@@ -189,8 +189,11 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        target = graphs.para.view(-1, self.config.num_para)
-        pred = self(graphs)
+        if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
+            target: torch.Tensor = graphs.assoc.view(-1, self.config.num_para)
+        else:
+            target: torch.Tensor = graphs.para.view(-1, self.config.num_para)
+        pred: torch.Tensor = self(graphs)
         loss_mape = mape(pred, target)
         self.log(
             "train_mape",
@@ -201,6 +204,7 @@ class PNApcsaftL(L.LightningModule):
         )
         return loss_mape
 
+    # pylint: disable=R0914
     def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         mape_den = 0.0
         huber_den = 0.0
@@ -208,15 +212,28 @@ class PNApcsaftL(L.LightningModule):
         huber_vp = 0.0
         metrics_dict = {}
 
-        pred_para = self(graphs).squeeze().to(torch.float64)
-        pred_para = torch.hstack([pred_para, graphs.munanb])
-        datapoints = graphs.rho.to(torch.float64).view(-1, 5)
-        if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+        pred_para: torch.Tensor = (
+            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+        )
+        if self.config.num_para == 2:
+            para_assoc = 10 ** (
+                pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
+            )
+            para_msigmae = graphs.para
+        else:
+            para_assoc = 10 ** (
+                graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
+            )
+            para_msigmae = pred_para
+        pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
+        datapoints: torch.Tensor = graphs.rho.to(torch.float64).view(-1, 5)
+        if datapoints.shape[0] > 0:
             pred = pcsaft_den(pred_para, datapoints)
             target = datapoints[:, -1].cpu()
+            result_filter = ~torch.isnan(pred)
             # pylint: disable = not-callable
-            loss_mape = mape(pred, target)
-            loss_huber = hloss(pred, target, reduction="mean")
+            loss_mape = mape(pred[result_filter], target[result_filter])
+            loss_huber = hloss(pred[result_filter], target[result_filter])
             mape_den = loss_mape.item()
             huber_den = loss_huber.item()
             # self.log("mape_den", mape_den)
@@ -227,23 +244,22 @@ class PNApcsaftL(L.LightningModule):
                 }
             )
 
-        datapoints = graphs.vp.to(torch.float64).view(-1, 5)
-        if ~torch.all(datapoints == torch.zeros_like(datapoints)):
+        datapoints: torch.Tensor = graphs.vp.to(torch.float64).view(-1, 5)
+        if datapoints.shape[0] > 0:
             pred = pcsaft_vp(pred_para, datapoints)
             target = datapoints[:, -1].cpu()
             result_filter = ~torch.isnan(pred)
             # pylint: disable = not-callable
             loss_mape = mape(pred[result_filter], target[result_filter])
             loss_huber = hloss(pred[result_filter], target[result_filter])
-            if loss_mape.item() < 0.5:
-                mape_vp = loss_mape.item()
-                huber_vp = loss_huber.item()
-                metrics_dict.update(
-                    {
-                        "mape_vp": mape_vp,
-                        "huber_vp": huber_vp,
-                    }
-                )
+            mape_vp = loss_mape.item()
+            huber_vp = loss_huber.item()
+            metrics_dict.update(
+                {
+                    "mape_vp": mape_vp,
+                    "huber_vp": huber_vp,
+                }
+            )
         self.log_dict(metrics_dict, on_step=True, batch_size=1, sync_dist=True)
         return metrics_dict
 

@@ -8,16 +8,18 @@ from typing import Any
 import ml_collections
 import numpy as np
 import torch
+import torch_geometric.transforms as T
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 from ray import train
 from ray.train import Checkpoint
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, ReduceLROnPlateau
+from torch.utils.data import ConcatDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
+from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
 from . import models
@@ -28,12 +30,12 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path)
-    elif dataset == "esper":
+    elif dataset in ("esper", "esper_assoc", "esper_assoc_only"):
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path)
     else:
         raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+            f"dataset is either ramirez or esper, got >>> {dataset} <<< instead"
         )
     # Compute the maximum in-degree in the training data.
     max_degree = -1
@@ -59,26 +61,19 @@ def create_model(
         pre_layers=config.pre_layers,
         post_layers=config.post_layers,
         deg=deg,
-        skip_connections=config.skip_connections,
-        self_loops=config.add_self_loops,
-    )
-    mlp_params = models.ReadoutMLPParams(
-        num_mlp_layers=config.num_mlp_layers,
-        num_para=config.num_para,
         dropout=config.dropout_rate,
+        self_loops=config.add_self_loops,
     )
 
     if config.model == "PNA":
-
         return models.PNAPCSAFT(
             hidden_dim=config.hidden_dim,
             pna_params=pna_params,
-            mlp_params=mlp_params,
+            num_para=config.num_para,
         )
     if config.model == "PNAL":
         return models.PNApcsaftL(
             pna_params=pna_params,
-            mlp_params=mlp_params,
             config=config,
         )
 
@@ -127,19 +122,17 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    if parameters.size < 8:
-        zeros = np.zeros(
-            5,
-        )
-        parameters = np.concatenate([parameters, zeros], axis=0)
     pred_mape = [0.0]
-    if ~np.all(rho == np.zeros_like(rho)):
+    if rho.shape[0] > 0:
         pred_mape = []
         for state in rho:
-            den = pure_den_feos(parameters, state)
-            mape_den = np.abs((state[-1] - den) / state[-1])
-            if mape_den > 1:  # against algorithm fail
+            try:
+                den = pure_den_feos(parameters, state)
+                mape_den = np.abs((state[-1] - den) / state[-1])
+            except RuntimeError:
                 continue
+            # if mape_den > 1:  # against algorithm fail
+            #     continue
             pred_mape += [mape_den]
 
     den = np.asarray(pred_mape)
@@ -147,7 +140,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
         den = den.mean()
 
     pred_mape = [0.0]
-    if ~np.all(vp == np.zeros_like(vp)):
+    if vp.shape[0] > 0:
         pred_mape = []
         for state in vp:
             try:
@@ -155,8 +148,8 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
                 mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
             except (AssertionError, RuntimeError):
                 continue
-            if mape_vp > 1:  # against algorithm fail
-                continue
+            # if mape_vp > 1:  # against algorithm fail
+            #     continue
             pred_mape += [mape_vp]
 
     vp = np.asarray(pred_mape)
@@ -170,67 +163,21 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
     parameters = np.abs(parameters)
     den = []
-    if ~np.all(rho == np.zeros_like(rho)):
+    if rho.shape[0] > 0:
         for state in rho:
             den += [pure_den_feos(parameters, state)]
     den = np.asarray(den)
 
     vpl = []
-    if ~np.all(vp == np.zeros_like(vp)):
+    if vp.shape[0] > 0:
         for state in vp:
             try:
                 vpl += [pure_vp_feos(parameters, state)]
             except (AssertionError, RuntimeError):
-                continue
+                vpl += [np.nan]
     vp = np.asarray(vpl)
 
     return den, vp
-
-
-def create_schedulers(config, optimizer):
-    "Creates lr schedulers."
-
-    class Noop:
-        """Dummy noop scheduler"""
-
-        def step(self, *args, **kwargs):
-            """Scheduler step"""
-
-        def __getattr__(self, _):
-            return self.step
-
-    if config.change_sch:
-        scheduler = Noop()
-        scheduler2 = ReduceLROnPlateau(
-            optimizer,
-            mode="min",
-            patience=config.patience,
-            verbose=True,
-            cooldown=config.patience,
-            min_lr=1e-15,
-            eps=1e-15,
-        )
-    else:
-        scheduler = CosineAnnealingWarmRestarts(optimizer, config.warmup_steps)
-        scheduler2 = Noop()
-    return scheduler, scheduler2
-
-
-# pylint: disable= R0913,R0917
-def load_checkpoint(config, workdir, model, optimizer, scaler, device):
-    "Loads saved model checkpoints."
-    ckp_path = osp.join(workdir, "train/checkpoints/last_checkpoint.pth")
-    initial_step = 1
-    if osp.exists(ckp_path):
-        checkpoint = torch.load(ckp_path, map_location=device)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        if not config.change_opt:
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scaler.load_state_dict(checkpoint["scaler_state_dict"])
-        step = checkpoint["step"]
-        initial_step = int(step) + 1
-        del checkpoint
-    return ckp_path, initial_step
 
 
 def build_datasets_loaders(config, workdir, dataset):
@@ -243,32 +190,79 @@ def build_datasets_loaders(config, workdir, dataset):
 
 
 # pylint: disable=R0903
-class Munanb(BaseTransform):
-    "To add mu, na, nb data to test dataset."
+class TransformParameters(BaseTransform):
+    "To add parameters to test dataset."
 
     def __init__(self, para_data: dict) -> None:
+        super().__init__()
         self.para_data = para_data
 
     def forward(self, data: Any) -> Any:
         if data.InChI in self.para_data:
-            data.munanb = self.para_data[data.InChI]
+            data.para, data.assoc, data.munanb = self.para_data[data.InChI]
         else:
-            data.munanb = torch.zeros(5)
+            data.para, data.assoc = (
+                torch.zeros(3),
+                torch.zeros(2),
+            )
+            data.munanb = torch.tensor(
+                (0,) + assoc_number(data.InChI), dtype=torch.float32
+            )
         return data
 
 
-def build_test_dataset(workdir, train_dataset):
+class LogAssoc(BaseTransform):
+    "Log10 assoc for training."
+
+    def __init__(self, workdir: str) -> None:
+        super().__init__()
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path)
+        assoc = {}
+        msigmae = {}
+        for graph in train_dataset:
+            assoc[graph.InChI] = torch.abs(torch.log10(graph.assoc))
+            msigmae[graph.InChI] = torch.abs(torch.log10(graph.para))
+        self.assoc = assoc
+        self.msigmae = msigmae
+
+    def forward(self, data: Any) -> Any:
+        data.assoc = self.assoc[data.InChI]
+        data.para = self.msigmae[data.InChI]
+        return data
+
+
+def build_test_dataset(workdir, train_dataset, transform=None):
     "Builds test dataset."
 
     para_data = {}
-    if isinstance(train_dataset, Esper):
+    if isinstance(train_dataset, (Esper, ConcatDataset)):
         for graph in train_dataset:
-            inchi, para = graph.InChI, graph.munanb
-            para_data[inchi] = para
-    test_loader = ThermoMLDataset(
-        osp.join(workdir, "data/thermoml"), transform=Munanb(para_data)
+            inchi, para, assoc, munanb = (
+                graph.InChI,
+                graph.para,
+                graph.assoc,
+                graph.munanb,
+            )
+            para_data[inchi] = (para, assoc, munanb)
+    if transform:
+        transform = T.Compose([TransformParameters(para_data), transform])
+    else:
+        transform = TransformParameters(para_data)
+    tml_dataset = ThermoMLDataset(
+        osp.join(workdir, "data/thermoml"), transform=transform
     )
-    return test_loader, para_data
+    test_idx = []
+    val_idx = []
+    # separate test and val dataset
+    for idx, graph in enumerate(tml_dataset):
+        if graph.InChI in para_data:
+            val_idx.append(idx)
+        elif graph.munanb[-1] == 0:
+            test_idx.append(idx)
+    test_dataset = tml_dataset[test_idx]
+    val_dataset = tml_dataset[val_idx]
+    return val_dataset, test_dataset
 
 
 def build_train_dataset(workdir, dataset, transform=None):
@@ -279,9 +273,31 @@ def build_train_dataset(workdir, dataset, transform=None):
     elif dataset == "esper":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
+    elif dataset == "esper_assoc":
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path, transform=transform)
+        as_idx = []
+        non_as_idx = []
+        for i, graph in enumerate(train_dataset):
+            if all(graph.munanb[1:] > 0):
+                as_idx.append(i)
+            if all(graph.munanb[1:] == 0):
+                non_as_idx.append(i)
+        train_dataset = ConcatDataset(
+            [train_dataset[as_idx]] * 4 + [train_dataset[non_as_idx]]
+        )
+    elif dataset == "esper_assoc_only":
+        path = osp.join(workdir, "data/esper2023")
+        train_dataset = Esper(path, transform=transform)
+        as_idx = []
+        for i, graph in enumerate(train_dataset):
+            if all(graph.munanb[1:] > 0):
+                as_idx.append(i)
+        train_dataset = train_dataset[as_idx]
     else:
         raise ValueError(
-            f"dataset is either ramirez or thermoml, got >>> {dataset} <<< instead"
+            f"dataset is either ramirez, esper, esper_assoc \
+              or esper_assoc_only, got >>> {dataset} <<< instead"
         )
 
     return train_dataset
@@ -324,7 +340,7 @@ def output_artifacts(workdir: str):
 class EpochTimer(Callback):
     "Elapsed time counter."
 
-    start_time: float
+    start_time: float = time.time()
 
     def on_train_epoch_start(
         self, trainer: Trainer, pl_module: LightningModule
@@ -347,7 +363,7 @@ class VpOff(BaseTransform):
 
     def forward(self, data: Any) -> Any:
 
-        data.vp = torch.zeros(1, 5)
+        data.vp = torch.tensor([])
         return data
 
 

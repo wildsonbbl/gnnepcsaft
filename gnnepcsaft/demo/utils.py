@@ -1,5 +1,6 @@
 """Module for functions used in model demonstration."""
 
+import itertools
 import os
 import os.path as osp
 from typing import Union
@@ -11,14 +12,16 @@ import torch
 from rdkit import Chem
 
 from ..configs.default import get_config
-from ..data.graph import from_InChI, from_smiles
-from ..data.graphdataset import Ramirez, ThermoMLDataset
+from ..data.graph import assoc_number, from_InChI, from_smiles
+from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
+from ..epcsaft.utils import parameters_gc_pcsaft
 from ..train.models import PNAPCSAFT, PNApcsaftL
 from ..train.utils import mape, rhovp_data
 
 sns.set_theme(style="ticks")
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
+markers = itertools.cycle(("o", "v", "^", "<", ">", "*", "s", "p", "P", "D"))
 
 config = get_config()
 device = torch.device("cpu")
@@ -35,7 +38,15 @@ tml_para = {}
 for graph in tml_loader:
     tml_para[graph.InChI] = graph
 
-testloader = ThermoMLDataset(osp.join(real_path, "../data/thermoml"))
+es_loader = Esper(osp.join(real_path, "../data/esper2023"))
+es_para = {}
+for graph in es_loader:
+    es_para[graph.InChI] = (
+        graph.para,
+        10 ** (graph.assoc * torch.tensor([-1.0, 1.0])),
+        graph.munanb,
+    )
+
 device = torch.device("cpu")
 
 
@@ -50,7 +61,9 @@ def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
         del checkpoint
 
 
-def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
+def plotdata(
+    inchi: str, molecule_name: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT
+):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
     parameters"""
@@ -64,12 +77,12 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
         gh = tml_para[inchi]
     else:
         return
-    list_params = predparams(inchi, models)
+    list_params = predparams(inchi, models, model_msigmae)
 
     rho = gh.rho.view(-1, 5).to(torch.float64).numpy()
     vp = gh.vp.view(-1, 5).to(torch.float64).numpy()
 
-    pred_den_list, pred_vp_list, ra_den, ra_vp = pred_rhovp(inchi, list_params, rho, vp)
+    pred_den_list, pred_vp_list = pred_rhovp(inchi, list_params, rho, vp)
 
     plotvp(
         inchi,
@@ -78,7 +91,6 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
         (
             vp,
             pred_vp_list,
-            ra_vp,
         ),
     )
 
@@ -89,25 +101,23 @@ def plotdata(inchi: str, molecule_name: str, models: list[PNAPCSAFT]):
         (
             rho,
             pred_den_list,
-            ra_den,
         ),
     )
 
     mol = Chem.MolFromInchi(inchi)
     img = Draw.MolToImage(mol, size=(600, 600))
-    img.show()
     img_path = osp.join("images", "mol_" + molecule_name + ".png")
     img.save(img_path, dpi=(300, 300), format="png", bitmap_format="png")
 
 
 def pltline(x, y):
     "Line plot."
-    return plt.plot(x, y, linewidth=0.5)
+    return plt.plot(x, y, marker=next(iter(markers)), linewidth=0.5)
 
 
 def pltscatter(x, y):
     "Scatter plot."
-    return plt.scatter(x, y, marker="x", s=10, c="black")
+    return plt.scatter(x, y, marker="x", s=10, c="black", zorder=10)
 
 
 def plterr(x, y, m):
@@ -120,7 +130,7 @@ def plterr(x, y, m):
             plt.text(x[i], y[i], f"{maperror} %", ha="center", va="center", fontsize=8)
 
 
-def pltcustom(ra, scale="linear", ylabel="", n=2):
+def pltcustom(inchi, scale="linear", ylabel="", n=2):
     """
     Add legend and lables for `plotdata`.
     """
@@ -130,15 +140,16 @@ def pltcustom(ra, scale="linear", ylabel="", n=2):
     legend = ["ThermoML Archive"]
     for i in range(1, n + 1):
         legend += [f"GNNePCSAFT {i}"]
-    if ra:
-        legend += ["Ramírez-Vélez et al. (2022)"]
+    if inchi in es_para:
+        legend += ["Ref."]
+    legend += ["GC PCSAFT"]
     plt.legend(legend, loc=(1.01, 0.75))
     plt.grid(False)
     plt.yscale(scale)
     sns.despine(trim=True)
 
 
-def predparams(inchi, models):
+def predparams(inchi: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
         gh = from_InChI(inchi)
@@ -146,35 +157,56 @@ def predparams(inchi, models):
         list_params = []
         for model in models:
             model.eval()
-            parameters = model(graphs)
-            params = parameters.squeeze().to(torch.float64).numpy()
-            list_params.append(params)
+            parameters = model.pred_with_bounds(graphs)
+            params = parameters.squeeze().to(torch.float64)
+            if params.size(0) == 2:
+                if inchi in es_para:
+                    munanb = es_para[inchi][2]
+                else:
+                    munanb = torch.tensor(
+                        (0,) + assoc_number(inchi), dtype=torch.float32
+                    )
+                msigmae = (
+                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+                )
+                params = torch.hstack(
+                    (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
+                )
+            elif params.size(0) == 3:
+                params = torch.hstack((params, torch.zeros(5)))
+            list_params.append(params.numpy().round(decimals=4))
+        if inchi in es_para:
+            list_params.append(np.hstack(es_para[inchi]).round(decimals=4))
+        try:
+            list_params.append(
+                np.asarray(parameters_gc_pcsaft(gh.smiles)).round(decimals=4)
+            )
+        # pylint: disable=W0702
+        except:
+            pass
+
     return list_params
 
 
 def pred_rhovp(inchi, list_params, rho, vp):
     "Predicted density and vapor pressure with ePC-SAFT."
     pred_den_list, pred_vp_list = [], []
+    print(f"#### {inchi} ####")
     for i, params in enumerate(list_params):
+        print(f"#### Parameters for model {i+1} ####")
+        print(params)
         pred_den, pred_vp = rhovp_data(params, rho, vp)
         pred_den_list.append(pred_den)
         pred_vp_list.append(pred_vp)
-        print(f"#### Parameters for model {i + 1} ####")
-        print(params)
-    if inchi in ra_para:
-        params = np.asarray(ra_para[inchi])
-        ra_den, ra_vp = rhovp_data(params, rho, vp)
-    else:
-        ra_den, ra_vp = [], []
-    return pred_den_list, pred_vp_list, ra_den, ra_vp
+    return pred_den_list, pred_vp_list
 
 
 def plotden(inchi, molecule_name, models, data):
     "Plot density data."
 
-    rho, pred_den_list, ra_den = data
+    rho, pred_den_list = data
     if ~np.all(rho == np.zeros_like(rho)):
-        idx_p = abs(rho[:, 1] - 101325) < 15_000
+        idx_p = abs(rho[:, 1] - 101325) < 1_000
         rho = rho[idx_p]
         if rho.shape[0] != 0:
             idx = np.argsort(rho[:, 0], 0)
@@ -189,15 +221,8 @@ def plotden(inchi, molecule_name, models, data):
                 # mden_model = 100 * np.abs(rho[idx, -1] - pred_den[idx]) / rho[idx, -1]
                 # plterr(x, y, mden_model)
 
-            if inchi in ra_para:
-                ra_den = ra_den[idx_p]
-                y = ra_den[idx]
-                pltline(x, y)
-                # mden_ra = 100 * np.abs(rho[idx, -1] - ra_den[idx]) / rho[idx, -1]
-                # plterr(x, y, mden_ra)
-
             # Customize the plot appearance
-            pltcustom(inchi in ra_para, "linear", "Density (mol / m³)", len(models))
+            pltcustom(inchi, "linear", "Density (mol / m³)", len(models))
             img_path = osp.join("images", "den_" + molecule_name + ".png")
             plt.savefig(
                 img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
@@ -207,7 +232,7 @@ def plotden(inchi, molecule_name, models, data):
 
 def plotvp(inchi, molecule_name, models, data):
     "Plot vapor pressure data."
-    vp, pred_vp_list, ra_vp = data
+    vp, pred_vp_list = data
     if ~np.all(vp == np.zeros_like(vp)):
         idx = np.argsort(vp[:, 0], 0)
         x = vp[idx, 0]
@@ -220,14 +245,8 @@ def plotvp(inchi, molecule_name, models, data):
             # mvp_model = 100 * np.abs(vp[idx, -1] - pred_vp[idx]) / vp[idx, -1]
             # plterr(x, y, mvp_model)
 
-        if inchi in ra_para:
-            y = ra_vp[idx] / 100000
-            pltline(x, y)
-            # mvp_ra = 100 * np.abs(vp[idx, -1] - ra_vp[idx]) / vp[idx, -1]
-            # plterr(x, y * 1.01, mvp_ra)
-
         # Customize the plot appearance
-        pltcustom(inchi in ra_para, "log", "Vapor pressure (bar)", len(models))
+        pltcustom(inchi, "log", "Vapor pressure (bar)", len(models))
 
         # Save the plot as a high-quality image file
         img_path = osp.join("images", "vp_" + molecule_name + ".png")
@@ -237,7 +256,7 @@ def plotvp(inchi, molecule_name, models, data):
         plt.show()
 
 
-def model_para_fn(model: PNAPCSAFT):
+def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
     """Calculates density and/or vapor pressure mean absolute percentage error
     between ThermoML Archive experimental data and predicted data with ePC-SAFT
     using the model estimated parameters."""
@@ -245,10 +264,26 @@ def model_para_fn(model: PNAPCSAFT):
     model_array = {}
     model.eval()
     with torch.no_grad():
-        for graphs in testloader:
+        for graphs in tml_loader:
             graphs = graphs.to(device)
-            parameters = model(graphs)
-            params = parameters.squeeze().to(torch.float64).numpy()
+            parameters = model.pred_with_bounds(graphs)
+            params = parameters.squeeze().to(torch.float64)
+            if params.size(0) == 2:
+                if graphs.InChI in es_para:
+                    munanb = es_para[graphs.InChI][2]
+                else:
+                    munanb = torch.tensor(
+                        (0,) + assoc_number(graphs.InChI), dtype=torch.float32
+                    )
+                msigmae = (
+                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+                )
+                params = torch.hstack(
+                    (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
+                )
+            elif params.size(0) == 3:
+                params = torch.hstack((params, torch.zeros(5)))
+            params = params.numpy()
             rho = graphs.rho.view(-1, 5).to(torch.float64).numpy()
             vp = graphs.vp.view(-1, 5).to(torch.float64).numpy()
             mden_array, mvp_array = mape(params, rho, vp, False)
