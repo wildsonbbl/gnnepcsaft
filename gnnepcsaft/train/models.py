@@ -11,7 +11,7 @@ from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-from torch_geometric.data import Data
+from torch_geometric.data.data import Data
 from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
 from torchmetrics.functional import mean_absolute_percentage_error as mape
@@ -94,16 +94,12 @@ class PNAPCSAFT(torch.nn.Module):
 
     def forward(
         self,
-        data: Data,
-    ):
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        batch: torch.Tensor,
+    ) -> torch.Tensor:
         """Forward pass of the model"""
-
-        x, edge_index, edge_attr, batch = (
-            data.x,
-            data.edge_index,
-            data.edge_attr,
-            data.batch,
-        )
 
         if self.pna_params.self_loops:
             edge_index, edge_attr = add_self_loops(
@@ -122,17 +118,25 @@ class PNAPCSAFT(torch.nn.Module):
 
     def pred_with_bounds(self, data: Data):
         """Forward pass of the model with bounds."""
-        x: torch.Tensor = self.forward(data)
+
+        x, edge_index, edge_attr, batch = (
+            data.x,
+            data.edge_index,
+            data.edge_attr,
+            data.batch,
+        )
+
+        params = self.forward(x, edge_index, edge_attr, batch)
         upper_bounds = (
             self.upper_bounds[:3] if self.num_para == 3 else self.upper_bounds[3:]
         ).to(device=x.device)
         lower_bounds = (
             self.lower_bounds[:3] if self.num_para == 3 else self.lower_bounds[3:]
         ).to(device=x.device)
-        x = torch.minimum(x, upper_bounds)
-        x = torch.maximum(x, lower_bounds)
+        params = torch.minimum(params, upper_bounds)
+        params = torch.maximum(params, lower_bounds)
 
-        return x
+        return params
 
 
 class PNApcsaftL(L.LightningModule):
@@ -154,10 +158,13 @@ class PNApcsaftL(L.LightningModule):
     # pylint: disable=W0221
     def forward(
         self,
-        data: Data,
-    ):
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        batch: torch.Tensor,
+    ) -> torch.Tensor:
         """Forward pass of the model"""
-        return self.model(data)
+        return self.model(x, edge_index, edge_attr, batch)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         if self.config.optimizer == "adam":
@@ -193,7 +200,13 @@ class PNApcsaftL(L.LightningModule):
             target: torch.Tensor = graphs.assoc.view(-1, self.config.num_para)
         else:
             target: torch.Tensor = graphs.para.view(-1, self.config.num_para)
-        pred: torch.Tensor = self(graphs)
+        x, edge_index, edge_attr, batch = (
+            graphs.x,
+            graphs.edge_index,
+            graphs.edge_attr,
+            graphs.batch,
+        )
+        pred: torch.Tensor = self(x, edge_index, edge_attr, batch)
         loss_mape = mape(pred, target)
         self.log(
             "train_mape",
