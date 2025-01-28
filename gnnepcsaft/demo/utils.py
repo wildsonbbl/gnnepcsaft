@@ -20,7 +20,6 @@ from ..train.utils import mape, rhovp_data
 
 sns.set_theme(style="ticks")
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
 markers = itertools.cycle(("o", "v", "^", "<", ">", "*", "s", "p", "P", "D"))
 
 config = get_config()
