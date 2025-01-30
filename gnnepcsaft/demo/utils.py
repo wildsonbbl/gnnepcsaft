@@ -10,6 +10,7 @@ import numpy as np
 import seaborn as sns
 import torch
 from rdkit import Chem
+from torch.export.dynamic_shapes import Dim
 
 from ..configs.default import get_config
 from ..data.graph import assoc_number, from_InChI, from_smiles
@@ -370,3 +371,25 @@ def predparams2(smiles, models):
         array_params = np.asarray(list_params)
         list_array_params.append(array_params)
     return list_array_params
+
+
+def save_exported_program(
+    model: torch.nn.Module, example_input: tuple, path: str
+) -> torch.export.ExportedProgram:
+    """Save model as Exported Program."""
+    model.eval()
+    dynamic_shapes = {
+        "x": (Dim.AUTO, 9),
+        "edge_index": (2, Dim.AUTO),
+        "edge_attr": (Dim.AUTO, 3),
+        "batch": None,
+    }
+
+    exportedprogram = torch.export.export(
+        model,
+        example_input,
+        dynamic_shapes=dynamic_shapes,
+    )
+
+    torch.export.save(exportedprogram, path)
+    return exportedprogram
