@@ -67,6 +67,8 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         num_workers=os.cpu_count(),
     )
 
+    val_dataset = DataLoader(val_dataset)
+
     # trainer callback and logger
     callbacks = []
 
@@ -117,6 +119,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # creating model from config
     deg = calc_deg(dataset, workdir)
     model: models.PNApcsaftL = create_model(config, deg)
+    model = torch.compile(model, dynamic=True)
 
     # Trainer configs
     if job_type == "train":
