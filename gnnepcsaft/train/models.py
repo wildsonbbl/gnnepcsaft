@@ -368,3 +368,150 @@ class GATPCSAFT(torch.nn.Module):
         params = torch.maximum(params, lower_bounds)
 
         return params
+
+
+class PCsaftL(L.LightningModule):
+    """Graph neural network to predict ePCSAFT parameters with pytorch lightning."""
+
+    def __init__(
+        self,
+        config: ml_collections.ConfigDict,
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        self.config = config
+
+        if config.model == "GATL":
+            self.model = GATPCSAFT(
+                config.hidden_dim,
+                config.propagation_depth,
+                config.num_para,
+                config.dropout_rate,
+                config.heads,
+            )
+        else:
+            raise ValueError(f"Unsupported model: {config.model}.")
+
+    # pylint: disable=W0221
+    def forward(
+        self,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        batch: torch.Tensor,
+    ) -> torch.Tensor:
+        """Forward pass of the model"""
+        return self.model(x, edge_index, edge_attr, batch)
+
+    def configure_optimizers(self) -> OptimizerLRScheduler:
+        if self.config.optimizer == "adam":
+            opt = torch.optim.AdamW(
+                self.parameters(),
+                lr=self.config.learning_rate,
+                weight_decay=self.config.weight_decay,
+                amsgrad=True,
+                eps=1e-5,
+            )
+        elif self.config.optimizer == "sgd":
+            opt = torch.optim.SGD(
+                self.parameters(),
+                lr=self.config.learning_rate,
+                momentum=0.0,
+                weight_decay=0.0,
+                nesterov=False,
+            )
+        else:
+            raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
+        return {
+            "optimizer": opt,
+            "lr_scheduler": {
+                "scheduler": CosineAnnealingWarmRestarts(opt, self.config.warmup_steps),
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
+
+    # pylint: disable = W0613
+    def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
+        if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
+            target: torch.Tensor = graphs.assoc.view(-1, self.config.num_para)
+        else:
+            target: torch.Tensor = graphs.para.view(-1, self.config.num_para)
+        x, edge_index, edge_attr, batch = (
+            graphs.x,
+            graphs.edge_index,
+            graphs.edge_attr,
+            graphs.batch,
+        )
+        pred: torch.Tensor = self(x, edge_index, edge_attr, batch)
+        loss_mape = mape(pred, target)
+        self.log(
+            "train_mape",
+            loss_mape,
+            on_step=True,
+            batch_size=target.shape[0],
+            sync_dist=True,
+        )
+        return loss_mape
+
+    # pylint: disable=R0914
+    def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
+        mape_den = 0.0
+        huber_den = 0.0
+        mape_vp = 0.0
+        huber_vp = 0.0
+        metrics_dict = {}
+
+        pred_para: torch.Tensor = (
+            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+        )
+        if self.config.num_para == 2:
+            para_assoc = 10 ** (
+                pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
+            )
+            para_msigmae = graphs.para
+        else:
+            para_assoc = 10 ** (
+                graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
+            )
+            para_msigmae = pred_para
+        pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
+        datapoints: torch.Tensor = graphs.rho.to(torch.float64).view(-1, 5)
+        if datapoints.shape[0] > 0:
+            pred = pcsaft_den(pred_para, datapoints)
+            target = datapoints[:, -1].cpu()
+            result_filter = ~torch.isnan(pred)
+            # pylint: disable = not-callable
+            loss_mape = mape(pred[result_filter], target[result_filter])
+            loss_huber = hloss(pred[result_filter], target[result_filter])
+            mape_den = loss_mape.item()
+            huber_den = loss_huber.item()
+            # self.log("mape_den", mape_den)
+            metrics_dict.update(
+                {
+                    "mape_den": mape_den,
+                    "huber_den": huber_den,
+                }
+            )
+
+        datapoints: torch.Tensor = graphs.vp.to(torch.float64).view(-1, 5)
+        if datapoints.shape[0] > 0:
+            pred = pcsaft_vp(pred_para, datapoints)
+            target = datapoints[:, -1].cpu()
+            result_filter = ~torch.isnan(pred)
+            # pylint: disable = not-callable
+            loss_mape = mape(pred[result_filter], target[result_filter])
+            loss_huber = hloss(pred[result_filter], target[result_filter])
+            mape_vp = loss_mape.item()
+            huber_vp = loss_huber.item()
+            metrics_dict.update(
+                {
+                    "mape_vp": mape_vp,
+                    "huber_vp": huber_vp,
+                }
+            )
+        self.log_dict(metrics_dict, on_step=True, batch_size=1, sync_dist=True)
+        return metrics_dict
+
+    def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
+        return self.validation_step(graphs, batch_idx)
