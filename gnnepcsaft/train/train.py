@@ -230,6 +230,7 @@ def training_updated(
     config.hidden_dim = int(train_config["hidden_dim"])
     config.pre_layers = int(train_config["pre_layers"])
     config.post_layers = int(train_config["post_layers"])
+    config.heads = int(train_config["heads"])
 
     ltrain_and_evaluate(config, workdir)
 
