@@ -279,7 +279,7 @@ class PNApcsaftL(L.LightningModule):
         return self.validation_step(graphs, batch_idx)
 
 
-# pylint: disable=R0902
+# pylint: disable=R0902,R0913,R0917
 class GATPCSAFT(torch.nn.Module):
     """Graph neural network to predict ePCSAFT parameters"""
 
