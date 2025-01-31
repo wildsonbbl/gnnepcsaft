@@ -76,6 +76,8 @@ def create_model(
             pna_params=pna_params,
             config=config,
         )
+    if config.model == "GATL":
+        return models.PCsaftL(config=config)
 
     raise ValueError(f"Unsupported model: {config.model}.")
 
