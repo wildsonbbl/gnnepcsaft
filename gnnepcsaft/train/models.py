@@ -12,7 +12,7 @@ from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric.data.data import Data
-from torch_geometric.nn import BatchNorm, PNAConv, global_add_pool
+from torch_geometric.nn import BatchNorm, GATConv, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
 from torchmetrics.functional import mean_absolute_percentage_error as mape
 
@@ -101,10 +101,9 @@ class PNAPCSAFT(torch.nn.Module):
     ) -> torch.Tensor:
         """Forward pass of the model"""
 
-        if self.pna_params.self_loops:
-            edge_index, edge_attr = add_self_loops(
-                edge_index, edge_attr, 0, num_nodes=x.size(0)
-            )
+        edge_index, edge_attr = add_self_loops(
+            edge_index, edge_attr, 0, num_nodes=x.size(0)
+        )
         x = self.node_embed(x)
         edge_attr = self.edge_embed(edge_attr)
 
@@ -278,3 +277,94 @@ class PNApcsaftL(L.LightningModule):
 
     def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         return self.validation_step(graphs, batch_idx)
+
+
+class GATPCSAFT(torch.nn.Module):
+    """Graph neural network to predict ePCSAFT parameters"""
+
+    def __init__(
+        self,
+        hidden_dim: int,
+        propagation_depth: int,
+        num_para: int,
+        dropout: float,
+        heads: int,
+    ):
+        super().__init__()
+
+        self.convs = ModuleList()
+        self.batch_norms = ModuleList()
+        self.lower_bounds = torch.tensor(
+            [1.0, 1.9, 50.0, -1 * math.log10(0.9), math.log10(200.0)]
+        )
+        self.upper_bounds = torch.tensor(
+            [25.0, 4.5, 550.0, -1 * math.log10(0.0001), math.log10(5000.0)]
+        )
+        self.num_para = num_para
+
+        self.node_embed = AtomEncoder(hidden_dim)
+        self.edge_embed = BondEncoder(hidden_dim)
+        self.dropout = Dropout(p=dropout)
+
+        for _ in range(propagation_depth):
+            conv = GATConv(
+                in_channels=hidden_dim,
+                out_channels=hidden_dim,
+                edge_dim=hidden_dim,
+                heads=heads,
+                concat=False,
+            )
+            self.convs.append(conv)
+            self.batch_norms.append(BatchNorm(hidden_dim))
+
+        self.mlp = Sequential(
+            Linear(hidden_dim, hidden_dim // 2),
+            BatchNorm1d(hidden_dim // 2),
+            ReLU(),
+            Linear(hidden_dim // 2, hidden_dim // 4),
+            BatchNorm1d(hidden_dim // 4),
+            ReLU(),
+            Linear(hidden_dim // 4, num_para),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        batch: torch.Tensor,
+    ) -> torch.Tensor:
+        """Forward pass of the model"""
+
+        x = self.node_embed(x)
+        edge_attr = self.edge_embed(edge_attr)
+
+        for conv, batch_norm in zip(self.convs, self.batch_norms):
+            x = F.relu(batch_norm(conv(x, edge_index, edge_attr)))
+            x = self.dropout(x)
+
+        x = x.sum(dim=0, keepdim=True) if batch is None else global_add_pool(x, batch)
+        x = self.mlp(x)
+        return x
+
+    def pred_with_bounds(self, data: Data):
+        """Forward pass of the model with bounds."""
+
+        x, edge_index, edge_attr, batch = (
+            data.x,
+            data.edge_index,
+            data.edge_attr,
+            data.batch,
+        )
+
+        params = self.forward(x, edge_index, edge_attr, batch)
+        upper_bounds = (
+            self.upper_bounds[:3] if self.num_para == 3 else self.upper_bounds[3:]
+        ).to(device=x.device)
+        lower_bounds = (
+            self.lower_bounds[:3] if self.num_para == 3 else self.lower_bounds[3:]
+        ).to(device=x.device)
+        params = torch.minimum(params, upper_bounds)
+        params = torch.maximum(params, lower_bounds)
+
+        return params
