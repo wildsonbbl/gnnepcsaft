@@ -130,7 +130,7 @@ def smiles2graph(smiles_string):
         edge_index = np.empty((2, 0), dtype=np.int64)
         edge_attr = np.empty((0, num_bond_features), dtype=np.int64)
 
-    graph = dict()
+    graph = {}
     graph["edge_index"] = edge_index
     graph["edge_feat"] = edge_attr
     graph["node_feat"] = x
