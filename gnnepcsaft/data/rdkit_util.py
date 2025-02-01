@@ -3,8 +3,7 @@ from rdkit import Chem, RDLogger
 
 # pylint: disable = no-name-in-module
 from rdkit.Chem.Fragments import fr_COO2, fr_Imine, fr_isocyan, fr_isothiocyan
-from rdkit.Chem.rdMolDescriptors import CalcNumHBA, CalcNumHBD
-from rdkit.Chem.rdMolDescriptors import CalcExactMolWt
+from rdkit.Chem.rdMolDescriptors import CalcExactMolWt, CalcNumHBA, CalcNumHBD
 
 RDLogger.DisableLog("rdApp.*")
 
@@ -76,6 +75,7 @@ def assoc_number(inchi: str):
         )
 
     return na, nb
+
 
 def mw(inchi: str) -> float:
     "Calcultes molecular weight."
