@@ -6,7 +6,7 @@ from torch.utils.data import Dataset as ds
 from torch_geometric.data import Data, InMemoryDataset
 
 from .graph import from_InChI
-from .preprocess import mw
+from .rdkit_util import mw
 
 
 class ThermoMLDataset(InMemoryDataset):
