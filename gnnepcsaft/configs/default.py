@@ -30,14 +30,14 @@ def get_config():
     config.checkpoint = ""
 
     # GNN hyperparameters.
-    config.model_name = "esper_msigmae_6"
+    config.model_name = "esper_msigmae_7"
     config.model = "GATL"
-    config.propagation_depth = 6
-    config.hidden_dim = 128
-    config.post_layers = 1
-    config.pre_layers = 3
+    config.propagation_depth = 7
+    config.hidden_dim = 256
+    config.post_layers = None
+    config.pre_layers = None
     config.num_para = 3
     config.add_self_loops = True
     config.dropout_rate = 0.25
-    config.heads = 2
+    config.heads = 3
     return config
