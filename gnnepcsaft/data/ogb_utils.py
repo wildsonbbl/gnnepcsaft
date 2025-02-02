@@ -96,6 +96,8 @@ def smiles2graph(smiles_string):
     """
 
     mol = Chem.MolFromSmiles(smiles_string)
+    if mol is None:
+        raise ValueError("SMILES is not valid")
 
     # atoms
     atom_features_list = []

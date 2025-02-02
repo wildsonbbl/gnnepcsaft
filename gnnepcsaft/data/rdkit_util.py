@@ -12,6 +12,8 @@ RDLogger.DisableLog("rdApp.*")
 def inchitosmiles(InChI, with_hydrogen, kekulize):
     "Transform InChI to a SMILES."
     mol = Chem.MolFromInchi(InChI)
+    if mol is None:
+        raise ValueError("InChI is not valid")
 
     # pylint: disable = no-member
     if with_hydrogen:
@@ -27,6 +29,8 @@ def smilestoinchi(smiles, with_hydrogen=False, kekulize=False):
     "Transform SMILES to InChI."
     # pylint: disable = no-member
     mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError("SMILES is not valid")
 
     if with_hydrogen:
         mol = Chem.AddHs(mol)
@@ -48,6 +52,8 @@ def assoc_number(inchi: str):
     if inchi in exceptions:
         return 1, 1
     mol = Chem.MolFromInchi(inchi, removeHs=False)
+    if mol is None:
+        raise ValueError("InChI is not valid")
     mol = Chem.AddHs(mol)
     na = CalcNumHBA(mol)
     nb = CalcNumHBD(mol)
