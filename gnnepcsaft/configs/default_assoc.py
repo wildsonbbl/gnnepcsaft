@@ -22,12 +22,12 @@ def get_config():
 
     config.accelerator = "gpu"
     config.batch_size = 387
-    config.num_train_steps = 150_000
+    config.num_train_steps = 300_000
     config.log_every_steps = 5000
     config.eval_every_steps = 9999
     config.checkpoint_every_steps = 10000
     config.dataset = "esper_assoc_only"
-    config.checkpoint = "esper_assoc_8-epoch=74999-train_mape=0.0048.ckpt"
+    config.checkpoint = "esper_assoc_8-epoch=149999-train_mape=0.0030.ckpt"
 
     # GNN hyperparameters.
     config.model_name = "esper_assoc_8"
