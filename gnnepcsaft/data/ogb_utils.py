@@ -84,7 +84,7 @@ def safe_index(l, e):
     """
     try:
         return l.index(e)
-    except IndexError:
+    except (IndexError, ValueError):
         return len(l) - 1
 
 
