@@ -165,18 +165,19 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
     parameters = np.abs(parameters)
     den = []
-    if rho.shape[0] > 0:
-        for state in rho:
+    for state in rho:
+        try:
             den += [pure_den_feos(parameters, state)]
+        except (AssertionError, RuntimeError):
+            den += [0.0]
     den = np.asarray(den)
 
     vpl = []
-    if vp.shape[0] > 0:
-        for state in vp:
-            try:
-                vpl += [pure_vp_feos(parameters, state)]
-            except (AssertionError, RuntimeError):
-                vpl += [np.nan]
+    for state in vp:
+        try:
+            vpl += [pure_vp_feos(parameters, state)]
+        except (AssertionError, RuntimeError):
+            vpl += [0.0]
     vp = np.asarray(vpl)
 
     return den, vp
