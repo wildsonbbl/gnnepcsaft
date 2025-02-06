@@ -154,26 +154,22 @@ for episode in tqdm(range(num_episodes)):
 
             # Store log probability and value for training
 
-            log_probs = distribution.log_prob(actions).sum(dim=1).detach()
+            old_log_probs = distribution.log_prob(actions).sum(dim=1).detach()
         for epoch in range(num_epochs):
             # Get state representation
             # state = graphs
-            old_log_probs = log_probs.detach()
 
             # Actor forward pass
             mean, std = actor(graphs)
-
             distribution = torch.distributions.Normal(mean, std)
             actions = distribution.sample()
 
             # Store log probability and value for training
-
             log_probs = distribution.log_prob(actions).sum(dim=1)
+            ratio = torch.exp(log_probs - old_log_probs)
 
             # Critic forward pass
             values = torch.squeeze(critic(graphs, actions))
-
-            ratio = torch.exp(log_probs - old_log_probs)
 
             # Compute predicted properties using PC-SAFT
             batch_pc_saft_params = actions.detach().cpu().numpy()
@@ -212,11 +208,22 @@ for episode in tqdm(range(num_episodes)):
 
                 reward = -(density_error**2 + pressure_error**2)
 
-                # write code that checks if params are within bounds
+                # Checks if params are within bounds
+                penalty = 0
                 if not np.all(params_lower_bound <= params[:5]) or not np.all(
                     params[:5] <= params_upper_bound
                 ):
-                    reward -= 1000
+                    # Compute the extent to which parameters are out of bounds
+                    lower_diff = params_lower_bound - params[:5]
+                    upper_diff = params[:5] - params_upper_bound
+                    total_diff = np.sum(
+                        np.maximum(0, lower_diff) + np.maximum(0, upper_diff)
+                    )
+                    penalty = (
+                        -total_diff
+                    )  # Negative penalty proportional to the violation
+                reward += penalty
+
                 rewards.append(torch.tensor([reward], dtype=torch.float))
 
             # Convert lists to tensors
@@ -239,20 +246,20 @@ for episode in tqdm(range(num_episodes)):
             critic_loss = value_loss_coef * F.mse_loss(values, rewards_norm)
 
             # Add entropy bonus for exploration
-            entropy_loss = -entropy_coef * distribution.entropy().mean()
-
-            # Total loss
-            total_loss = actor_loss + critic_loss + entropy_loss
+            entropy_loss = -entropy_coef * distribution.entropy().sum(dim=1).mean()
+            actor_loss += entropy_loss
 
             # Optimize
             actor_optimizer.zero_grad()
             critic_optimizer.zero_grad()
-            total_loss.backward()
+            actor_loss.backward()
+            critic_loss.backward()
             actor_optimizer.step()
             critic_optimizer.step()
 
     # Logging
     avg_reward = rewards.mean().item()
-    wandb.log({"avg_reward": avg_reward})
+    avg_actor_loss = actor_loss.item()
+    wandb.log({"avg_reward": avg_reward, "avg_actor_loss": avg_actor_loss})
 
 print("Training completed.")
