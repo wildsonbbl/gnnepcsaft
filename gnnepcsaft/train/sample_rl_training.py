@@ -1,5 +1,6 @@
 "Module to be used for RL training"
 
+import multiprocessing as mp
 import os
 
 import numpy as np
@@ -139,6 +140,51 @@ for graph in tml:
 tml_dataloader = DataLoader(tml, batch_size=batch_size, shuffle=True)
 
 
+def compute_reward(args):  # pylint: disable=too-many-locals
+    params, inchi = args
+    na, nb = assoc_number(inchi)
+
+    # Transform parameters
+    params[-2] = 10 ** (-params[-2])
+    params[-1] = 10 ** (params[-1])
+    params_full = np.hstack((params, np.array([0.0, na, nb])))
+
+    # Get states
+    states_rho, states_vp = tml_data[inchi]
+    rho_pred, vp_pred = rhovp_data(params_full, states_rho.numpy(), states_vp.numpy())
+
+    # Get experimental data
+    density_exp = states_rho[:, -1].numpy()
+    pressure_exp = states_vp[:, -1].numpy()
+
+    # Calculate errors
+    density_error = (
+        np.mean((rho_pred - density_exp) / density_exp)
+        if len(density_exp) >= 1
+        else 0.0
+    )
+    pressure_error = (
+        np.mean((vp_pred - pressure_exp) / pressure_exp)
+        if len(pressure_exp) >= 1
+        else 0.0
+    )
+
+    reward = -(density_error**2 + pressure_error**2)
+
+    # Check parameter bounds
+    penalty = 0
+    if not np.all(params_lower_bound <= params[:5]) or not np.all(
+        params[:5] <= params_upper_bound
+    ):
+        lower_diff = params_lower_bound - params[:5]
+        upper_diff = params[:5] - params_upper_bound
+        total_diff = np.sum(np.maximum(0, lower_diff) + np.maximum(0, upper_diff))
+        penalty = -total_diff  # Negative penalty
+    reward += penalty
+
+    return reward
+
+
 # Training loop
 for episode in tqdm(range(num_episodes)):
     rewards = []
@@ -173,61 +219,17 @@ for episode in tqdm(range(num_episodes)):
 
             # Compute predicted properties using PC-SAFT
             batch_pc_saft_params = actions.detach().cpu().numpy()
-            density_exp = []
-            density_pred = []
-            pressure_exp = []
-            pressure_pred = []
-            rewards = []
-            for idx, inchi in enumerate(graphs.InChI):
-                na, nb = assoc_number(inchi)
-                params = batch_pc_saft_params[idx]
+            # Prepare arguments for mapping in multiprocessing
+            args_list = [
+                (batch_pc_saft_params[idx], inchi)
+                for idx, inchi in enumerate(graphs.InChI)
+            ]
 
-                params[-2] = 10 ** (-params[-2])
-                params[-1] = 10 ** (params[-1])
-                params = np.hstack((params, np.array([0.0, na, nb])))
-
-                states_rho, states_vp = tml_data[inchi]
-                # experimental_conditions = (graph.rho, graph.vp)
-                rho_pred, vp_pred = rhovp_data(
-                    params, states_rho.numpy(), states_vp.numpy()
-                )
-
-                # Get experimental data
-                density_exp = states_rho[:, -1].numpy()
-                pressure_exp = states_vp[:, -1].numpy()
-
-                # Calculate reward
-                if density_exp.shape[0] >= 1:
-                    density_error = np.mean((rho_pred - density_exp) / density_exp)
-                else:
-                    density_error = 0.0
-                if pressure_exp.shape[0] >= 1:
-                    pressure_error = np.mean((vp_pred - pressure_exp) / pressure_exp)
-                else:
-                    pressure_error = 0.0
-
-                reward = -(density_error**2 + pressure_error**2)
-
-                # Checks if params are within bounds
-                penalty = 0
-                if not np.all(params_lower_bound <= params[:5]) or not np.all(
-                    params[:5] <= params_upper_bound
-                ):
-                    # Compute the extent to which parameters are out of bounds
-                    lower_diff = params_lower_bound - params[:5]
-                    upper_diff = params[:5] - params_upper_bound
-                    total_diff = np.sum(
-                        np.maximum(0, lower_diff) + np.maximum(0, upper_diff)
-                    )
-                    penalty = (
-                        -total_diff
-                    )  # Negative penalty proportional to the violation
-                reward += penalty
-
-                rewards.append(torch.tensor([reward], dtype=torch.float))
-
-            # Convert lists to tensors
-            rewards = torch.stack(rewards).squeeze().to(device=device)
+            # Use multiprocessing pool to calculate rewards with pc-saft parameters
+            with mp.Pool(processes=mp.cpu_count()) as pool:
+                rewards = pool.map(compute_reward, args_list)
+            # Convert rewards to torch tensor
+            rewards = torch.tensor(rewards, dtype=torch.float, device=device)
             rewards_norm = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
 
             # Calculate advantages
