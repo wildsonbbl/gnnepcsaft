@@ -4,9 +4,9 @@ import os
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
+import wandb
+from torch import nn, optim
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
@@ -27,7 +27,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Define the Actor Network (GNN)
 class GNNActor(nn.Module):
     def __init__(self):
-        super(GNNActor, self).__init__()
+        super().__init__()
         self.msigmae: GATPCSAFT  # trained model
         self.assoc: GATPCSAFT  # trained model
         self.log_std = nn.Parameter(torch.ones(5))  # Learnable standard deviation
@@ -49,7 +49,7 @@ class GNNActor(nn.Module):
 # Define the Critic Network
 class Critic(nn.Module):
     def __init__(self, hidden_dim, propagation_depth, dropout, heads):
-        super(Critic, self).__init__()
+        super().__init__()
         self.state_head = GATPCSAFT(hidden_dim, propagation_depth, 5, dropout, heads)
         self.action_head = nn.Sequential(
             nn.Linear(5, 5),
@@ -75,25 +75,39 @@ class Critic(nn.Module):
         return _value
 
 
+# PCSAFT parameters bounds
 params_lower_bound = np.array([1.0, 1.9, 50.0, 1e-4, 200.0])
 params_upper_bound = np.array([25.0, 4.5, 550.0, 0.9, 5000.0])
-
-tml = ThermoMLDataset(os.path.join(workdir, "gnnepcsaft/data/thermoml"))
-tml_data = {}
-batch_size = 512
-for graph in tml:
-    tml_data[graph.InChI] = (graph.rho, graph.vp)
-tml_dataloader = DataLoader(tml, batch_size=batch_size, shuffle=True)
 
 # Training parameters
 num_episodes = 100_000
 num_epochs = 10
+batch_size = 512
 actor_learning_rate = 1e-3
 critic_learning_rate = 1e-2
-
 clip_epsilon = 0.2
 value_loss_coef = 0.5
 entropy_coef = 0.01
+
+# start wandb project logging
+wandb.init(
+    # Set the project where this run will be logged
+    project="gnn-pc-saft",
+    # Track hyperparameters and run metadata
+    config={
+        "num_episodes": num_episodes,
+        "batch_size": batch_size,
+        "num_epochs": num_epochs,
+        "actor_learning_rate": actor_learning_rate,
+        "critic_learning_rate": critic_learning_rate,
+        "clip_epsilon": clip_epsilon,
+        "value_loss_coef": value_loss_coef,
+        "entropy_coef": entropy_coef,
+    },
+    group="rl_training",
+    tags=["rl_training", "train"],
+    job_type="train",
+)
 
 # Initialize actor and critic
 actor = GNNActor()
@@ -117,6 +131,13 @@ critic.to(device)
 
 actor_optimizer = optim.Adam(actor.parameters(), lr=actor_learning_rate)
 critic_optimizer = optim.Adam(critic.parameters(), lr=critic_learning_rate)
+
+tml = ThermoMLDataset(os.path.join(workdir, "gnnepcsaft/data/thermoml"))
+tml_data = {}
+for graph in tml:
+    tml_data[graph.InChI] = (graph.rho, graph.vp)
+tml_dataloader = DataLoader(tml, batch_size=batch_size, shuffle=True)
+
 
 # Training loop
 for episode in tqdm(range(num_episodes)):
@@ -230,18 +251,8 @@ for episode in tqdm(range(num_episodes)):
             actor_optimizer.step()
             critic_optimizer.step()
 
-            # Logging
-            if (epoch + 1) % 5 == 0:
-                avg_reward = rewards.mean().item()
-                avg_actor_loss = actor_loss.detach().item()
-                avg_critic_loss = critic_loss.detach().item()
-                print(
-                    f"\n\nEpisode {episode + 1}/{num_episodes}, Epoch {epoch+1}/{num_epochs}, "
-                    f"Average Reward: {avg_reward:.4f}, "
-                    f"Actor Loss: {avg_actor_loss:.4f}, Critic Loss: {avg_critic_loss:.4f}"
-                )
-                print(
-                    f"density_error: {density_error}, pressure_error: {pressure_error}"
-                )
+    # Logging
+    avg_reward = rewards.mean().item()
+    wandb.log({"avg_reward": avg_reward})
 
 print("Training completed.")
