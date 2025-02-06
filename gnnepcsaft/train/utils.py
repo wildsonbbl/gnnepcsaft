@@ -124,8 +124,8 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    pred_mape = [0.0]
-    if rho.shape[0] > 0:
+    pred_mape = [np.nan]
+    if rho.shape[0] > 2:
         pred_mape = []
         for state in rho:
             try:
@@ -141,8 +141,8 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if mean:
         den = den.mean()
 
-    pred_mape = [0.0]
-    if vp.shape[0] > 0:
+    pred_mape = [np.nan]
+    if vp.shape[0] > 2:
         pred_mape = []
         for state in vp:
             try:
