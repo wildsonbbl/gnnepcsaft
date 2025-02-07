@@ -5,6 +5,7 @@ import math
 
 import lightning as L
 import ml_collections
+import numpy as np
 import torch
 import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
@@ -16,14 +17,9 @@ from torch_geometric.nn import BatchNorm, GATConv, PNAConv, global_add_pool
 from torch_geometric.utils import add_self_loops
 from torchmetrics.functional import mean_absolute_percentage_error as mape
 
-from ..epcsaft import utils
+from .utils import rho_batch, vp_batch
 
 # from typing import Any
-
-
-pcsaft_den = utils.DenFromTensor.apply
-pcsaft_vp = utils.VpFromTensor.apply
-hloss = F.huber_loss
 
 
 @dataclasses.dataclass
@@ -218,61 +214,40 @@ class PNApcsaftL(L.LightningModule):
 
     # pylint: disable=R0914
     def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        mape_den = 0.0
-        huber_den = 0.0
-        mape_vp = 0.0
-        huber_vp = 0.0
         metrics_dict = {}
-
         pred_para: torch.Tensor = (
-            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach()
         )
         if self.config.num_para == 2:
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
-            para_msigmae = graphs.para
+            para_msigmae = graphs.para.view(-1, 3)
         else:
             para_assoc = 10 ** (
-                graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
+                graphs.assoc.view(-1, 2)
+                * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
             para_msigmae = pred_para
-        pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
-        datapoints: torch.Tensor = graphs.rho.to(torch.float64).view(-1, 5)
-        if datapoints.shape[0] > 0:
-            pred = pcsaft_den(pred_para, datapoints)
-            target = datapoints[:, -1].cpu()
-            result_filter = ~torch.isnan(pred)
-            # pylint: disable = not-callable
-            loss_mape = mape(pred[result_filter], target[result_filter])
-            loss_huber = hloss(pred[result_filter], target[result_filter])
-            mape_den = loss_mape.item()
-            huber_den = loss_huber.item()
-            # self.log("mape_den", mape_den)
-            metrics_dict.update(
-                {
-                    "mape_den": mape_den,
-                    "huber_den": huber_den,
-                }
-            )
+        pred_para = (
+            torch.hstack([para_msigmae, para_assoc, graphs.munanb.view(-1, 3)])
+            .cpu()
+            .numpy()
+        )
+        pred_rho = rho_batch(pred_para, graphs.rho)
+        pred_vp = vp_batch(pred_para, graphs.vp)
+        rho = np.vstack(graphs.rho)[:, -1]
+        vp = np.vstack(graphs.vp)[:, -1]
+        mape_den = np.mean(np.abs(rho - pred_rho) / rho).item()
+        mape_vp = np.mean(np.abs(vp - pred_vp) / vp).item()
+        metrics_dict.update(
+            {
+                "mape_den": mape_den,
+                "mape_vp": mape_vp,
+            }
+        )
 
-        datapoints: torch.Tensor = graphs.vp.to(torch.float64).view(-1, 5)
-        if datapoints.shape[0] > 0:
-            pred = pcsaft_vp(pred_para, datapoints)
-            target = datapoints[:, -1].cpu()
-            result_filter = ~torch.isnan(pred)
-            # pylint: disable = not-callable
-            loss_mape = mape(pred[result_filter], target[result_filter])
-            loss_huber = hloss(pred[result_filter], target[result_filter])
-            mape_vp = loss_mape.item()
-            huber_vp = loss_huber.item()
-            metrics_dict.update(
-                {
-                    "mape_vp": mape_vp,
-                    "huber_vp": huber_vp,
-                }
-            )
-        self.log_dict(metrics_dict, on_step=True, batch_size=1, sync_dist=True)
+        self.log_dict(metrics_dict, on_step=False, on_epoch=True, batch_size=1)
         return metrics_dict
 
     def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
@@ -457,62 +432,72 @@ class PCsaftL(L.LightningModule):
 
     # pylint: disable=R0914
     def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        mape_den = 0.0
-        huber_den = 0.0
-        mape_vp = 0.0
-        huber_vp = 0.0
         metrics_dict = {}
-
         pred_para: torch.Tensor = (
-            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach()
         )
         if self.config.num_para == 2:
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
-            para_msigmae = graphs.para
+            para_msigmae = graphs.para.view(-1, 3)
         else:
             para_assoc = 10 ** (
-                graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
+                graphs.assoc.view(-1, 2)
+                * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
             para_msigmae = pred_para
-        pred_para = torch.hstack([para_msigmae, para_assoc, graphs.munanb])
-        datapoints: torch.Tensor = graphs.rho.to(torch.float64).view(-1, 5)
-        if datapoints.shape[0] > 0:
-            pred = pcsaft_den(pred_para, datapoints)
-            target = datapoints[:, -1].cpu()
-            result_filter = ~torch.isnan(pred)
-            # pylint: disable = not-callable
-            loss_mape = mape(pred[result_filter], target[result_filter])
-            loss_huber = hloss(pred[result_filter], target[result_filter])
-            mape_den = loss_mape.item()
-            huber_den = loss_huber.item()
-            # self.log("mape_den", mape_den)
-            metrics_dict.update(
-                {
-                    "mape_den": mape_den,
-                    "huber_den": huber_den,
-                }
-            )
+        pred_para = (
+            torch.hstack([para_msigmae, para_assoc, graphs.munanb.view(-1, 3)])
+            .cpu()
+            .numpy()
+        )
+        pred_rho = rho_batch(pred_para, graphs.rho)
+        pred_vp = vp_batch(pred_para, graphs.vp)
+        rho = np.vstack(graphs.rho)[:, -1]
+        vp = np.vstack(graphs.vp)[:, -1]
+        mape_den = np.mean(np.abs(rho - pred_rho) / rho).item()
+        mape_vp = np.mean(np.abs(vp - pred_vp) / vp).item()
+        metrics_dict.update(
+            {
+                "mape_den": mape_den,
+                "mape_vp": mape_vp,
+            }
+        )
 
-        datapoints: torch.Tensor = graphs.vp.to(torch.float64).view(-1, 5)
-        if datapoints.shape[0] > 0:
-            pred = pcsaft_vp(pred_para, datapoints)
-            target = datapoints[:, -1].cpu()
-            result_filter = ~torch.isnan(pred)
-            # pylint: disable = not-callable
-            loss_mape = mape(pred[result_filter], target[result_filter])
-            loss_huber = hloss(pred[result_filter], target[result_filter])
-            mape_vp = loss_mape.item()
-            huber_vp = loss_huber.item()
-            metrics_dict.update(
-                {
-                    "mape_vp": mape_vp,
-                    "huber_vp": huber_vp,
-                }
-            )
-        self.log_dict(metrics_dict, on_step=True, batch_size=1, sync_dist=True)
+        self.log_dict(metrics_dict, on_step=False, on_epoch=True, batch_size=1)
         return metrics_dict
 
     def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         return self.validation_step(graphs, batch_idx)
+
+
+def create_model(
+    config: ml_collections.ConfigDict, deg: torch.Tensor
+) -> torch.nn.Module:
+    """Creates a model, as specified by the config."""
+
+    pna_params = PnaconvsParams(
+        propagation_depth=config.propagation_depth,
+        pre_layers=config.pre_layers,
+        post_layers=config.post_layers,
+        deg=deg,
+        dropout=config.dropout_rate,
+        self_loops=config.add_self_loops,
+    )
+
+    if config.model == "PNA":
+        return PNAPCSAFT(
+            hidden_dim=config.hidden_dim,
+            pna_params=pna_params,
+            num_para=config.num_para,
+        )
+    if config.model == "PNAL":
+        return PNApcsaftL(
+            pna_params=pna_params,
+            config=config,
+        )
+    if config.model == "GATL":
+        return PCsaftL(config=config)
+
+    raise ValueError(f"Unsupported model: {config.model}.")
