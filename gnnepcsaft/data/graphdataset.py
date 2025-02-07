@@ -77,15 +77,16 @@ class ThermoMLDataset(InMemoryDataset):
             graph.vp = (
                 data.filter(pl.col("inchi1") == inchi, pl.col("tp") == 3)
                 .select("TK", "PPa", "phase", "tp", "m")
-                .to_torch()
+                .to_numpy()
             )
-            graph.rho = (
+            rho = (
                 data.filter(pl.col("inchi1") == inchi, pl.col("tp") == 1)
                 .select("TK", "PPa", "phase", "tp", "m")
-                .to_torch()
+                .to_numpy()
             )
 
-            graph.rho[:, -1] *= 1000 / graph.mw  # convert to mol/ m³
+            rho[:, -1] *= 1000 / graph.mw  # convert to mol/ m³
+            graph.rho = rho
 
             datalist.append(graph)
 
