@@ -1,5 +1,6 @@
 """Model with important functions to help model training"""
 
+import multiprocessing as mp
 import os.path as osp
 import time
 from tempfile import TemporaryDirectory
@@ -22,7 +23,6 @@ from torch_geometric.utils import degree
 from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
-from . import models
 
 
 def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
@@ -49,37 +49,6 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
     return deg
-
-
-def create_model(
-    config: ml_collections.ConfigDict, deg: torch.Tensor
-) -> torch.nn.Module:
-    """Creates a model, as specified by the config."""
-
-    pna_params = models.PnaconvsParams(
-        propagation_depth=config.propagation_depth,
-        pre_layers=config.pre_layers,
-        post_layers=config.post_layers,
-        deg=deg,
-        dropout=config.dropout_rate,
-        self_loops=config.add_self_loops,
-    )
-
-    if config.model == "PNA":
-        return models.PNAPCSAFT(
-            hidden_dim=config.hidden_dim,
-            pna_params=pna_params,
-            num_para=config.num_para,
-        )
-    if config.model == "PNAL":
-        return models.PNApcsaftL(
-            pna_params=pna_params,
-            config=config,
-        )
-    if config.model == "GATL":
-        return models.PCsaftL(config=config)
-
-    raise ValueError(f"Unsupported model: {config.model}.")
 
 
 def create_optimizer(config: ml_collections.ConfigDict, params):
@@ -396,3 +365,80 @@ class CustomRayTrainReportCallback(Callback):
 
             # Report to train session
             train.report(metrics=metrics, checkpoint=checkpoint)
+
+
+def density(parameters: np.ndarray, state: np.ndarray):
+    """Calculates density  with ePC-SAFT"""
+
+    try:
+        den = pure_den_feos(parameters, state)
+    except (AssertionError, RuntimeError):
+        den = 0.0
+
+    return den
+
+
+def vaporpressure(parameters: np.ndarray, state: np.ndarray):
+    """Calculates vapor pressure with ePC-SAFT"""
+    try:
+        vp = pure_vp_feos(parameters, state)
+    except (AssertionError, RuntimeError):
+        vp = 0.0
+
+    return vp
+
+
+def rho_mp(args):
+    "Calculates rho with multiprocessing"
+    parameters, state = args
+    return density(parameters, state)
+
+
+def vp_mp(args):
+    "Calculates vp with multiprocessing"
+    parameters, state = args
+    return vaporpressure(parameters, state)
+
+
+def rho_single(args):
+    """Calculates density  with ePC-SAFT"""
+    parameters, states = args
+    den = []
+    for state in states:
+        den += [rho_mp((parameters, state))]
+    return np.asarray(den)
+
+
+def rho_batch(parameters_batch, states_batch):
+    """Calculates density  with ePC-SAFT"""
+    args_list = [
+        (para, states)
+        for para, states in zip(parameters_batch, states_batch)
+        if states.shape[0] > 0
+    ]
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=ctx.cpu_count()) as pool:
+        den = pool.map(rho_single, args_list)
+    return np.hstack(den)
+
+
+def vp_sigle(args):
+    """Calculates vapor pressure with ePC-SAFT using nested multiprocessing"""
+    parameters, states = args
+    vp = []
+    for state in states:
+        vp += [vp_mp((parameters, state))]
+    return np.asarray(vp)
+
+
+def vp_batch(parameters_batch, states_batch):
+    """Calculates vapor pressure with ePC-SAFT in batch mode using nested multiprocessing"""
+    args_list = [
+        (para, states)
+        for para, states in zip(parameters_batch, states_batch)
+        if states.shape[0] > 0
+    ]
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=ctx.cpu_count()) as pool:
+        vp = pool.map(vp_sigle, args_list)
+    return np.hstack(vp)
