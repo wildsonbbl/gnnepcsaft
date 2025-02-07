@@ -21,6 +21,7 @@ from torch_geometric.loader import DataLoader
 
 from ..configs.configs_parallel import get_configs
 from . import models
+from .models import create_model
 from .utils import (
     CustomRayTrainReportCallback,
     EpochTimer,
@@ -28,7 +29,6 @@ from .utils import (
     build_test_dataset,
     build_train_dataset,
     calc_deg,
-    create_model,
 )
 
 
