@@ -101,7 +101,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
                 den = pure_den_feos(parameters, state)
                 mape_den = np.abs((state[-1] - den) / state[-1])
             except RuntimeError:
-                continue
+                mape_den = 1.0
             # if mape_den > 1:  # against algorithm fail
             #     continue
             pred_mape += [mape_den]
@@ -118,7 +118,7 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
                 vp_pred = pure_vp_feos(parameters, state)
                 mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
             except (AssertionError, RuntimeError):
-                continue
+                mape_vp = 1.0
             # if mape_vp > 1:  # against algorithm fail
             #     continue
             pred_mape += [mape_vp]
@@ -419,7 +419,7 @@ def rho_batch(parameters_batch, states_batch):
     ctx = mp.get_context("spawn")
     with ctx.Pool(processes=ctx.cpu_count()) as pool:
         den = pool.map(rho_single, args_list)
-    return np.hstack(den)
+    return den
 
 
 def vp_sigle(args):
@@ -441,4 +441,4 @@ def vp_batch(parameters_batch, states_batch):
     ctx = mp.get_context("spawn")
     with ctx.Pool(processes=ctx.cpu_count()) as pool:
         vp = pool.map(vp_sigle, args_list)
-    return np.hstack(vp)
+    return vp
