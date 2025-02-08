@@ -24,10 +24,10 @@ def get_config():
     config.batch_size = 512
     config.num_train_steps = 600_000
     config.log_every_steps = 5000
-    config.eval_every_steps = 5000
-    config.checkpoint_every_steps = 5000
+    config.eval_every_steps = 10000
+    config.checkpoint_every_steps = 10000
     config.dataset = "esper"
-    config.checkpoint = "esper_msigmae_7-epoch=72499-train_mape=0.0069.ckpt"
+    config.checkpoint = ""
 
     # GNN hyperparameters.
     config.model_name = "esper_msigmae_7"
