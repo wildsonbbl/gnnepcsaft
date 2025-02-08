@@ -79,8 +79,8 @@ def plotdata(
         return
     list_params = predparams(inchi, models, model_msigmae)
 
-    rho = gh.rho.view(-1, 5).to(torch.float64).numpy()
-    vp = gh.vp.view(-1, 5).to(torch.float64).numpy()
+    rho = gh.rho
+    vp = gh.vp
 
     pred_den_list, pred_vp_list = pred_rhovp(inchi, list_params, rho, vp)
 
@@ -284,8 +284,8 @@ def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
             elif params.size(0) == 3:
                 params = torch.hstack((params, torch.zeros(5)))
             params = params.numpy()
-            rho = graphs.rho.view(-1, 5).to(torch.float64).numpy()
-            vp = graphs.vp.view(-1, 5).to(torch.float64).numpy()
+            rho = graphs.rho
+            vp = graphs.vp
             mden_array, mvp_array = mape(params, rho, vp, False)
             mden, mvp = mden_array.mean(), mvp_array.mean()
             parameters = parameters.tolist()[0]
