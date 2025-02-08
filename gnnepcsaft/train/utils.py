@@ -230,11 +230,11 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     for idx, graph in enumerate(tml_dataset):
         if graph.InChI in para_data or graph.munanb[-1] == 0:
             val_idx.append(idx)
-        elif graph.InChI in para_data and graph.munanb[-1] > 0:
+        if graph.InChI in para_data and graph.munanb[-1] > 0:
             val_assoc_idx.append(idx)
-    vall_assoc_dataset = tml_dataset[val_assoc_idx]
+    val_assoc_dataset = tml_dataset[val_assoc_idx]
     val_dataset = tml_dataset[val_idx]
-    return val_dataset, vall_assoc_dataset
+    return val_dataset, val_assoc_dataset
 
 
 def build_train_dataset(workdir, dataset, transform=None):

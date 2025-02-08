@@ -85,9 +85,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             save_last=False,
             monitor="mape_den",
             save_top_k=1,
-            every_n_train_steps=config.checkpoint_every_steps,
             verbose=True,
-            save_on_train_epoch_end=True,
         )
         callbacks.append(checkpoint_mape_den)
 
@@ -97,9 +95,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             save_last=False,
             monitor="train_mape",
             save_top_k=1,
-            every_n_train_steps=config.log_every_steps,
             verbose=True,
-            save_on_train_epoch_end=True,
         )
         callbacks.append(checkpoint_train_loss)
 
