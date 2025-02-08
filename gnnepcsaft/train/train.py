@@ -197,7 +197,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
 
 def training_parallel(
-    train_loop_config: dict,
+    train_loop_config: list[dict],
     config: ml_collections.ConfigDict,
     workdir: str,
 ):
@@ -210,7 +210,6 @@ def training_parallel(
 
     local_rank = str(train.get_context().get_local_rank())
     train_config = train_loop_config[local_rank]
-    config.model_name = config.model_name + "_" + local_rank
     # selected hyperparameters to test
     training_updated(train_config, config, workdir)
 
@@ -227,11 +226,8 @@ def training_updated(
 
     """
 
-    config.propagation_depth = int(train_config["propagation_depth"])
-    config.hidden_dim = int(train_config["hidden_dim"])
-    config.pre_layers = int(train_config["pre_layers"])
-    config.post_layers = int(train_config["post_layers"])
-    config.heads = int(train_config["heads"])
+    for hparam in train_config:
+        config[hparam] = train_config[hparam]
 
     ltrain_and_evaluate(config, workdir)
 
