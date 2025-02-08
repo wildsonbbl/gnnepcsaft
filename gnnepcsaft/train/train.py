@@ -58,7 +58,9 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Dataset building
     transform = None if job_type == "train" else VpOff()
     train_dataset = build_train_dataset(workdir, dataset)
-    val_dataset, _ = build_test_dataset(workdir, train_dataset, transform)
+    val_dataset, val_assoc_dataset = build_test_dataset(
+        workdir, train_dataset, transform
+    )
 
     train_loader = DataLoader(
         train_dataset,
@@ -67,7 +69,10 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         num_workers=os.cpu_count(),
     )
 
-    val_dataset = DataLoader(val_dataset)
+    val_dataloader = DataLoader(
+        val_dataset if dataset == "esper" else val_assoc_dataset,
+        batch_size=len(val_dataset),
+    )
 
     # trainer callback and logger
     callbacks = []
@@ -82,7 +87,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
             save_top_k=1,
             every_n_train_steps=config.checkpoint_every_steps,
             verbose=True,
-            save_on_train_epoch_end=False,
+            save_on_train_epoch_end=True,
         )
         callbacks.append(checkpoint_mape_den)
 
@@ -172,7 +177,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     trainer.fit(
         model,
         train_loader,
-        val_dataset,
+        val_dataloader,
         ckpt_path=ckpt_path,
     )
     # if job_type == "train":
