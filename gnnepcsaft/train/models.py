@@ -236,10 +236,16 @@ class PNApcsaftL(L.LightningModule):
         )
         pred_rho = rho_batch(pred_para, graphs.rho)
         pred_vp = vp_batch(pred_para, graphs.vp)
-        rho = np.vstack(graphs.rho)[:, -1]
-        vp = np.vstack(graphs.vp)[:, -1]
-        mape_den = np.mean(np.abs(rho - pred_rho) / rho).item()
-        mape_vp = np.mean(np.abs(vp - pred_vp) / vp).item()
+        rho = [rho[:, -1] for rho in graphs.rho if rho.shape[0] > 0]
+        vp = [vp[:, -1] for vp in graphs.vp if vp.shape[0] > 0]
+        mape_den = []
+        for pred, exp in zip(pred_rho, rho):
+            mape_den += [np.mean(np.abs(pred - exp) / exp).item()]
+        mape_den = np.asarray(mape_den).mean().item()
+        mape_vp = []
+        for pred, exp in zip(pred_vp, vp):
+            mape_vp += [np.mean(np.abs(pred - exp) / exp).item()]
+        mape_vp = np.asarray(mape_vp).mean().item()
         metrics_dict.update(
             {
                 "mape_den": mape_den,
@@ -454,10 +460,16 @@ class PCsaftL(L.LightningModule):
         )
         pred_rho = rho_batch(pred_para, graphs.rho)
         pred_vp = vp_batch(pred_para, graphs.vp)
-        rho = np.vstack(graphs.rho)[:, -1]
-        vp = np.vstack(graphs.vp)[:, -1]
-        mape_den = np.mean(np.abs(rho - pred_rho) / rho).item()
-        mape_vp = np.mean(np.abs(vp - pred_vp) / vp).item()
+        rho = [rho[:, -1] for rho in graphs.rho if rho.shape[0] > 0]
+        vp = [vp[:, -1] for vp in graphs.vp if vp.shape[0] > 0]
+        mape_den = []
+        for pred, exp in zip(pred_rho, rho):
+            mape_den += [np.mean(np.abs(pred - exp) / exp).item()]
+        mape_den = np.asarray(mape_den).mean().item()
+        mape_vp = []
+        for pred, exp in zip(pred_vp, vp):
+            mape_vp += [np.mean(np.abs(pred - exp) / exp).item()]
+        mape_vp = np.asarray(mape_vp).mean().item()
         metrics_dict.update(
             {
                 "mape_den": mape_den,
