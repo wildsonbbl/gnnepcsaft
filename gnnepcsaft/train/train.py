@@ -6,6 +6,7 @@ from functools import partial
 
 import lightning as L
 import ml_collections
+import numpy as np
 import torch
 import wandb
 from absl import app, flags, logging
@@ -223,7 +224,10 @@ def training_updated(
     """
 
     for hparam in train_config:
-        config[hparam] = train_config[hparam]
+        value = train_config[hparam]
+        if isinstance(value, (np.int64)):
+            value = int(value)
+        config[hparam] = value
 
     ltrain_and_evaluate(config, workdir)
 
