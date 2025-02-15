@@ -237,7 +237,7 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
     """Returns the convolution layer."""
     aggregators = ["mean", "min", "max", "std"]
     scalers = ["identity", "amplification", "attenuation"]
-    if config.conv == "PNA":
+    if config.conv == "PNA":  # 2020, https://doi.org/10.48550/arXiv.2004.05718
         return gnn.PNAConv(
             in_channels=config.hidden_dim,
             out_channels=config.hidden_dim,
@@ -251,14 +251,14 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             divide_input=True,
         )
 
-    if config.conv == "GCN":
+    if config.conv == "GCN":  # 2016-2017, https://doi.org/10.48550/arXiv.1609.02907
         return gnn.GCNConv(
             in_channels=config.hidden_dim,
             out_channels=config.hidden_dim,
             add_self_loops=config.add_self_loops,
         )
 
-    if config.conv == "GAT":
+    if config.conv == "GAT":  # 2017-2018, https://doi.org/10.48550/arXiv.1710.10903
         assert (
             config.hidden_dim % config.heads == 0
         ), "hidden_dim must be divisible by heads"
@@ -273,7 +273,7 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             add_self_loops=config.add_self_loops,
         )
 
-    if config.conv == "GATv2":
+    if config.conv == "GATv2":  # 2021-2022, https://doi.org/10.48550/arXiv.2105.14491
         assert (
             config.hidden_dim % config.heads == 0
         ), "hidden_dim must be divisible by heads"
@@ -287,7 +287,9 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             add_self_loops=config.add_self_loops,
         )
 
-    if config.conv == "Transformer":
+    if (
+        config.conv == "Transformer"
+    ):  # 2020-2021, https://doi.org/10.48550/arXiv.2009.03509
         assert (
             config.hidden_dim % config.heads == 0
         ), "hidden_dim must be divisible by heads"
@@ -300,14 +302,14 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             edge_dim=config.hidden_dim,
         )
 
-    if config.conv == "SAGE":
+    if config.conv == "SAGE":  # 2017-2018, https://doi.org/10.48550/arXiv.1706.02216
         return gnn.SAGEConv(
             in_channels=config.hidden_dim,
             out_channels=config.hidden_dim,
             aggr=aggregators,
         )
 
-    if config.conv == "GIN":
+    if config.conv == "GIN":  # 2018-2019, https://doi.org/10.48550/arXiv.1810.00826
         return gnn.GINConv(
             nn=Sequential(
                 Linear(config.hidden_dim, config.hidden_dim),
@@ -317,7 +319,7 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             train_eps=False,
         )
 
-    if config.conv == "GINE":
+    if config.conv == "GINE":  # 2019-2020, https://doi.org/10.48550/arXiv.1905.12265
         return gnn.GINEConv(
             nn=Sequential(
                 Linear(config.hidden_dim, config.hidden_dim),
@@ -328,7 +330,7 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             edge_dim=config.hidden_dim,
         )
 
-    if config.conv == "Edge":
+    if config.conv == "Edge":  # 2018-2019, https://doi.org/10.48550/arXiv.1801.07829
         return gnn.EdgeConv(
             nn=Sequential(
                 Linear(2 * config.hidden_dim, config.hidden_dim),
@@ -338,19 +340,21 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             aggr="max",
         )
 
-    if config.conv == "GatedGraph":
+    if (
+        config.conv == "GatedGraph"
+    ):  # 2015-2017, https://doi.org/10.48550/arXiv.1511.05493
         return gnn.GatedGraphConv(
             out_channels=config.hidden_dim,
             num_layers=config.num_layers,
         )
 
-    if config.conv == "Graph":
+    if config.conv == "Graph":  # 2018-2021, https://doi.org/10.48550/arXiv.1810.02244
         return gnn.GraphConv(
             in_channels=config.hidden_dim,
             out_channels=config.hidden_dim,
         )
 
-    if config.conv == "ARMA":
+    if config.conv == "ARMA":  # 2019-2021, https://doi.org/10.1109/TPAMI.2021.3054830
         return gnn.ARMAConv(
             in_channels=config.hidden_dim,
             out_channels=config.hidden_dim,
@@ -359,7 +363,7 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             dropout=config.dropout,
         )
 
-    if config.conv == "SG":
+    if config.conv == "SG":  # 2019, https://doi.org/10.48550/arXiv.1902.07153
         return gnn.SGConv(
             in_channels=config.hidden_dim,
             out_channels=config.hidden_dim,
