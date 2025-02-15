@@ -9,5 +9,15 @@ def get_search_space():
     return {
         "propagation_depth": tune.choice([3, 4, 5, 6, 7, 8]),
         "hidden_dim": tune.choice([64, 128, 256]),
-        "heads": tune.choice([1, 2, 3]),
+        "post_layers": tune.choice([1, 2, 3]),
+        "pre_layers": tune.choice([1, 2, 3]),
+        "model": "PNAL",
     }
+
+
+# {
+#     "propagation_depth": tune.choice([3, 4, 5, 6, 7, 8]),
+#     "hidden_dim": tune.choice([64, 128, 256]),
+#     "heads": tune.choice([1, 2, 3]),
+#     "model": "GATL",
+# }
