@@ -198,7 +198,6 @@ class GNNePCSAFT(torch.nn.Module):
         for conv, batch_norm in zip(self.convs, self.batch_norms):
             x = self.dropout(x)
             # check if edge_attr is a keyword argument in conv
-            print(inspect.signature(conv.forward).parameters)
             if "edge_attr" in inspect.signature(conv.forward).parameters:
                 x = F.relu(
                     batch_norm(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))
