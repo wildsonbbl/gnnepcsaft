@@ -16,7 +16,7 @@ from ..configs.default import get_config
 from ..data.graph import assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import parameters_gc_pcsaft
-from ..train.models import PNAPCSAFT, PNApcsaftL
+from ..train.models import GNNePCSAFT, GNNePCSAFTL
 from ..train.utils import mape, rhovp_data
 
 sns.set_theme(style="ticks")
@@ -50,10 +50,10 @@ for graph in es_loader:
 device = torch.device("cpu")
 
 
-def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
+def loadckp(ckp_path: str, model: Union[GNNePCSAFT, GNNePCSAFTL]):
     """Loads save checkpoint."""
     if osp.exists(ckp_path):
-        state = "model_state_dict" if isinstance(model, PNAPCSAFT) else "state_dict"
+        state = "model_state_dict" if isinstance(model, GNNePCSAFT) else "state_dict"
         checkpoint = torch.load(
             ckp_path, map_location=torch.device("cpu"), weights_only=False
         )
@@ -62,7 +62,7 @@ def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
 
 
 def plotdata(
-    inchi: str, molecule_name: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT
+    inchi: str, molecule_name: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT
 ):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
@@ -149,7 +149,7 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def predparams(inchi: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT):
+def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
         gh = from_InChI(inchi)
@@ -256,7 +256,7 @@ def plotvp(inchi, molecule_name, models, data):
         plt.show()
 
 
-def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
+def model_para_fn(model: GNNePCSAFT, model_msigmae: GNNePCSAFT):
     """Calculates density and/or vapor pressure mean absolute percentage error
     between ThermoML Archive experimental data and predicted data with ePC-SAFT
     using the model estimated parameters."""
@@ -318,7 +318,7 @@ def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def plotparams(smiles: list[str], models: list[PNAPCSAFT], xlabel: str = "CnHn+2"):
+def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+2"):
     """
     For plotting te behaviour between parameters and chain length.
     """

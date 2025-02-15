@@ -116,7 +116,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
     # creating model from config
     deg = calc_deg(dataset, workdir)
-    model: models.PNApcsaftL = create_model(config, deg)
+    model: models.GNNePCSAFTL = create_model(config, deg)
     # model = torch.compile(model, dynamic=True) off for old gpus
 
     # Trainer configs

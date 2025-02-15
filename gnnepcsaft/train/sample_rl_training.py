@@ -1,4 +1,4 @@
-"Module to be used for RL training"
+"Module to be used for testing a RL training"
 
 import copy
 import math
@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from ..data.graphdataset import ThermoMLDataset
 from ..data.rdkit_util import assoc_number
-from .models import GATPCSAFT, PCsaftL
+from .models import GNNePCSAFT, GNNePCSAFTL
 from .utils import rhovp_data
 
 # pylint: disable=missing-function-docstring, missing-class-docstring, invalid-name
@@ -61,8 +61,8 @@ def add_exploration_noise(action, _noise_scale):
 class GNNActor(nn.Module):
     def __init__(self):
         super().__init__()
-        self.msigmae: GATPCSAFT  # trained model
-        self.assoc: GATPCSAFT  # trained model
+        self.msigmae: GNNePCSAFT  # trained model
+        self.assoc: GNNePCSAFT  # trained model
 
     def forward(self, _data) -> torch.Tensor:
         x, edge_index, edge_attr, batch = (
@@ -79,12 +79,13 @@ class GNNActor(nn.Module):
 
 # Define the Critic Network
 class Critic(nn.Module):
-    def __init__(self, hidden_dim, propagation_depth, dropout, heads):
+    def __init__(
+        self,
+        hidden_dim,
+    ):
         super().__init__()
         # State processing
-        self.state_head = GATPCSAFT(
-            hidden_dim, propagation_depth, hidden_dim // 4, dropout, heads
-        )
+        self.state_head: GNNePCSAFT
         # Action processing
         self.action_head = nn.Sequential(
             nn.Linear(5, hidden_dim // 4),
@@ -156,13 +157,13 @@ wandb.init(
 # Initialize actor and critic
 actor = GNNActor()
 # pylint: disable=E1120
-actor.msigmae = PCsaftL.load_from_checkpoint(
+actor.msigmae = GNNePCSAFTL.load_from_checkpoint(
     checkpoint_path=os.path.join(
         workdir,
         "gnnepcsaft/train/checkpoints/esper_msigmae_7-epoch=72499-train_mape=0.0069.ckpt",
     )
 ).model
-actor.assoc = PCsaftL.load_from_checkpoint(
+actor.assoc = GNNePCSAFTL.load_from_checkpoint(
     checkpoint_path=os.path.join(
         workdir,
         "gnnepcsaft/train/checkpoints/esper_assoc_8-epoch=149999-train_mape=0.0030.ckpt",
@@ -170,7 +171,7 @@ actor.assoc = PCsaftL.load_from_checkpoint(
 ).model
 actor.to(device)
 # pylint: enable=E1120
-critic = Critic(hidden_dim=256, propagation_depth=8, dropout=0.0, heads=3)
+critic = Critic(hidden_dim=256)
 critic.to(device)
 
 # Initialize target networks
@@ -179,7 +180,7 @@ target_actor.msigmae = copy.deepcopy(actor.msigmae)
 target_actor.assoc = copy.deepcopy(actor.assoc)
 target_actor.to(device)
 
-target_critic = Critic(hidden_dim=256, propagation_depth=8, dropout=0.0, heads=3)
+target_critic = Critic(hidden_dim=256)
 target_critic.load_state_dict(critic.state_dict())
 target_critic.to(device)
 

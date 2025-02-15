@@ -31,13 +31,21 @@ def get_config():
 
     # GNN hyperparameters.
     config.model_name = "esper_msigmae_7"
-    config.model = "GATL"
+    config.conv = "PNA"
+    config.global_pool = "mean"
     config.propagation_depth = 7
     config.hidden_dim = 256
-    config.post_layers = None
-    config.pre_layers = None
-    config.num_para = 3
+    ## PNA
+    config.post_layers = 2
+    config.pre_layers = 2
+    config.towers = 2  # hidden_dim % towers == 0
+    ## GatedGraphConv, ARMAConv
+    config.num_layers = 2
+    config.num_stacks = 2
+    ## GAT, GATv2, TransformerConv
+    config.heads = 4  # hidden_dim % heads == 0
+
+    config.dropout = 0.6
     config.add_self_loops = True
-    config.dropout_rate = 0.25
-    config.heads = 3
+    config.num_para = 3
     return config
