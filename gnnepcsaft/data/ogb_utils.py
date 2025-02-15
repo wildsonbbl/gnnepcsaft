@@ -1,4 +1,5 @@
 "Module to avoid importing ogb for smiles2graph"
+# ogb==1.3.6
 import numpy as np
 from rdkit import Chem
 
