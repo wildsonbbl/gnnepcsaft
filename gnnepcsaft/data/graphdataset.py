@@ -268,9 +268,9 @@ class Esper(InMemoryDataset):
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
 
-            graph.para = torch.tensor(para, dtype=torch.float64)
-            graph.assoc = torch.tensor(assoc, dtype=torch.float64).log10().abs()
-            graph.munanb = torch.tensor(munanb, dtype=torch.float64)
+            graph.para = torch.tensor([para], dtype=torch.float64)
+            graph.assoc = torch.tensor([assoc], dtype=torch.float64).log10().abs()
+            graph.munanb = torch.tensor([munanb], dtype=torch.float64)
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])

@@ -174,11 +174,11 @@ class TransformParameters(BaseTransform):
             data.para, data.assoc, data.munanb = self.para_data[data.InChI]
         else:
             data.para, data.assoc = (
-                torch.zeros(3),
-                torch.zeros(2),
+                torch.zeros(1, 3),
+                torch.zeros(1, 2),
             )
             data.munanb = torch.tensor(
-                (0,) + assoc_number(data.InChI), dtype=torch.float32
+                [(0,) + assoc_number(data.InChI)], dtype=torch.float32
             )
         return data
 
@@ -228,9 +228,9 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     val_idx = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
-        if graph.InChI in para_data or graph.munanb[-1] == 0:
+        if graph.InChI in para_data or graph.munanb[0, -1] == 0:
             val_idx.append(idx)
-        if graph.InChI in para_data and graph.munanb[-1] > 0:
+        if graph.InChI in para_data and graph.munanb[0, -1] > 0:
             val_assoc_idx.append(idx)
     val_assoc_dataset = tml_dataset[val_assoc_idx]
     val_dataset = tml_dataset[val_idx]
