@@ -40,6 +40,7 @@ def from_InChI(
         edge_index=torch.from_numpy(edge_index),
         InChI=InChI,
         smiles=smiles,
+        ecfp=ECFP(smiles),
     )
 
 

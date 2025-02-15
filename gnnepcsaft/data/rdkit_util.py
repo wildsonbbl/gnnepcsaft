@@ -1,5 +1,7 @@
 "Module for helper functions with rdkit"
+import numpy as np
 from rdkit import Chem, RDLogger
+from rdkit.Chem import AllChem
 
 # pylint: disable = no-name-in-module
 from rdkit.Chem.Fragments import fr_COO2, fr_Imine, fr_isocyan, fr_isothiocyan
@@ -92,3 +94,14 @@ def mw(inchi: str) -> float:
         mol_weight = 0
 
     return mol_weight
+
+
+def ECFP(smiles: str, radius: int = 3, nBits: int = 3072):
+    "Calculates ECFP fingerprints."
+    try:
+        mol = Chem.MolFromSmiles(smiles, sanitize=True)
+        fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits)
+        fp = np.array(fp, dtype=np.int8)
+    except (TypeError, ValueError):
+        fp = np.zeros(nBits, dtype=np.int8)
+    return fp
