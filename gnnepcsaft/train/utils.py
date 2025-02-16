@@ -417,7 +417,7 @@ def rho_batch(parameters_batch, states_batch):
         if states.shape[0] > 0
     ]
     ctx = mp.get_context("spawn")
-    with ctx.Pool(processes=ctx.cpu_count()) as pool:
+    with ctx.Pool(processes=ctx.cpu_count() // 2) as pool:
         den = pool.map(rho_single, args_list)
     return den
 
@@ -439,6 +439,6 @@ def vp_batch(parameters_batch, states_batch):
         if states.shape[0] > 0
     ]
     ctx = mp.get_context("spawn")
-    with ctx.Pool(processes=ctx.cpu_count()) as pool:
+    with ctx.Pool(processes=ctx.cpu_count() // 2) as pool:
         vp = pool.map(vp_sigle, args_list)
     return vp
