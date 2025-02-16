@@ -76,9 +76,9 @@ class GNNePCSAFTL(L.LightningModule):
     # pylint: disable = W0613
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
         if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
-            target: torch.Tensor = graphs.assoc.view(-1, self.config.num_para)
+            target: torch.Tensor = graphs.assoc
         else:
-            target: torch.Tensor = graphs.para.view(-1, self.config.num_para)
+            target: torch.Tensor = graphs.para
         x, edge_index, edge_attr, batch = (
             graphs.x,
             graphs.edge_index,
@@ -106,17 +106,14 @@ class GNNePCSAFTL(L.LightningModule):
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
-            para_msigmae = graphs.para.view(-1, 3)
+            para_msigmae = graphs.para
         else:
             para_assoc = 10 ** (
-                graphs.assoc.view(-1, 2)
-                * torch.tensor([-1.0, 1.0], device=pred_para.device)
+                graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
             )
             para_msigmae = pred_para
         pred_para = (
-            torch.hstack([para_msigmae, para_assoc, graphs.munanb.view(-1, 3)])
-            .cpu()
-            .numpy()
+            torch.hstack([para_msigmae, para_assoc, graphs.munanb]).cpu().numpy()
         )
         pred_rho = rho_batch(pred_para, graphs.rho)
         pred_vp = vp_batch(pred_para, graphs.vp)
