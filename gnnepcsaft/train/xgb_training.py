@@ -37,6 +37,7 @@ def training(workdir: str, config: dict):
             "device": "cuda",
             "lambda": config["lambda"],
             "alpha": config["alpha"],
+            "eta": config["eta"],
         }
         # Train the model
         results = {}
@@ -60,6 +61,7 @@ def training(workdir: str, config: dict):
 
         # save model
         xgb_model.save_model(os.path.join(workdir, "train/checkpoints/xgb_model.json"))
+        return mape_den, mape_vp
 
 
 def evaluation(val_loader, xgb_model):
@@ -117,6 +119,7 @@ def main(argv):
             "lambda": 0.0001,
             "alpha": 0.0001,
             "num_boost_round": FLAGS.num_boost_round,
+            "eta": 0.01,
         },
     )
 
