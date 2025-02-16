@@ -19,7 +19,7 @@ def main(argv):
         "eta": tune.loguniform(1e-4, 1e-1),
         "lambda": tune.loguniform(1e-6, 1e-1),
         "alpha": tune.loguniform(1e-6, 1e-1),
-        "num_boost_round": 100,
+        "num_boost_round": 5000,
     }
 
     workdir = FLAGS.workdir
@@ -33,7 +33,7 @@ def main(argv):
     # Run the tuner
     tuner = tune.Tuner(
         tune.with_resources(tune_xgb, resources={"cpu": 2, "gpu": 0.5}),
-        tune_config=tune.TuneConfig(num_samples=2),
+        tune_config=tune.TuneConfig(num_samples=30),
         param_space=search_config,
     )
     result = tuner.fit()
