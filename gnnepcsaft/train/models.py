@@ -223,10 +223,8 @@ class GNNePCSAFT(torch.nn.Module):
         lower_bounds = (
             self.lower_bounds[:3] if self.num_para == 3 else self.lower_bounds[3:]
         ).to(device=x.device)
-        params = torch.minimum(params, upper_bounds)
-        params = torch.maximum(params, lower_bounds)
 
-        return params
+        return params.clip(lower_bounds, upper_bounds)
 
 
 def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
