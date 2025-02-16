@@ -14,7 +14,7 @@ params_lower_bound = np.array([1.0, 1.9, 50.0, 1e-4, 200.0, 0, 0, 0])
 params_upper_bound = np.array([25.0, 4.5, 550.0, 0.9, 5000.0, np.inf, np.inf, np.inf])
 
 
-def training(workdir):
+def training(workdir: str, config: dict):
     """Training function"""
     # Load the data
     train_dataset = build_train_dataset(workdir, "esper")
@@ -32,20 +32,31 @@ def training(workdir):
 
         xgb_param = {
             "booster": "gblinear",
-            "objective": "reg:squarederror",
-            "eval_metric": "mape",
+            "objective": "reg:squaredlogerror",
+            "eval_metric": ["mape", "rmsle"],
             "device": "cuda",
+            "lambda": config["lambda"],
+            "alpha": config["alpha"],
         }
         # Train the model
+        results = {}
         xgb_model = xgb.train(
             xgb_param,
             train_dmatrix,
-            num_boost_round=10000,
+            num_boost_round=config["num_boost_round"],
             evals=[(train_dmatrix, "train")],
+            evals_result=results,
+            verbose_eval=False,
         )
 
+        print(
+            f"Train-mape: {results['train']['mape'][-1]} "
+            f"|| Train-rmsle: {results['train']['rmsle'][-1]}"
+        )
         # evaluate on validation set
-        evaluation(val_loader, xgb_model)
+        mape_den, mape_vp = evaluation(val_loader, xgb_model)
+
+        print(f"MAPE den: {mape_den}, MAPE vp: {mape_vp}")
 
         # save model
         xgb_model.save_model(os.path.join(workdir, "train/checkpoints/xgb_model.json"))
@@ -84,12 +95,13 @@ def evaluation(val_loader, xgb_model):
             assert pred.shape == exp.shape
             mape_vp += [np.mean(np.abs(pred - exp) / exp).item()]
         mape_vp = np.asarray(mape_vp).mean().item()
-        print(f"MAPE den: {mape_den}, MAPE vp: {mape_vp}")
+        return mape_den, mape_vp
 
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
+flags.DEFINE_integer("num_boost_round", 1000, "Number of boosting rounds.")
 
 
 def main(argv):
@@ -99,7 +111,14 @@ def main(argv):
 
     logging.info("Calling training!")
 
-    training(FLAGS.workdir)
+    training(
+        FLAGS.workdir,
+        {
+            "lambda": 0.0001,
+            "alpha": 0.0001,
+            "num_boost_round": FLAGS.num_boost_round,
+        },
+    )
 
 
 if __name__ == "__main__":
