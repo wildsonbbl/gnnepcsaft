@@ -45,7 +45,6 @@ def create_logger(config, dataset):
     )
 
 
-# pylint: disable=R0914,R0915
 def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     """Execute model training and evaluation loop with lightning.
 
@@ -53,10 +52,8 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
-    job_type = config.job_type
-    dataset = config.dataset
     # Dataset building
-    train_dataset = build_train_dataset(workdir, dataset)
+    train_dataset = build_train_dataset(workdir, config.dataset)
     val_dataset, val_assoc_dataset = build_test_dataset(workdir, train_dataset)
 
     train_loader = DataLoader(
@@ -67,12 +64,90 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     )
 
     val_dataloader = DataLoader(
-        val_dataset if dataset == "esper" else val_assoc_dataset,
+        val_dataset if config.dataset == "esper" else val_assoc_dataset,
         batch_size=len(val_dataset),
     )
 
     # trainer callback and logger
+    callbacks, logger = get_callbacks_logger(config, workdir)
+
+    # creating model from config
+    model: models.GNNePCSAFTL = create_model(config, calc_deg(config.dataset, workdir))
+    # model = torch.compile(model, dynamic=True) off for old gpus
+
+    # Trainer configs
+    strategy, plugins, enable_checkpointing = get_strategy(config.job_type)
+
+    # creating Lighting trainer function
+    trainer = L.Trainer(
+        devices="auto",
+        accelerator=config.accelerator,
+        strategy=strategy,
+        max_steps=config.num_train_steps,
+        log_every_n_steps=config.log_every_steps,
+        val_check_interval=config.eval_every_steps,
+        check_val_every_n_epoch=None,
+        num_sanity_val_steps=0,
+        callbacks=callbacks,
+        logger=logger,
+        plugins=plugins,
+        enable_progress_bar=False,
+        enable_checkpointing=enable_checkpointing,
+    )
+
+    trainer, ckpt_path = get_ckpt_path(config, workdir, config.job_type, model, trainer)
+
+    # training run
+    logging.info("Training run!")
+    trainer.fit(
+        model,
+        train_loader,
+        val_dataloader,
+        ckpt_path=ckpt_path,
+    )
+
+
+def get_strategy(job_type):
+    "gets strategy for training"
+    if job_type == "train":
+        strategy = "auto"
+        plugins = None
+        enable_checkpointing = True
+    else:
+        strategy = RayDDPStrategy()
+        plugins = [RayLightningEnvironment()]
+        enable_checkpointing = False
+    return strategy, plugins, enable_checkpointing
+
+
+def get_ckpt_path(config, workdir, job_type, model, trainer):
+    "gets checkpoint path for resuming training"
+    ckpt_path = None
+    if job_type == "tuning":
+        trainer: L.Trainer = prepare_trainer(trainer)
+
+        checkpoint: Checkpoint = train.get_checkpoint()
+        trial_id = train.get_context().get_trial_id()
+
+        if checkpoint:
+            with checkpoint.as_directory() as ckpt_dir:
+                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.pt")
+    elif config.checkpoint:
+        ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
+        if config.change_opt:
+            # pylint: disable=E1120
+            ckpt = torch.load(ckpt_path, weights_only=False)
+            model.load_state_dict(ckpt["state_dict"])
+            # pylint: enable=E1120
+            ckpt_path = None
+    return trainer, ckpt_path
+
+
+def get_callbacks_logger(config, workdir):
+    """Creates callbacks and logger for training."""
     callbacks = []
+    job_type = config.job_type
+    dataset = config.dataset
 
     if job_type == "train":
         # Checkpointing from val loss (mape_den) and train loss (train_mape)
@@ -113,84 +188,7 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     else:
         callbacks.append(CustomRayTrainReportCallback())
         logger = None
-
-    # creating model from config
-    deg = calc_deg(dataset, workdir)
-    model: models.GNNePCSAFTL = create_model(config, deg)
-    # model = torch.compile(model, dynamic=True) off for old gpus
-
-    # Trainer configs
-    if job_type == "train":
-        strategy = "auto"
-        plugins = None
-        enable_checkpointing = True
-    else:
-        strategy = RayDDPStrategy()
-        plugins = [RayLightningEnvironment()]
-        enable_checkpointing = False
-
-    # creating Lighting trainer function
-    trainer = L.Trainer(
-        devices="auto",
-        accelerator=config.accelerator,
-        strategy=strategy,
-        max_steps=config.num_train_steps,
-        log_every_n_steps=config.log_every_steps,
-        val_check_interval=config.eval_every_steps,
-        check_val_every_n_epoch=None,
-        num_sanity_val_steps=0,
-        callbacks=callbacks,
-        logger=logger,
-        plugins=plugins,
-        enable_progress_bar=False,
-        enable_checkpointing=enable_checkpointing,
-    )
-
-    ckpt_path = None
-    if job_type == "tuning":
-        trainer: L.Trainer = prepare_trainer(trainer)
-
-        checkpoint: Checkpoint = train.get_checkpoint()
-        trial_id = train.get_context().get_trial_id()
-
-        if checkpoint:
-            with checkpoint.as_directory() as ckpt_dir:
-                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.pt")
-    elif config.checkpoint:
-        ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
-        if config.change_opt:
-            # pylint: disable=E1120
-            ckpt = torch.load(ckpt_path, weights_only=False)
-            model.load_state_dict(ckpt["state_dict"])
-            # pylint: enable=E1120
-            ckpt_path = None
-
-    # training run
-    logging.info("Training run!")
-    trainer.fit(
-        model,
-        train_loader,
-        val_dataloader,
-        ckpt_path=ckpt_path,
-    )
-    # if job_type == "train":
-    #     wandb.finish()
-
-    #     logging.info("Testing run!")
-    #     # Logging test results at wandb
-    #     trainer.logger = WandbLogger(
-    #         log_model=True,
-    #         # Set the project where this run will be logged
-    #         project="gnn-pc-saft",
-    #         # Track hyperparameters and run metadata
-    #         config=config.to_dict(),
-    #         group=dataset,
-    #         tags=[dataset, "eval", config.model_name],
-    #         job_type="eval",
-    #     )
-
-    #     trainer.test(model, test_dataset)
-    #     wandb.finish()
+    return callbacks, logger
 
 
 def training_parallel(
