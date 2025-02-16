@@ -24,3 +24,6 @@ teqp
 PCSAFTsuperanc
 feos
 si-units
+xgboost
+onnxscript
+onnxruntime
