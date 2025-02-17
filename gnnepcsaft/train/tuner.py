@@ -88,7 +88,6 @@ def main(argv):
     max_t = config.num_train_steps // config.eval_every_steps
     # BOHB search algorithm
     search_alg = TuneBOHB(
-        space=search_space,
         metric="mape_den",
         mode="min",
         seed=77,
@@ -140,6 +139,7 @@ def main(argv):
     else:
         tuner = tune.Tuner(
             trainable,
+            param_space={"train_loop_config": search_space},
             tune_config=tune.TuneConfig(
                 search_alg=search_alg,
                 scheduler=scheduler,
