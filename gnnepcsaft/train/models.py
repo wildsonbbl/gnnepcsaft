@@ -378,7 +378,7 @@ def get_global_pool(config: ConfigDict):
     raise ValueError(f"Unsupported global pooling: {config.global_pool}.")
 
 
-def create_model(config: ConfigDict, deg: torch.Tensor) -> GNNePCSAFTL:
+def create_model(config: ConfigDict, deg: list) -> GNNePCSAFTL:
     """Creates a model, as specified by the config."""
     config.deg = deg
 
