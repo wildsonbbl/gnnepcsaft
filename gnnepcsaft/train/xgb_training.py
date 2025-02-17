@@ -116,10 +116,10 @@ def main(argv):
     training(
         FLAGS.workdir,
         {
-            "lambda": 0.0001,
-            "alpha": 0.0001,
+            "lambda": 1.92e-6,
+            "alpha": 2.77e-5,
             "num_boost_round": FLAGS.num_boost_round,
-            "eta": 0.01,
+            "eta": 0.039,
         },
     )
 
