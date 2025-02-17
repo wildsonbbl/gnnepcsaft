@@ -48,7 +48,7 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
     for data in train_dataset:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
-    return deg
+    return deg.tolist()
 
 
 def create_optimizer(config: ml_collections.ConfigDict, params):

@@ -237,7 +237,7 @@ def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
             out_channels=config.hidden_dim,
             aggregators=aggregators,
             scalers=scalers,
-            deg=config.deg,
+            deg=torch.tensor(config.deg, dtype=torch.long),
             edge_dim=config.hidden_dim,
             towers=config.towers,
             pre_layers=config.pre_layers,

@@ -39,6 +39,7 @@ def get_config():
     config.post_layers = 2
     config.pre_layers = 2
     config.towers = 2  # hidden_dim % towers == 0
+    config.deg = []
     ## GatedGraphConv, ARMAConv
     config.num_layers = 2
     config.num_stacks = 2
