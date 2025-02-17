@@ -1,5 +1,6 @@
 """Module to tune xgb"""
 
+import ConfigSpace as CS
 from absl import app, flags, logging
 from ray import train, tune
 from ray.air.integrations.wandb import WandbLoggerCallback
@@ -19,16 +20,19 @@ def main(argv):
 
     logging.info("Calling tuner!")
     # Hyperparameter search space
-    search_space = {
-        "eta": tune.loguniform(1e-4, 1e-1),
-        "lambda": tune.loguniform(1e-6, 1e-1),
-        "alpha": tune.loguniform(1e-6, 1e-1),
-        "num_boost_round": 5000,
-    }
+    search_space = CS.ConfigurationSpace()
+    search_space.add(
+        CS.UniformFloatHyperparameter("eta", lower=1e-4, upper=1e-1, log=True),
+        CS.UniformFloatHyperparameter("lambda", lower=1e-6, upper=1e-1, log=True),
+        CS.UniformFloatHyperparameter("alpha", lower=1e-6, upper=1e-1, log=True),
+        CS.Constant("num_boost_round", 1000),
+    )
 
     workdir = FLAGS.workdir
     # BOHB search algorithm
-    search_alg = TuneBOHB(metric="mape_den", mode="min", seed=77, max_concurrent=2)
+    search_alg = TuneBOHB(
+        space=search_space, metric="mape_den", mode="min", seed=77, max_concurrent=2
+    )
     search_alg = ConcurrencyLimiter(search_alg, max_concurrent=2)
     # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
@@ -62,7 +66,6 @@ def main(argv):
     # Run the tuner
     tuner = tune.Tuner(
         tune.with_resources(tune_xgb, resources={"cpu": 2, "gpu": 0.5}),
-        param_space=search_space,
         tune_config=tune.TuneConfig(
             num_samples=60, search_alg=search_alg, scheduler=scheduler
         ),

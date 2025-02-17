@@ -15,8 +15,8 @@ torchmetrics
 wandb
 lightning
 dvc-gs
-ConfigSpace==0.4.18
-hpbandster==0.7.4
+ConfigSpace
+hpbandster
 ray[train]
 ray[tune]
 wheel
@@ -25,5 +25,6 @@ PCSAFTsuperanc
 feos
 si-units
 xgboost
+onnx
 onnxscript
 onnxruntime
