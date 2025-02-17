@@ -36,8 +36,9 @@ def training(workdir: str, config: dict):
             max_depth=config["max_depth"],
             min_samples_split=2,
             min_samples_leaf=1,
-            max_features=1,
+            max_features=config["max_features"],
             bootstrap=True,
+            oob_score=True,
         )
 
         rf_model.fit(x, y)
@@ -114,6 +115,7 @@ def main(argv):
         {
             "n_estimators": 1000,
             "max_depth": None,
+            "max_features": "log2",
         },
     )
 
