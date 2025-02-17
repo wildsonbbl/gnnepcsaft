@@ -11,6 +11,6 @@ def get_search_space() -> dict:
         "hidden_dim": tune.choice([64, 128, 256]),
         "post_layers": tune.choice([1, 2, 3]),
         "pre_layers": tune.choice([1, 2, 3]),
-        "towers": tune.choice([1, 2, 3]),
+        "towers": tune.choice([1, 2, 4]),
         "conv": "PNA",
     }
