@@ -25,7 +25,7 @@ from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
 
 
-def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
+def calc_deg(dataset: str, workdir: str) -> list:
     """Calculates deg for `PNAPCSAFT` model."""
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -228,7 +228,7 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     val_idx = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
-        if graph.InChI in para_data or graph.munanb[0, -1] == 0:
+        if graph.InChI not in para_data and graph.munanb[0, -1] == 0:
             val_idx.append(idx)
         if graph.InChI in para_data and graph.munanb[0, -1] > 0:
             val_assoc_idx.append(idx)
