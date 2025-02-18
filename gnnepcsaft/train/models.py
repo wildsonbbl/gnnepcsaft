@@ -4,7 +4,6 @@ import inspect
 import math
 
 import lightning as L
-import ml_collections
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -26,7 +25,7 @@ class GNNePCSAFTL(L.LightningModule):
 
     def __init__(
         self,
-        config: ml_collections.ConfigDict,
+        config: ConfigDict,
     ):
         super().__init__()
         self.save_hyperparameters()

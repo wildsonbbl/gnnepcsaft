@@ -13,4 +13,5 @@ def get_search_space() -> dict:
         "pre_layers": tune.choice([1, 2, 3]),
         "towers": tune.choice([1, 2, 4]),
         "conv": "PNA",
+        "dropout": 0.0,
     }
