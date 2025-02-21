@@ -239,16 +239,22 @@ class HabitchNN(torch.nn.Module):
         self.mlp = Sequential(
             Linear(input_dim, 2048),
             SELU(),
+            Dropout(p=0.1),
             Linear(2048, 1024),
             SELU(),
+            Dropout(p=0.1),
             Linear(1024, 1024),
             SELU(),
+            Dropout(p=0.1),
             Linear(1024, 512),
             SELU(),
+            Dropout(p=0.1),
             Linear(512, 128),
             SELU(),
+            Dropout(p=0.1),
             Linear(128, 32),
             SELU(),
+            Dropout(p=0.1),
             Linear(32, 3),
         )
 
