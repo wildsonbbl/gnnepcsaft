@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from lightning.pytorch.utilities.types import STEP_OUTPUT, OptimizerLRScheduler
 from ml_collections import ConfigDict
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
-from torch.nn import BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
+from torch.nn import SELU, BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric import nn as gnn
 from torch_geometric.data.data import Data
@@ -72,8 +72,7 @@ class GNNePCSAFTL(L.LightningModule):
             },
         }
 
-    # pylint: disable = W0613
-    def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:
+    def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:  # pylint: disable=W0613
         if self.config.dataset in ("esper_assoc", "esper_assoc_only"):
             target: torch.Tensor = graphs.assoc
         else:
@@ -95,8 +94,9 @@ class GNNePCSAFTL(L.LightningModule):
         )
         return loss_mape
 
-    # pylint: disable=R0914
-    def validation_step(self, graphs, batch_idx) -> STEP_OUTPUT:
+    def validation_step(  # pylint: disable=W0613
+        self, graphs, batch_idx, dataloader_idx
+    ) -> STEP_OUTPUT:
         metrics_dict = {}
         pred_para: torch.Tensor = (
             self.model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach()
@@ -128,8 +128,8 @@ class GNNePCSAFTL(L.LightningModule):
         mape_vp = np.asarray(mape_vp).mean().item()
         metrics_dict.update(
             {
-                "mape_den": mape_den,
-                "mape_vp": mape_vp,
+                f"mape_den: {dataloader_idx}": mape_den,
+                f"mape_vp: {dataloader_idx}": mape_vp,
             }
         )
 
@@ -138,11 +138,10 @@ class GNNePCSAFTL(L.LightningModule):
         )
         return metrics_dict
 
-    def test_step(self, graphs, batch_idx) -> STEP_OUTPUT:
-        return self.validation_step(graphs, batch_idx)
+    def test_step(self, graphs, batch_idx, dataloader_idx) -> STEP_OUTPUT:
+        return self.validation_step(graphs, batch_idx, dataloader_idx)
 
 
-# pylint: disable=R0902,R0913,R0917
 class GNNePCSAFT(torch.nn.Module):
     """Graph neural network to predict ePCSAFT parameters"""
 
@@ -224,6 +223,142 @@ class GNNePCSAFT(torch.nn.Module):
         ).to(device=x.device)
 
         return params.clip(lower_bounds, upper_bounds)
+
+
+class HabitchNN(torch.nn.Module):
+    """
+    Neural network to predict PCSAFT parameters
+    from (Habicht; Brandenbusch; Sadowski, 2023, 10.1016/j.fluid.2022.113657).
+    """
+
+    def __init__(self, input_dim: int):
+        super().__init__()
+        self.lower_bounds = torch.tensor([1.0, 1.9, 50.0])
+        self.upper_bounds = torch.tensor([25.0, 4.5, 550.0])
+
+        self.mlp = Sequential(
+            Linear(input_dim, 2048),
+            SELU(),
+            Linear(2048, 1024),
+            SELU(),
+            Linear(1024, 1024),
+            SELU(),
+            Linear(1024, 512),
+            SELU(),
+            Linear(512, 128),
+            SELU(),
+            Linear(128, 32),
+            SELU(),
+            Linear(32, 3),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass of the model"""
+        return self.mlp(x)
+
+    def pred_with_bounds(self, graphs: Data):
+        """Forward pass of the model with bounds."""
+
+        ecfp, mw, atom_count, ring_count, rbonds_count = (
+            graphs.ecfp,
+            graphs.mw,
+            graphs.atom_count,
+            graphs.ring_count,
+            graphs.rbonds_count,
+        )
+        x = torch.cat((ecfp, mw, atom_count, ring_count, rbonds_count), dim=1)
+
+        params = self.forward(x)
+        upper_bounds = self.upper_bounds.to(device=x.device)
+        lower_bounds = self.lower_bounds.to(device=x.device)
+
+        return params.clip(lower_bounds, upper_bounds)
+
+
+class HabitchNNL(L.LightningModule):
+    """
+    Neural network to predict PCSAFT parameters
+    from (Habicht; Brandenbusch; Sadowski, 2023, 10.1016/j.fluid.2022.113657).
+    """
+
+    def __init__(self, config: ConfigDict):
+        super().__init__()
+        self.save_hyperparameters()
+
+        self.config = config
+
+        self.model = HabitchNN(config.input_dim)
+
+    # pylint: disable=W0221
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass of the model"""
+        return self.model(x)
+
+    def configure_optimizers(self) -> OptimizerLRScheduler:
+        return {
+            "optimizer": torch.optim.Adam(
+                self.parameters(), lr=1e-3, weight_decay=1e-4
+            ),
+        }
+
+    def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:  # pylint: disable=W0613
+        """Training step of the model"""
+        target: torch.Tensor = graphs.para
+
+        ecfp, mw, atom_count, ring_count, rbonds_count = (
+            graphs.ecfp,
+            graphs.mw,
+            graphs.atom_count,
+            graphs.ring_count,
+            graphs.rbonds_count,
+        )
+        x = torch.cat((ecfp, mw, atom_count, ring_count, rbonds_count), dim=1)
+
+        pred: torch.Tensor = self(x)
+        loss = F.huber_loss(pred, target)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(  # pylint: disable=W0613,R0914
+        self, graphs, batch_idx, dataloader_idx
+    ) -> STEP_OUTPUT:
+        metrics_dict = {}
+        pred_para: torch.Tensor = (
+            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach()
+        )
+        para_assoc = 10 ** (
+            graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
+        )
+        para_msigmae = pred_para
+        pred_para = (
+            torch.hstack([para_msigmae, para_assoc, graphs.munanb]).cpu().numpy()
+        )
+        pred_rho = rho_batch(pred_para, graphs.rho)
+        pred_vp = vp_batch(pred_para, graphs.vp)
+        rho = [rho[:, -1] for rho in graphs.rho if rho.shape[0] > 0]
+        vp = [vp[:, -1] for vp in graphs.vp if vp.shape[0] > 0]
+        mape_den = []
+        for pred, exp in zip(pred_rho, rho):
+            mape_den += [np.mean(np.abs(pred - exp) / exp).item()]
+        mape_den = np.asarray(mape_den).mean().item()
+        mape_vp = []
+        for pred, exp in zip(pred_vp, vp):
+            mape_vp += [np.mean(np.abs(pred - exp) / exp).item()]
+        mape_vp = np.asarray(mape_vp).mean().item()
+        metrics_dict.update(
+            {
+                f"mape_den: {dataloader_idx}": mape_den,
+                f"mape_vp: {dataloader_idx }": mape_vp,
+            }
+        )
+
+        self.log_dict(
+            metrics_dict, on_step=False, on_epoch=True, batch_size=1, sync_dist=True
+        )
+        return metrics_dict
+
+    def test_step(self, graphs, batch_idx, dataloader_idx) -> STEP_OUTPUT:
+        return self.validation_step(graphs, batch_idx, dataloader_idx)
 
 
 def get_conv(config: ConfigDict):  # pylint: disable=R0911,R0912
