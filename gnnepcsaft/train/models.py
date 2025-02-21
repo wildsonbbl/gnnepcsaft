@@ -293,7 +293,7 @@ class HabitchNNL(L.LightningModule):
 
         self.config = config
 
-        self.model = HabitchNN(config.input_dim)
+        self.model = HabitchNN(3083)
 
     # pylint: disable=W0221
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -302,8 +302,12 @@ class HabitchNNL(L.LightningModule):
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
         return {
-            "optimizer": torch.optim.Adam(
-                self.parameters(), lr=1e-3, weight_decay=1e-4
+            "optimizer": torch.optim.AdamW(
+                self.parameters(),
+                lr=self.config.learning_rate,
+                weight_decay=self.config.weight_decay,
+                amsgrad=True,
+                eps=1e-5,
             ),
         }
 
