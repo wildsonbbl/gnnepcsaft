@@ -270,9 +270,9 @@ class HabitchNN(torch.nn.Module):
             graphs.mw,
             graphs.atom_count,
             graphs.ring_count,
-            graphs.rbonds_count,
+            graphs.rbond_count,
         )
-        x = torch.cat((ecfp, mw, atom_count, ring_count, rbonds_count), dim=1)
+        x = torch.hstack((ecfp, mw, atom_count, ring_count, rbonds_count))
 
         params = self.forward(x)
         upper_bounds = self.upper_bounds.to(device=x.device)
@@ -293,7 +293,7 @@ class HabitchNNL(L.LightningModule):
 
         self.config = config
 
-        self.model = HabitchNN(3083)
+        self.model = HabitchNN(3085)
 
     # pylint: disable=W0221
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -320,9 +320,9 @@ class HabitchNNL(L.LightningModule):
             graphs.mw,
             graphs.atom_count,
             graphs.ring_count,
-            graphs.rbonds_count,
+            graphs.rbond_count,
         )
-        x = torch.cat((ecfp, mw, atom_count, ring_count, rbonds_count), dim=1)
+        x = torch.hstack((ecfp, mw, atom_count, ring_count, rbonds_count))
 
         pred: torch.Tensor = self(x)
         loss = F.huber_loss(pred, target)
