@@ -94,7 +94,7 @@ class GNNePCSAFTL(L.LightningModule):
         )
         return loss_mape
 
-    def validation_step(  # pylint: disable=W0613
+    def validation_step(  # pylint: disable=W0613,R0914
         self, graphs, batch_idx, dataloader_idx
     ) -> STEP_OUTPUT:
         metrics_dict = {}
@@ -142,7 +142,7 @@ class GNNePCSAFTL(L.LightningModule):
         return self.validation_step(graphs, batch_idx, dataloader_idx)
 
 
-class GNNePCSAFT(torch.nn.Module):
+class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
     """Graph neural network to predict ePCSAFT parameters"""
 
     def __init__(self, config: ConfigDict):
