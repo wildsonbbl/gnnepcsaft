@@ -3,6 +3,7 @@
 import os
 
 import numpy as np
+import torch
 import xgboost as xgb
 from absl import app, flags, logging
 from torch_geometric.loader import DataLoader
@@ -27,7 +28,16 @@ def training(workdir: str, config: dict):
     # Create the XGBoost dataset
     for graphs_train in train_loader:
         train_dmatrix = xgb.DMatrix(
-            np.asarray(graphs_train.ecfp), label=graphs_train.para.numpy()
+            torch.hstack(
+                (
+                    graphs_train.ecfp,
+                    graphs_train.mw,
+                    graphs_train.atom_count,
+                    graphs_train.ring_count,
+                    graphs_train.rbond_count,
+                )
+            ).numpy(),
+            label=graphs_train.para.numpy(),
         )
 
         xgb_param = {
@@ -67,7 +77,17 @@ def training(workdir: str, config: dict):
 def evaluation(val_loader, xgb_model):
     """Evaluation function"""
     for graphs in val_loader:
-        test_dmatrix = xgb.DMatrix(np.asarray(graphs.ecfp))
+        test_dmatrix = xgb.DMatrix(
+            torch.hstack(
+                (
+                    graphs.ecfp,
+                    graphs.mw,
+                    graphs.atom_count,
+                    graphs.ring_count,
+                    graphs.rbond_count,
+                )
+            ).numpy()
+        )
         pred_msigmae = xgb_model.predict(test_dmatrix)
         assert isinstance(pred_msigmae, np.ndarray)
         assert pred_msigmae.shape == graphs.para.numpy().shape

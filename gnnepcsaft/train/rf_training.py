@@ -4,6 +4,7 @@ import os
 
 import joblib
 import numpy as np
+import torch
 from absl import app, flags, logging
 from sklearn.ensemble import RandomForestRegressor
 from torch_geometric.loader import DataLoader
@@ -27,7 +28,16 @@ def training(workdir: str, config: dict):
     val_loader = DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
     # Create the XGBoost dataset
     for graphs_train in train_loader:
-        x = np.asarray(graphs_train.ecfp)
+        x = torch.hstack(
+            (
+                graphs_train.ecfp,
+                graphs_train.mw,
+                graphs_train.atom_count,
+                graphs_train.ring_count,
+                graphs_train.rbond_count,
+            )
+        )
+        x = x.numpy()
         y = graphs_train.para.numpy()
 
         rf_model = RandomForestRegressor(
@@ -65,7 +75,16 @@ def training(workdir: str, config: dict):
 def evaluation(val_loader: DataLoader, rf_model: RandomForestRegressor):
     """Evaluation function"""
     for graphs in val_loader:
-        x = np.asarray(graphs.ecfp)
+        x = torch.hstack(
+            (
+                graphs.ecfp,
+                graphs.mw,
+                graphs.atom_count,
+                graphs.ring_count,
+                graphs.rbond_count,
+            )
+        )
+        x = x.numpy()
         pred_msigmae = rf_model.predict(x)
         assert isinstance(pred_msigmae, np.ndarray)
         assert pred_msigmae.shape == graphs.para.numpy().shape
