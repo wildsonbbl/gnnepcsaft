@@ -45,9 +45,9 @@ def from_InChI(
         InChI=InChI,
         smiles=smiles,
         ecfp=torch.from_numpy(ECFP(smiles)),
-        mw=torch.as_tensor([mw(InChI)]),
-        ring_count=torch.as_tensor([ring_count(smiles)]),
-        rbond_count=torch.as_tensor([rbond_count(smiles)]),
+        mw=torch.as_tensor([[mw(InChI)]]),
+        ring_count=torch.as_tensor([[ring_count(smiles)]]),
+        rbond_count=torch.as_tensor([[rbond_count(smiles)]]),
         atom_count=torch.as_tensor([g_atom_count]),
     )
 
