@@ -69,7 +69,6 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in inchis:
             try:
                 graph = from_InChI(inchi)
-                graph.mw = mw(inchi)
             except (TypeError, ValueError) as e:
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
@@ -85,7 +84,7 @@ class ThermoMLDataset(InMemoryDataset):
                 .to_numpy()
             )
 
-            rho[:, -1] *= 1000 / graph.mw  # convert to mol/ m³
+            rho[:, -1] *= 1000 / mw(inchi)  # convert to mol/ m³
             graph.rho = rho
 
             datalist.append(graph)

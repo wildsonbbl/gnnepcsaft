@@ -5,7 +5,13 @@ from rdkit.Chem import AllChem
 
 # pylint: disable = no-name-in-module
 from rdkit.Chem.Fragments import fr_COO2, fr_Imine, fr_isocyan, fr_isothiocyan
-from rdkit.Chem.rdMolDescriptors import CalcExactMolWt, CalcNumHBA, CalcNumHBD
+from rdkit.Chem.rdMolDescriptors import (
+    CalcExactMolWt,
+    CalcNumHBA,
+    CalcNumHBD,
+    CalcNumRings,
+    CalcNumRotatableBonds,
+)
 
 RDLogger.DisableLog("rdApp.*")
 
@@ -101,7 +107,39 @@ def ECFP(smiles: str, radius: int = 3, nBits: int = 3072):
     try:
         mol = Chem.MolFromSmiles(smiles, sanitize=True)
         fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits)
-        fp = np.array(fp, dtype=np.int8)
+        fp = np.array([fp], dtype=np.int8)
     except (TypeError, ValueError):
-        fp = np.zeros(nBits, dtype=np.int8)
+        fp = np.zeros((1, nBits), dtype=np.int8)
     return fp
+
+
+def ring_count(smiles: str) -> int:
+    "Calculates the number of rings."
+    try:
+        mol = Chem.MolFromSmiles(smiles, sanitize=True)
+        _ring_count = CalcNumRings(mol)
+    except (TypeError, ValueError):
+        _ring_count = 0
+    return _ring_count
+
+
+def rbond_count(smiles: str) -> int:
+    "Calculates the number of rotatable bonds."
+    try:
+        mol = Chem.MolFromSmiles(smiles, sanitize=True)
+        _rbond_count = CalcNumRotatableBonds(mol)
+    except (TypeError, ValueError):
+        _rbond_count = 0
+    return _rbond_count
+
+
+def atom_count(smiles: str) -> list:
+    "Calculates the number of atoms."
+    atom_count_list = [0] * 119
+    try:
+        mol = Chem.MolFromSmiles(smiles, sanitize=True)
+        for atom in mol.GetAtoms():
+            atom_count_list[atom.GetAtomicNum()] += 1
+    except (TypeError, ValueError):
+        pass
+    return atom_count_list

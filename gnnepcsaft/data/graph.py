@@ -34,13 +34,21 @@ def from_InChI(
     edge_attr = graph["edge_feat"]
     edge_index = graph["edge_index"]
 
+    SELECTED_ATOMS = (6, 7, 8, 9, 14, 15, 16, 17, 35, 53)
+    g_atom_count = atom_count(smiles)
+    g_atom_count = [g_atom_count[i] for i in SELECTED_ATOMS]
+
     return Data(
         x=torch.from_numpy(x),
         edge_attr=torch.from_numpy(edge_attr),
         edge_index=torch.from_numpy(edge_index),
         InChI=InChI,
         smiles=smiles,
-        ecfp=ECFP(smiles),
+        ecfp=torch.from_numpy(ECFP(smiles)),
+        mw=torch.as_tensor([mw(InChI)]),
+        ring_count=torch.as_tensor([ring_count(smiles)]),
+        rbond_count=torch.as_tensor([rbond_count(smiles)]),
+        atom_count=torch.as_tensor([g_atom_count]),
     )
 
 
@@ -52,17 +60,5 @@ def from_smiles(smiles: str) -> Data:
         smile (str): The smile string.
     """
 
-    RDLogger.DisableLog("rdApp.*")
-
-    graph = smiles2graph(smiles)
-
-    x = graph["node_feat"]
-    edge_attr = graph["edge_feat"]
-    edge_index = graph["edge_index"]
-
-    return Data(
-        x=torch.from_numpy(x),
-        edge_attr=torch.from_numpy(edge_attr),
-        edge_index=torch.from_numpy(edge_index),
-        smiles=smiles,
-    )
+    inchi = smilestoinchi(smiles)
+    return from_InChI(inchi)
