@@ -27,20 +27,20 @@ def get_config():
     config.eval_every_steps = 5000
     config.dataset = "esper"
     config.checkpoint = ""
-    config.model = "habitch"
-    config.model_name = "habitch_msigmae_1"
+    config.model = "gnn"
+    config.model_name = ""
 
     # GNN hyperparameters.
     ## General
     config.conv = "PNA"
     config.global_pool = "mean"
-    config.propagation_depth = 7
+    config.propagation_depth = 5
     config.hidden_dim = 256
-    config.dropout = 0.6
+    config.dropout = 0.0
     config.add_self_loops = True
     config.num_para = 3
     ## PNA
-    config.post_layers = 2
+    config.post_layers = 3
     config.pre_layers = 2
     config.towers = 2  # hidden_dim % towers == 0
     config.deg = []
@@ -48,6 +48,6 @@ def get_config():
     config.num_layers = 2
     config.num_stacks = 2
     ## GAT, GATv2, TransformerConv
-    config.heads = 4  # hidden_dim % heads == 0
+    config.heads = 2  # hidden_dim % heads == 0
 
     return config
