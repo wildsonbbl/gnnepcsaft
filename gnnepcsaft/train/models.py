@@ -84,7 +84,15 @@ class GNNePCSAFTL(L.LightningModule):
             graphs.batch,
         )
         pred: torch.Tensor = self(x, edge_index, edge_attr, batch)
+        loss = F.huber_loss(pred, target)
         loss_mape = mape(pred, target)
+        self.log(
+            "train_huber",
+            loss,
+            on_step=True,
+            batch_size=target.shape[0],
+            sync_dist=True,
+        )
         self.log(
             "train_mape",
             loss_mape,
@@ -129,8 +137,8 @@ class GNNePCSAFTL(L.LightningModule):
         mape_vp = np.asarray(mape_vp).mean().item()
         metrics_dict.update(
             {
-                f"mape_den: {dataloader_idx}": mape_den,
-                f"mape_vp: {dataloader_idx}": mape_vp,
+                "mape_den": mape_den,
+                "mape_vp": mape_vp,
             }
         )
 
@@ -344,7 +352,21 @@ class HabitchNNL(L.LightningModule):
 
         pred: torch.Tensor = self(x)
         loss = F.huber_loss(pred, target)
-        self.log("train_loss", loss)
+        loss_mape = mape(pred, target)
+        self.log(
+            "train_huber",
+            loss,
+            on_step=True,
+            batch_size=target.shape[0],
+            sync_dist=True,
+        )
+        self.log(
+            "train_mape",
+            loss_mape,
+            on_step=True,
+            batch_size=target.shape[0],
+            sync_dist=True,
+        )
         return loss
 
     def validation_step(  # pylint: disable=W0613,R0914
@@ -376,8 +398,8 @@ class HabitchNNL(L.LightningModule):
         mape_vp = np.asarray(mape_vp).mean().item()
         metrics_dict.update(
             {
-                f"mape_den: {dataloader_idx}": mape_den,
-                f"mape_vp: {dataloader_idx }": mape_vp,
+                "mape_den": mape_den,
+                "mape_vp": mape_vp,
             }
         )
 

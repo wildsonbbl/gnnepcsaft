@@ -173,7 +173,7 @@ def get_callbacks_logger(config, workdir):
             dirpath=osp.join(workdir, "train/checkpoints"),
             filename=config.model_name + "-{epoch}-{mape_den:.4f}",
             save_last=False,
-            monitor="mape_den",
+            monitor="mape_den/dataloader_idx_0",
             save_top_k=1,
             verbose=True,
         )
