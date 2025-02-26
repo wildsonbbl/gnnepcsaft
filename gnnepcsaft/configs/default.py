@@ -23,16 +23,16 @@ def get_config():
     config.accelerator = "gpu"
     config.batch_size = 512
     config.num_train_steps = 100_000
-    config.log_every_steps = 5000
-    config.eval_every_steps = 10000
+    config.log_every_steps = 1000
+    config.eval_every_steps = 5000
     config.checkpoint_every_steps = 10000
     config.dataset = "esper"
     config.checkpoint = ""
     config.model = "habitch"
+    config.model_name = "habitch_msigmae_1"
 
     # GNN hyperparameters.
     ## General
-    config.model_name = "esper_msigmae_7"
     config.conv = "PNA"
     config.global_pool = "mean"
     config.propagation_depth = 7
