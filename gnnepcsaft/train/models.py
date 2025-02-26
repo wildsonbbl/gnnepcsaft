@@ -301,14 +301,31 @@ class HabitchNNL(L.LightningModule):
         return self.model(x)
 
     def configure_optimizers(self) -> OptimizerLRScheduler:
-        return {
-            "optimizer": torch.optim.AdamW(
+        if self.config.optimizer == "adam":
+            opt = torch.optim.AdamW(
                 self.parameters(),
                 lr=self.config.learning_rate,
                 weight_decay=self.config.weight_decay,
                 amsgrad=True,
                 eps=1e-5,
-            ),
+            )
+        elif self.config.optimizer == "sgd":
+            opt = torch.optim.SGD(
+                self.parameters(),
+                lr=self.config.learning_rate,
+                momentum=0.0,
+                weight_decay=0.0,
+                nesterov=False,
+            )
+        else:
+            raise ValueError(f"Unsupported optimizer: {self.config.optimizer}.")
+        return {
+            "optimizer": opt,
+            "lr_scheduler": {
+                "scheduler": CosineAnnealingWarmRestarts(opt, self.config.warmup_steps),
+                "interval": "step",
+                "frequency": 1,
+            },
         }
 
     def training_step(self, graphs, batch_idx) -> STEP_OUTPUT:  # pylint: disable=W0613
@@ -522,8 +539,12 @@ def get_global_pool(config: ConfigDict):
     raise ValueError(f"Unsupported global pooling: {config.global_pool}.")
 
 
-def create_model(config: ConfigDict, deg: list) -> GNNePCSAFTL:
+def create_model(config: ConfigDict, deg: list):
     """Creates a model, as specified by the config."""
     config.deg = deg
 
-    return GNNePCSAFTL(config)
+    if config.model.lower() == "gnn":
+        return GNNePCSAFTL(config)
+    if config.model.lower() == "habitch":
+        return HabitchNNL(config)
+    raise ValueError(f"Unsupported model: {config.model}.")

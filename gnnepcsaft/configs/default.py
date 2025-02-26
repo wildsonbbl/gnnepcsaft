@@ -28,6 +28,7 @@ def get_config():
     config.checkpoint_every_steps = 10000
     config.dataset = "esper"
     config.checkpoint = ""
+    config.model = "habitch"
 
     # GNN hyperparameters.
     ## General
