@@ -21,7 +21,6 @@ from ray.train.torch import TorchTrainer
 from torch_geometric.loader import DataLoader
 
 from ..configs.configs_parallel import get_configs
-from . import models
 from .models import create_model
 from .utils import (
     CustomRayTrainReportCallback,
@@ -45,7 +44,9 @@ def create_logger(config, dataset):
     )
 
 
-def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
+def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
+    config: ml_collections.ConfigDict, workdir: str
+):
     """Execute model training and evaluation loop with lightning.
 
     Args:
@@ -54,7 +55,9 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     """
     # Dataset building
     train_dataset = build_train_dataset(workdir, config.dataset)
-    val_dataset, val_assoc_dataset = build_test_dataset(workdir, train_dataset)
+    val_dataset, train_val_dataset, val_assoc_dataset = build_test_dataset(
+        workdir, train_dataset
+    )
 
     train_loader = DataLoader(
         train_dataset,
@@ -64,15 +67,26 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     )
 
     val_dataloader = DataLoader(
-        val_dataset if config.dataset == "esper" else val_assoc_dataset,
+        val_dataset,
         batch_size=len(val_dataset),
+        num_workers=os.cpu_count(),
+    )
+    val_assoc_dataloader = DataLoader(
+        val_assoc_dataset,
+        batch_size=len(val_assoc_dataset),
+        num_workers=os.cpu_count(),
+    )
+    train_val_dataloader = DataLoader(
+        train_val_dataset,
+        batch_size=len(train_val_dataset),
+        num_workers=os.cpu_count(),
     )
 
     # trainer callback and logger
     callbacks, logger = get_callbacks_logger(config, workdir)
 
     # creating model from config
-    model: models.GNNePCSAFTL = create_model(config, calc_deg(config.dataset, workdir))
+    model = create_model(config, calc_deg(config.dataset, workdir))
     # model = torch.compile(model, dynamic=True) off for old gpus
 
     # Trainer configs
@@ -102,7 +116,11 @@ def ltrain_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     trainer.fit(
         model,
         train_loader,
-        val_dataloader,
+        (
+            [val_dataloader, train_val_dataloader]
+            if config.dataset == "esper"
+            else [val_assoc_dataloader]
+        ),
         ckpt_path=ckpt_path,
     )
 

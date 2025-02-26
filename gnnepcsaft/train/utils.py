@@ -16,7 +16,6 @@ from lightning.pytorch.callbacks import Callback
 from ray import train
 from ray.train import Checkpoint
 from torch.utils.data import ConcatDataset
-from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
@@ -152,15 +151,6 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     return den, vp
 
 
-def build_datasets_loaders(config, workdir, dataset):
-    "Builds train and test dataset loader."
-    train_dataset = build_train_dataset(workdir, dataset)
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    test_loader, para_data = build_test_dataset(workdir, train_dataset)
-    return train_loader, test_loader, para_data
-
-
 # pylint: disable=R0903
 class TransformParameters(BaseTransform):
     "To add parameters to test dataset."
@@ -210,13 +200,11 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     para_data = {}
     if isinstance(train_dataset, (Esper, ConcatDataset)):
         for graph in train_dataset:
-            inchi, para, assoc, munanb = (
-                graph.InChI,
+            para_data[graph.InChI] = (
                 graph.para,
                 graph.assoc,
                 graph.munanb,
             )
-            para_data[inchi] = (para, assoc, munanb)
     if transform:
         transform = T.Compose([TransformParameters(para_data), transform])
     else:
@@ -226,15 +214,19 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     )
     val_assoc_idx = []
     val_idx = []
+    train_idx = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
         if graph.InChI not in para_data and graph.munanb[0, -1] == 0:
             val_idx.append(idx)
         if graph.InChI in para_data and graph.munanb[0, -1] > 0:
             val_assoc_idx.append(idx)
+        if graph.InChI in para_data and graph.munanb[0, -1] == 0:
+            train_idx.append(idx)
     val_assoc_dataset = tml_dataset[val_assoc_idx]
     val_dataset = tml_dataset[val_idx]
-    return val_dataset, val_assoc_dataset
+    train_val_dataset = tml_dataset[train_idx]
+    return val_dataset, train_val_dataset, val_assoc_dataset
 
 
 def build_train_dataset(workdir, dataset, transform=None):
