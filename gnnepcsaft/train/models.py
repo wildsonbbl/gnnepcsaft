@@ -98,9 +98,7 @@ class GNNePCSAFTL(L.LightningModule):
         self, graphs, batch_idx, dataloader_idx
     ) -> STEP_OUTPUT:
         metrics_dict = {}
-        pred_para: torch.Tensor = (
-            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach()
-        )
+        pred_para: torch.Tensor = self.model.pred_with_bounds(graphs).squeeze().detach()
         if self.config.num_para == 2:
             para_assoc = 10 ** (
                 pred_para * torch.tensor([-1.0, 1.0], device=pred_para.device)
@@ -112,7 +110,10 @@ class GNNePCSAFTL(L.LightningModule):
             )
             para_msigmae = pred_para
         pred_para = (
-            torch.hstack([para_msigmae, para_assoc, graphs.munanb]).cpu().numpy()
+            torch.hstack([para_msigmae, para_assoc, graphs.munanb])
+            .cpu()
+            .to(torch.float64)
+            .numpy()
         )
         pred_rho = rho_batch(pred_para, graphs.rho)
         pred_vp = vp_batch(pred_para, graphs.vp)
@@ -350,15 +351,16 @@ class HabitchNNL(L.LightningModule):
         self, graphs, batch_idx, dataloader_idx
     ) -> STEP_OUTPUT:
         metrics_dict = {}
-        pred_para: torch.Tensor = (
-            self.model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach()
-        )
+        pred_para: torch.Tensor = self.model.pred_with_bounds(graphs).squeeze().detach()
         para_assoc = 10 ** (
             graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
         )
         para_msigmae = pred_para
         pred_para = (
-            torch.hstack([para_msigmae, para_assoc, graphs.munanb]).cpu().numpy()
+            torch.hstack([para_msigmae, para_assoc, graphs.munanb])
+            .cpu()
+            .to(torch.float64)
+            .numpy()
         )
         pred_rho = rho_batch(pred_para, graphs.rho)
         pred_vp = vp_batch(pred_para, graphs.vp)
