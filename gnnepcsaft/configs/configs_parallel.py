@@ -5,22 +5,22 @@ def get_configs() -> list[dict]:
     """Get the hyperparameter configurations."""
     configs = [
         {
-            "model_name": "esper_msigmae_7.1",
-            "model": "GATL",
+            "model_name": "gnn_msigmae_1",
+            "model": "gnn",
+            "conv": "GATv2",
             "propagation_depth": 7,
             "hidden_dim": 256,
-            "post_layers": None,
-            "pre_layers": None,
-            "heads": 3,
+            "heads": 2,
         },
         {
-            "model_name": "esper_msigmae_5.3",
-            "model": "PNAL",
-            "propagation_depth": 6,
-            "hidden_dim": 128,
-            "post_layers": 1,
-            "pre_layers": 3,
-            "heads": None,
+            "model_name": "gnn_msigmae_2",
+            "model": "gnn",
+            "conv": "PNA",
+            "propagation_depth": 5,
+            "hidden_dim": 256,
+            "post_layers": 3,
+            "pre_layers": 2,
+            "towers": 2,
         },
     ]
     return configs

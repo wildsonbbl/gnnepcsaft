@@ -25,7 +25,6 @@ def get_config():
     config.num_train_steps = 100_000
     config.log_every_steps = 1000
     config.eval_every_steps = 5000
-    config.checkpoint_every_steps = 10000
     config.dataset = "esper"
     config.checkpoint = ""
     config.model = "habitch"
