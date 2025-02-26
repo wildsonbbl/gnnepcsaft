@@ -41,8 +41,6 @@ class ThermoMLDataset(InMemoryDataset):
         pre_transform=None,
         pre_filter=None,
     ):
-        self.dtype = torch.float64
-
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
 
@@ -237,7 +235,6 @@ class Esper(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
-        self.dtype = torch.float32
 
     @property
     def raw_file_names(self):
@@ -254,6 +251,7 @@ class Esper(InMemoryDataset):
 
     def process(self):
         datalist = []
+        dtype = torch.float32
         data = pl.read_csv(self.raw_paths[0], separator="	")
 
         for row in data.iter_rows():
@@ -268,9 +266,9 @@ class Esper(InMemoryDataset):
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
 
-            graph.para = torch.tensor([para], dtype=self.dtype)
-            graph.assoc = torch.tensor([assoc], dtype=self.dtype).log10().abs()
-            graph.munanb = torch.tensor([munanb], dtype=self.dtype)
+            graph.para = torch.tensor([para], dtype=dtype)
+            graph.assoc = torch.tensor([assoc], dtype=dtype).log10().abs()
+            graph.munanb = torch.tensor([munanb], dtype=dtype)
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
