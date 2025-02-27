@@ -117,7 +117,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         model,
         train_loader,
         (
-            [val_dataloader, train_val_dataloader]
+            [train_val_dataloader, val_dataloader]
             if config.dataset == "esper"
             else [val_assoc_dataloader]
         ),

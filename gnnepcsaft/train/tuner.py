@@ -150,28 +150,9 @@ def main(argv):
         )
 
     if FLAGS.get_result:
-        result = tuner.get_results()
+        tuner.get_results()
     else:
-        result = tuner.fit()
-
-    best_trial = result.get_best_result(
-        metric="mape_den/dataloader_idx_0",
-        mode="min",
-    )
-    best_trials = result.get_dataframe("mape_den/dataloader_idx_0", "min").sort_values(
-        "mape_den/dataloader_idx_0"
-    )
-    best_trials = best_trials[
-        [
-            "mape_den/dataloader_idx_0",
-            "train_mape",
-            "trial_id",
-            "training_iteration",
-        ]
-    ]
-    print(f"\nBest trial config:\n {best_trial.config}")
-    print(f"\nBest trial final metrics:\n {best_trial.metrics}")
-    print(f"\nBest trials final metrics:\n {best_trials.head(10)}")
+        tuner.fit()
 
 
 if __name__ == "__main__":
