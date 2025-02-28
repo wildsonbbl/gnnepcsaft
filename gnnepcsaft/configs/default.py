@@ -22,27 +22,27 @@ def get_config():
 
     config.accelerator = "gpu"
     config.batch_size = 512
-    config.num_train_steps = 100_000
-    config.log_every_steps = 1000
-    config.eval_every_steps = 5000
+    config.num_train_steps = 300_000
+    config.log_every_steps = 5000
+    config.eval_every_steps = 10000
     config.dataset = "esper"
     config.checkpoint = ""
     config.model = "gnn"
-    config.model_name = ""
+    config.model_name = "esper_msigmae_5_test"
 
     # GNN hyperparameters.
     ## General
     config.conv = "PNA"
-    config.global_pool = "mean"
-    config.propagation_depth = 5
-    config.hidden_dim = 256
+    config.global_pool = "add"
+    config.propagation_depth = 6
+    config.hidden_dim = 128
     config.dropout = 0.0
     config.add_self_loops = True
     config.num_para = 3
     ## PNA
-    config.post_layers = 3
-    config.pre_layers = 2
-    config.towers = 2  # hidden_dim % towers == 0
+    config.post_layers = 1
+    config.pre_layers = 3
+    config.towers = 1  # hidden_dim % towers == 0
     config.deg = []
     ## GatedGraphConv, ARMAConv
     config.num_layers = 2
