@@ -1,4 +1,3 @@
--r requirements-torch.txt
 absl-py
 Cython
 jax
