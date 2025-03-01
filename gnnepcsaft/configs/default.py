@@ -22,9 +22,9 @@ def get_config():
 
     config.accelerator = "gpu"
     config.batch_size = 512
-    config.num_train_steps = 300_000
-    config.log_every_steps = 5000
-    config.eval_every_steps = 10000
+    config.num_train_steps = 100_000
+    config.log_every_steps = 1000
+    config.eval_every_steps = 5000
     config.dataset = "esper"
     config.checkpoint = ""
     config.model = "gnn"
