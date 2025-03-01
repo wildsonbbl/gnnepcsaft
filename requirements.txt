@@ -1,3 +1,4 @@
+-r requirements-torch.txt
 absl-py
 Cython
 jax
@@ -9,7 +10,6 @@ ogb
 polars
 rdkit
 scipy
-torch
 torch_geometric
 torchmetrics
 wandb
