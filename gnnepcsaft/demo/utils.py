@@ -176,7 +176,7 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
                 params = torch.hstack((params, torch.zeros(5)))
             list_params.append(params.numpy().round(decimals=4))
         if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).round(decimals=4))
+            list_params.append(np.hstack(es_para[inchi]).round(decimals=4)[0])
         try:
             list_params.append(
                 np.asarray(parameters_gc_pcsaft(gh.smiles)).round(decimals=4)
@@ -355,7 +355,7 @@ def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+
     plt.show()
 
 
-def predparams2(smiles, models):
+def predparams2(smiles: str, models: list[GNNePCSAFT]):
     "Use models to predict ePC-SAFT parameters from smiles."
     list_array_params = []
     for model in models:
@@ -365,7 +365,7 @@ def predparams2(smiles, models):
             for smile in smiles:
                 graphs = from_smiles(smile)
                 graphs = graphs.to(device)
-                parameters = model(graphs)
+                parameters = model.pred_with_bounds(graphs)
                 params = parameters.squeeze().to(torch.float64).numpy()
                 list_params.append(params)
         array_params = np.asarray(list_params)
@@ -391,5 +391,13 @@ def save_exported_program(
         dynamic_shapes=dynamic_shapes,
     )
 
-    torch.export.save(exportedprogram, path)
+    torch.onnx.export(
+        exportedprogram,
+        example_input,
+        path,
+        verbose=True,
+        external_data=False,
+        optimize=True,
+        verify=True,
+    )
     return exportedprogram
