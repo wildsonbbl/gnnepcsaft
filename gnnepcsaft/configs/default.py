@@ -28,7 +28,7 @@ def get_config():
     config.dataset = "esper"
     config.checkpoint = ""
     config.model = "gnn"
-    config.model_name = "esper_msigmae_5_test"
+    config.model_name = "esper_msigmae_5.4"
 
     # GNN hyperparameters.
     ## General
