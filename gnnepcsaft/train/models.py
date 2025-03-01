@@ -84,7 +84,9 @@ class GNNePCSAFTL(L.LightningModule):
             graphs.batch,
         )
         pred: torch.Tensor = self(x, edge_index, edge_attr, batch)
-        loss = F.huber_loss(pred, target)
+        ape = (pred - target) / target  # absolute percentage error
+        zeros = torch.zeros_like(ape)
+        loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
         self.log(
             "train_huber",
@@ -100,7 +102,7 @@ class GNNePCSAFTL(L.LightningModule):
             batch_size=target.shape[0],
             sync_dist=True,
         )
-        return loss_mape
+        return loss
 
     def validation_step(  # pylint: disable=W0613,R0914
         self, graphs, batch_idx, dataloader_idx
