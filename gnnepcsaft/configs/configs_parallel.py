@@ -1,26 +1,43 @@
 """Module to get configs for model hyperparameters in parallel training"""
 
+from typing import Any
 
-def get_configs() -> list[dict]:
+
+def get_configs() -> list[dict[str, Any]]:
     """Get the hyperparameter configurations."""
     configs = [
         {
-            "model_name": "gnn_msigmae_1",
-            "model": "gnn",
-            "conv": "GATv2",
-            "propagation_depth": 7,
-            "hidden_dim": 256,
-            "heads": 2,
-        },
-        {
-            "model_name": "gnn_msigmae_2",
+            "model_name": "esper_msigmae_5.5",
             "model": "gnn",
             "conv": "PNA",
-            "propagation_depth": 5,
-            "hidden_dim": 256,
-            "post_layers": 3,
-            "pre_layers": 2,
-            "towers": 2,
+            "dropout": 0.0,
+            "propagation_depth": 6,
+            "hidden_dim": 128,
+            "post_layers": 1,
+            "pre_layers": 3,
+            "towers": 1,
+        },
+        {
+            "model_name": "esper_msigmae_5.6",
+            "model": "gnn",
+            "conv": "PNA",
+            "dropout": 0.1,
+            "propagation_depth": 6,
+            "hidden_dim": 128,
+            "post_layers": 1,
+            "pre_layers": 3,
+            "towers": 1,
+        },
+        {
+            "model_name": "esper_msigmae_5.7",
+            "model": "gnn",
+            "conv": "PNA",
+            "dropout": 0.25,
+            "propagation_depth": 6,
+            "hidden_dim": 128,
+            "post_layers": 1,
+            "pre_layers": 3,
+            "towers": 1,
         },
     ]
     return configs
