@@ -209,7 +209,7 @@ class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
             else:
                 x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
 
-        x = x.mean(dim=0, keepdim=True) if batch is None else self.global_pool(x, batch)
+        x = x.sum(dim=0, keepdim=True) if batch is None else self.global_pool(x, batch)
         x = self.mlp(x)
         return x
 
