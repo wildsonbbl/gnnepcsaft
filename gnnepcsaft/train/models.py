@@ -100,7 +100,7 @@ class GNNePCSAFTL(L.LightningModule):
             batch_size=target.shape[0],
             sync_dist=True,
         )
-        return loss
+        return loss_mape
 
     def validation_step(  # pylint: disable=W0613,R0914
         self, graphs, batch_idx, dataloader_idx
