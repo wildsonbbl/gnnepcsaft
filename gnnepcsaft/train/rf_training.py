@@ -20,15 +20,13 @@ def training(workdir: str, config: dict):
     """Training function"""
     # Load the data
     train_dataset = build_train_dataset(workdir, "esper")
-    val_dataset, train_val_dataset, _ = build_test_dataset(workdir, train_dataset)
+    test_dts = build_test_dataset(workdir, train_dataset)
     # Create the Dataloader
     train_loader = DataLoader(
         train_dataset, batch_size=len(train_dataset), shuffle=True
     )
-    val_loader = DataLoader(val_dataset, batch_size=len(val_dataset))
-    train_val_dataloader = DataLoader(
-        train_val_dataset, batch_size=len(train_val_dataset)
-    )
+    val_loader = DataLoader(test_dts[0], batch_size=len(test_dts[0]))
+    train_val_dataloader = DataLoader(test_dts[1], batch_size=len(test_dts[1]))
     # Create the XGBoost dataset
     for graphs_train in train_loader:
         x = torch.hstack(
@@ -39,8 +37,7 @@ def training(workdir: str, config: dict):
                 graphs_train.ring_count,
                 graphs_train.rbond_count,
             )
-        )
-        x = x.numpy()
+        ).numpy()
         y = graphs_train.para.numpy()
 
     rf_model = RandomForestRegressor(
