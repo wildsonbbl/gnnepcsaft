@@ -173,6 +173,7 @@ class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
         self.edge_embed = BondEncoder(config.hidden_dim)
         self.dropout = Dropout(p=config.dropout)
         self.global_pool = get_global_pool(config)
+        self.global_pool_type = config.global_pool
 
         for _ in range(config.propagation_depth):
             conv = get_conv(config)
@@ -211,7 +212,14 @@ class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
             else:
                 x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
 
-        x = x.sum(dim=0, keepdim=True) if batch is None else self.global_pool(x, batch)
+        if batch is not None:
+            x = self.global_pool(x, batch)
+        elif self.global_pool_type == "mean":
+            x = x.mean(dim=0, keepdim=True)
+        elif self.global_pool_type == "max":
+            x = x.max(dim=0, keepdim=True)
+        elif self.global_pool_type == "add":
+            x = x.sum(dim=0, keepdim=True)
         x = self.mlp(x)
         return x
 
