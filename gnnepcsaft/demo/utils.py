@@ -157,23 +157,7 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
         list_params = []
         for model in models:
             model.eval()
-            parameters = model.pred_with_bounds(graphs)
-            params = parameters.squeeze().to(torch.float64)
-            if params.size(0) == 2:
-                if inchi in es_para:
-                    munanb = es_para[inchi][2]
-                else:
-                    munanb = torch.tensor(
-                        (0,) + assoc_number(inchi), dtype=torch.float32
-                    )
-                msigmae = (
-                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-                )
-                params = torch.hstack(
-                    (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
-                )
-            elif params.size(0) == 3:
-                params = torch.hstack((params, torch.zeros(5)))
+            params = params_fn(model_msigmae, graphs, model)
             list_params.append(params.numpy().round(decimals=4))
         if inchi in es_para:
             list_params.append(np.hstack(es_para[inchi]).round(decimals=4)[0])
@@ -186,6 +170,26 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
             pass
 
     return list_params
+
+
+def params_fn(model_msigmae, graphs, model):
+    "fn to organize params"
+    params = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+    if graphs.InChI in es_para:
+        assoc = es_para[graphs.InChI][1][0]
+        munanb = es_para[graphs.InChI][2][0]
+    else:
+        assoc = torch.zeros(2)
+        munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
+
+    if params.size(0) == 2:
+        msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+        params = torch.hstack(
+            (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
+        )
+    elif params.size(0) == 3:
+        params = torch.hstack((params, assoc, munanb))
+    return params
 
 
 def pred_rhovp(inchi, list_params, rho, vp):
@@ -266,27 +270,8 @@ def model_para_fn(model: GNNePCSAFT, model_msigmae: GNNePCSAFT):
     with torch.no_grad():
         for graphs in tml_loader:
             graphs = graphs.to(device)
-            parameters = model.pred_with_bounds(graphs)
-            params = parameters.squeeze().to(torch.float64)
-            if params.size(0) == 2:
-                if graphs.InChI in es_para:
-                    munanb = es_para[graphs.InChI][2]
-                else:
-                    munanb = torch.tensor(
-                        (0,) + assoc_number(graphs.InChI), dtype=torch.float32
-                    )
-                msigmae = (
-                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-                )
-                params = torch.hstack(
-                    (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
-                )
-            elif params.size(0) == 3:
-                params = torch.hstack((params, torch.zeros(5)))
-            params = params.numpy()
-            rho = graphs.rho
-            vp = graphs.vp
-            mden_array, mvp_array = mape(params, rho, vp, False)
+            params = params_fn(model_msigmae, graphs, model)
+            mden_array, mvp_array = mape(params.numpy(), graphs.rho, graphs.vp, False)
             mden, mvp = mden_array.mean(), mvp_array.mean()
             parameters = parameters.tolist()[0]
             model_para[graphs.InChI] = (parameters, mden, mvp)
