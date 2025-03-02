@@ -20,12 +20,15 @@ def training(workdir: str, config: dict):
     """Training function"""
     # Load the data
     train_dataset = build_train_dataset(workdir, "esper")
-    val_dataset, _, _ = build_test_dataset(workdir, train_dataset)
+    val_dataset, train_val_dataset, _ = build_test_dataset(workdir, train_dataset)
     # Create the Dataloader
     train_loader = DataLoader(
         train_dataset, batch_size=len(train_dataset), shuffle=True
     )
-    val_loader = DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=len(val_dataset))
+    train_val_dataloader = DataLoader(
+        train_val_dataset, batch_size=len(train_val_dataset)
+    )
     # Create the XGBoost dataset
     for graphs_train in train_loader:
         x = torch.hstack(
@@ -40,36 +43,40 @@ def training(workdir: str, config: dict):
         x = x.numpy()
         y = graphs_train.para.numpy()
 
-        rf_model = RandomForestRegressor(
-            criterion="squared_error",
-            n_estimators=config["n_estimators"],
-            max_depth=config["max_depth"],
-            min_samples_split=2,
-            min_samples_leaf=1,
-            max_features=config["max_features"],
-            bootstrap=True,
-            oob_score=True,
-        )
+    rf_model = RandomForestRegressor(
+        criterion="squared_error",
+        n_estimators=config["n_estimators"],
+        max_depth=config["max_depth"],
+        min_samples_split=2,
+        min_samples_leaf=1,
+        max_features=config["max_features"],
+        bootstrap=True,
+        oob_score=True,
+    )
 
-        rf_model.fit(x, y)
+    rf_model.fit(x, y)
 
-        para_pred = rf_model.predict(x)
+    para_pred = rf_model.predict(x)
 
-        para_pred_mape = np.mean(np.abs(para_pred - y) / y)
+    para_pred_mape = np.mean(np.abs(para_pred - y) / y)
 
-        print(f"Train-mape: {para_pred_mape.item()}")
-        # evaluate on validation set
-        mape_den, mape_vp = evaluation(val_loader, rf_model)
+    print(f"Train-mape: {para_pred_mape.item()}")
+    # evaluate on validation set
+    mape_den, mape_vp = evaluation(val_loader, rf_model)
 
-        print(f"MAPE den: {mape_den}, MAPE vp: {mape_vp}")
+    print(f"MAPE den/val: {mape_den}, MAPE vp/val: {mape_vp}")
 
-        # save model
-        joblib.dump(
-            rf_model,
-            os.path.join(workdir, "train/checkpoints/rf_model.joblib"),
-            compress=3,
-        )
-        return mape_den, mape_vp
+    mape_den, mape_vp = evaluation(train_val_dataloader, rf_model)
+
+    print(f"MAPE den/train_val: {mape_den}, MAPE vp/train_val: {mape_vp}")
+
+    # save model
+    joblib.dump(
+        rf_model,
+        os.path.join(workdir, "train/checkpoints/rf_model.joblib"),
+        compress=3,
+    )
+    return mape_den, mape_vp
 
 
 def evaluation(val_loader: DataLoader, rf_model: RandomForestRegressor):

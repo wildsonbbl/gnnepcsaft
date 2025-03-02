@@ -19,12 +19,15 @@ def training(workdir: str, config: dict):
     """Training function"""
     # Load the data
     train_dataset = build_train_dataset(workdir, "esper")
-    val_dataset, _, _ = build_test_dataset(workdir, train_dataset)
+    val_dataset, train_val_dataset, _ = build_test_dataset(workdir, train_dataset)
     # Create the Dataloader
     train_loader = DataLoader(
         train_dataset, batch_size=len(train_dataset), shuffle=True
     )
-    val_loader = DataLoader(val_dataset, batch_size=len(val_dataset), shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=len(val_dataset))
+    train_val_dataloader = DataLoader(
+        train_val_dataset, batch_size=len(train_val_dataset)
+    )
     # Create the XGBoost dataset
     for graphs_train in train_loader:
         train_dmatrix = xgb.DMatrix(
@@ -40,38 +43,42 @@ def training(workdir: str, config: dict):
             label=graphs_train.para.numpy(),
         )
 
-        xgb_param = {
-            "booster": "gblinear",
-            "objective": "reg:squaredlogerror",
-            "eval_metric": ["mape", "rmsle"],
-            "device": "cuda",
-            "lambda": config["lambda"],
-            "alpha": config["alpha"],
-            "eta": config["eta"],
-        }
-        # Train the model
-        results = {}
-        xgb_model = xgb.train(
-            xgb_param,
-            train_dmatrix,
-            num_boost_round=config["num_boost_round"],
-            evals=[(train_dmatrix, "train")],
-            evals_result=results,
-            verbose_eval=False,
-        )
+    xgb_param = {
+        "booster": "gblinear",
+        "objective": "reg:squaredlogerror",
+        "eval_metric": ["mape", "rmsle"],
+        "device": "cuda",
+        "lambda": config["lambda"],
+        "alpha": config["alpha"],
+        "eta": config["eta"],
+    }
+    # Train the model
+    results = {}
+    xgb_model = xgb.train(
+        xgb_param,
+        train_dmatrix,
+        num_boost_round=config["num_boost_round"],
+        evals=[(train_dmatrix, "train")],
+        evals_result=results,
+        verbose_eval=False,
+    )
 
-        print(
-            f"Train-mape: {results['train']['mape'][-1]} "
-            f"|| Train-rmsle: {results['train']['rmsle'][-1]}"
-        )
-        # evaluate on validation set
-        mape_den, mape_vp = evaluation(val_loader, xgb_model)
+    print(
+        f"Train-mape: {results['train']['mape'][-1]} "
+        f"|| Train-rmsle: {results['train']['rmsle'][-1]}"
+    )
+    # evaluate on validation set
+    mape_den, mape_vp = evaluation(val_loader, xgb_model)
 
-        print(f"MAPE den: {mape_den}, MAPE vp: {mape_vp}")
+    print(f"MAPE den/val: {mape_den}, MAPE vp/val: {mape_vp}")
 
-        # save model
-        xgb_model.save_model(os.path.join(workdir, "train/checkpoints/xgb_model.json"))
-        return mape_den, mape_vp
+    mape_den, mape_vp = evaluation(train_val_dataloader, xgb_model)
+
+    print(f"MAPE den/train_val: {mape_den}, MAPE vp/train_val: {mape_vp}")
+
+    # save model
+    xgb_model.save_model(os.path.join(workdir, "train/checkpoints/xgb_model.json"))
+    return mape_den, mape_vp
 
 
 def evaluation(val_loader, xgb_model):
