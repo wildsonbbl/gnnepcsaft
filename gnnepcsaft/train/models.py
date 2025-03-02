@@ -353,7 +353,9 @@ class HabitchNNL(L.LightningModule):
         x = torch.hstack((ecfp, mw, atom_count, ring_count, rbonds_count))
 
         pred: torch.Tensor = self(x)
-        loss = F.huber_loss(pred, target)
+        ape = (pred - target) / target  # absolute percentage error
+        zeros = torch.zeros_like(ape)
+        loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
         self.log(
             "train_huber",
@@ -375,11 +377,12 @@ class HabitchNNL(L.LightningModule):
         self, graphs, batch_idx, dataloader_idx
     ) -> STEP_OUTPUT:
         metrics_dict = {}
-        pred_para: torch.Tensor = self.model.pred_with_bounds(graphs).squeeze().detach()
-        para_assoc = 10 ** (
-            graphs.assoc * torch.tensor([-1.0, 1.0], device=pred_para.device)
+        para_msigmae: torch.Tensor = (
+            self.model.pred_with_bounds(graphs).squeeze().detach()
         )
-        para_msigmae = pred_para
+        para_assoc = 10 ** (
+            graphs.assoc * torch.tensor([-1.0, 1.0], device=para_msigmae.device)
+        )
         pred_para = (
             torch.hstack([para_msigmae, para_assoc, graphs.munanb])
             .cpu()
