@@ -27,8 +27,8 @@ def get_config():
     config.eval_every_steps = 5000
     config.dataset = "esper"
     config.checkpoint = ""
-    config.model = "gnn"
-    config.model_name = "esper_msigmae_5.4"
+    config.model = "habitch"
+    config.model_name = "habitch_msigmae_1"
 
     # GNN hyperparameters.
     ## General
