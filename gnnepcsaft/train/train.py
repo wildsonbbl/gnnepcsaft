@@ -18,6 +18,7 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.train import Checkpoint
 from ray.train.lightning import RayDDPStrategy, RayLightningEnvironment, prepare_trainer
 from ray.train.torch import TorchTrainer
+from ray.tune import RunConfig
 from torch_geometric.loader import DataLoader
 
 from ..configs.configs_parallel import get_configs
@@ -253,8 +254,6 @@ def torch_trainer_config(
     num_workers: int,
     num_cpu: float,
     num_gpus: float,
-    num_cpu_trainer: float,
-    verbose: int,
     config: ml_collections.ConfigDict,
     tags: list,
 ):
@@ -265,12 +264,10 @@ def torch_trainer_config(
         num_workers=num_workers,
         use_gpu=True,
         resources_per_worker={"CPU": num_cpu, "GPU": num_gpus},
-        trainer_resources={"CPU": num_cpu_trainer},
     )
-    run_config = train.RunConfig(
+    run_config = RunConfig(
         name="gnnpcsaft",
         storage_path=None,
-        verbose=verbose,
         checkpoint_config=train.CheckpointConfig(
             num_to_keep=1,
         ),
@@ -302,11 +299,7 @@ flags.DEFINE_string(
 flags.DEFINE_list("tags", [], "wandb tags")
 flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial for ray")
 flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial for ray")
-flags.DEFINE_float(
-    "num_cpu_trainer", 1.0, "Fraction of CPUs for trainer resources for ray"
-)
 flags.DEFINE_integer("num_workers", 1, "Number of workers for ray")
-flags.DEFINE_integer("verbose", 0, "Ray train verbose")
 config_flags.DEFINE_config_file(
     "config",
     None,
@@ -335,8 +328,6 @@ def main(argv):
             FLAGS.num_workers,
             FLAGS.num_cpu,
             FLAGS.num_gpus,
-            FLAGS.num_cpu_trainer,
-            FLAGS.verbose,
             FLAGS.config,
             FLAGS.tags,
         )
