@@ -1,5 +1,6 @@
 """Model with important functions to help model training"""
 
+import multiprocessing as mp
 import os.path as osp
 import time
 from tempfile import TemporaryDirectory
@@ -15,17 +16,15 @@ from lightning.pytorch.callbacks import Callback
 from ray import train
 from ray.train import Checkpoint
 from torch.utils.data import ConcatDataset
-from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
 from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
-from . import models
 
 
-def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
+def calc_deg(dataset: str, workdir: str) -> list:
     """Calculates deg for `PNAPCSAFT` model."""
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -48,36 +47,7 @@ def calc_deg(dataset: str, workdir: str) -> torch.Tensor:
     for data in train_dataset:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
-    return deg
-
-
-def create_model(
-    config: ml_collections.ConfigDict, deg: torch.Tensor
-) -> torch.nn.Module:
-    """Creates a model, as specified by the config."""
-
-    pna_params = models.PnaconvsParams(
-        propagation_depth=config.propagation_depth,
-        pre_layers=config.pre_layers,
-        post_layers=config.post_layers,
-        deg=deg,
-        dropout=config.dropout_rate,
-        self_loops=config.add_self_loops,
-    )
-
-    if config.model == "PNA":
-        return models.PNAPCSAFT(
-            hidden_dim=config.hidden_dim,
-            pna_params=pna_params,
-            num_para=config.num_para,
-        )
-    if config.model == "PNAL":
-        return models.PNApcsaftL(
-            pna_params=pna_params,
-            config=config,
-        )
-
-    raise ValueError(f"Unsupported model: {config.model}.")
+    return deg.tolist()
 
 
 def create_optimizer(config: ml_collections.ConfigDict, params):
@@ -122,15 +92,15 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
 
     """
     parameters = np.abs(parameters)
-    pred_mape = [0.0]
-    if rho.shape[0] > 0:
+    pred_mape = [np.nan]
+    if rho.shape[0] > 2:
         pred_mape = []
         for state in rho:
             try:
                 den = pure_den_feos(parameters, state)
                 mape_den = np.abs((state[-1] - den) / state[-1])
             except RuntimeError:
-                continue
+                mape_den = 1.0
             # if mape_den > 1:  # against algorithm fail
             #     continue
             pred_mape += [mape_den]
@@ -139,15 +109,15 @@ def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = T
     if mean:
         den = den.mean()
 
-    pred_mape = [0.0]
-    if vp.shape[0] > 0:
+    pred_mape = [np.nan]
+    if vp.shape[0] > 2:
         pred_mape = []
         for state in vp:
             try:
                 vp_pred = pure_vp_feos(parameters, state)
                 mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
             except (AssertionError, RuntimeError):
-                continue
+                mape_vp = 1.0
             # if mape_vp > 1:  # against algorithm fail
             #     continue
             pred_mape += [mape_vp]
@@ -163,30 +133,22 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
     parameters = np.abs(parameters)
     den = []
-    if rho.shape[0] > 0:
-        for state in rho:
+    for state in rho:
+        try:
             den += [pure_den_feos(parameters, state)]
+        except (AssertionError, RuntimeError):
+            den += [0.0]
     den = np.asarray(den)
 
     vpl = []
-    if vp.shape[0] > 0:
-        for state in vp:
-            try:
-                vpl += [pure_vp_feos(parameters, state)]
-            except (AssertionError, RuntimeError):
-                vpl += [np.nan]
+    for state in vp:
+        try:
+            vpl += [pure_vp_feos(parameters, state)]
+        except (AssertionError, RuntimeError):
+            vpl += [0.0]
     vp = np.asarray(vpl)
 
     return den, vp
-
-
-def build_datasets_loaders(config, workdir, dataset):
-    "Builds train and test dataset loader."
-    train_dataset = build_train_dataset(workdir, dataset)
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-
-    test_loader, para_data = build_test_dataset(workdir, train_dataset)
-    return train_loader, test_loader, para_data
 
 
 # pylint: disable=R0903
@@ -202,11 +164,11 @@ class TransformParameters(BaseTransform):
             data.para, data.assoc, data.munanb = self.para_data[data.InChI]
         else:
             data.para, data.assoc = (
-                torch.zeros(3),
-                torch.zeros(2),
+                torch.zeros(1, 3),
+                torch.zeros(1, 2),
             )
             data.munanb = torch.tensor(
-                (0,) + assoc_number(data.InChI), dtype=torch.float32
+                [(0,) + assoc_number(data.InChI)], dtype=torch.float32
             )
         return data
 
@@ -238,13 +200,11 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     para_data = {}
     if isinstance(train_dataset, (Esper, ConcatDataset)):
         for graph in train_dataset:
-            inchi, para, assoc, munanb = (
-                graph.InChI,
+            para_data[graph.InChI] = (
                 graph.para,
                 graph.assoc,
                 graph.munanb,
             )
-            para_data[inchi] = (para, assoc, munanb)
     if transform:
         transform = T.Compose([TransformParameters(para_data), transform])
     else:
@@ -252,17 +212,21 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     tml_dataset = ThermoMLDataset(
         osp.join(workdir, "data/thermoml"), transform=transform
     )
-    test_idx = []
+    val_assoc_idx = []
     val_idx = []
+    train_idx = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
-        if graph.InChI in para_data:
+        if graph.InChI not in para_data and graph.munanb[0, -1] == 0:
             val_idx.append(idx)
-        elif graph.munanb[-1] == 0:
-            test_idx.append(idx)
-    test_dataset = tml_dataset[test_idx]
+        if graph.InChI in para_data and graph.munanb[0, -1] > 0:
+            val_assoc_idx.append(idx)
+        if graph.InChI in para_data and graph.munanb[0, -1] == 0:
+            train_idx.append(idx)
+    val_assoc_dataset = tml_dataset[val_assoc_idx]
     val_dataset = tml_dataset[val_idx]
-    return val_dataset, test_dataset
+    train_val_dataset = tml_dataset[train_idx]
+    return val_dataset, train_val_dataset, val_assoc_dataset
 
 
 def build_train_dataset(workdir, dataset, transform=None):
@@ -393,3 +357,80 @@ class CustomRayTrainReportCallback(Callback):
 
             # Report to train session
             train.report(metrics=metrics, checkpoint=checkpoint)
+
+
+def density(parameters: np.ndarray, state: np.ndarray):
+    """Calculates density  with ePC-SAFT"""
+
+    try:
+        den = pure_den_feos(parameters, state)
+    except (AssertionError, RuntimeError):
+        den = 0.0
+
+    return den
+
+
+def vaporpressure(parameters: np.ndarray, state: np.ndarray):
+    """Calculates vapor pressure with ePC-SAFT"""
+    try:
+        vp = pure_vp_feos(parameters, state)
+    except (AssertionError, RuntimeError):
+        vp = 0.0
+
+    return vp
+
+
+def rho_mp(args):
+    "Calculates rho with multiprocessing"
+    parameters, state = args
+    return density(parameters, state)
+
+
+def vp_mp(args):
+    "Calculates vp with multiprocessing"
+    parameters, state = args
+    return vaporpressure(parameters, state)
+
+
+def rho_single(args):
+    """Calculates density  with ePC-SAFT"""
+    parameters, states = args
+    den = []
+    for state in states:
+        den += [rho_mp((parameters, state))]
+    return np.asarray(den)
+
+
+def rho_batch(parameters_batch, states_batch):
+    """Calculates density  with ePC-SAFT"""
+    args_list = [
+        (para, states)
+        for para, states in zip(parameters_batch, states_batch)
+        if states.shape[0] > 0
+    ]
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=ctx.cpu_count() // 2) as pool:
+        den = pool.map(rho_single, args_list)
+    return den
+
+
+def vp_sigle(args):
+    """Calculates vapor pressure with ePC-SAFT using nested multiprocessing"""
+    parameters, states = args
+    vp = []
+    for state in states:
+        vp += [vp_mp((parameters, state))]
+    return np.asarray(vp)
+
+
+def vp_batch(parameters_batch, states_batch):
+    """Calculates vapor pressure with ePC-SAFT in batch mode using nested multiprocessing"""
+    args_list = [
+        (para, states)
+        for para, states in zip(parameters_batch, states_batch)
+        if states.shape[0] > 0
+    ]
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=ctx.cpu_count() // 2) as pool:
+        vp = pool.map(vp_sigle, args_list)
+    return vp

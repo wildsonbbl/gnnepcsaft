@@ -6,23 +6,6 @@ from urllib.request import HTTPError, urlopen
 
 import polars as pl
 from absl import app, flags, logging
-from rdkit import Chem, RDLogger
-
-# pylint: disable = no-name-in-module
-from rdkit.Chem.rdMolDescriptors import CalcExactMolWt
-
-RDLogger.DisableLog("rdApp.*")
-
-
-def mw(inchi: str) -> float:
-    "Calcultes molecular weight."
-    try:
-        mol = Chem.MolFromInchi(inchi, removeHs=False, sanitize=False)
-        mol_weight = CalcExactMolWt(mol)
-    except (TypeError, ValueError):
-        mol_weight = 0
-
-    return mol_weight
 
 
 def ramirez(root: str, save_dir: str):

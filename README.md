@@ -20,11 +20,10 @@ Checkpoints can be found at [Hugging Face](https://huggingface.co/wildsonbbl/gnn
 
 Use cases of this package are demonstrated in Jupyter Notebooks:
 
-- `compare.ipynb`: comparison of the performance between two or more trained models
-- `demo.ipynb`: pt-br demonstration of the models capabilities
-- `moleculargraphs.ipynb`: code to build all datasets used
-- `training.ipynb`: Code for model training
-- `tuning.ipynb`: code for hyperparameter tuning
+- `compare.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/compare.ipynb)): comparison of the performance between two or more trained models
+- `demo.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/demo.ipynb)): pt-br demonstration of models capabilities
+- `training.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/training.ipynb)): notebook for model training
+- `tuning.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/training.ipynb)): notebook for hyperparameter tuning
 
 ---
 

@@ -88,7 +88,10 @@ def main(argv):
     max_t = config.num_train_steps // config.eval_every_steps
     # BOHB search algorithm
     search_alg = TuneBOHB(
-        metric="mape_den", mode="min", seed=77, max_concurrent=FLAGS.max_concurrent
+        metric="mape_den/dataloader_idx_0",
+        mode="min",
+        seed=77,
+        max_concurrent=FLAGS.max_concurrent,
     )
     search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
     if FLAGS.restoredir:
@@ -96,7 +99,7 @@ def main(argv):
         search_space = None
     # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
-        metric="mape_den",
+        metric="mape_den/dataloader_idx_0",
         mode="min",
         max_t=max_t,
         stop_last_trials=True,
@@ -109,8 +112,6 @@ def main(argv):
         FLAGS.num_workers,
         FLAGS.num_cpu,
         FLAGS.num_gpus,
-        FLAGS.num_cpu_trainer,
-        FLAGS.verbose,
         FLAGS.config,
         FLAGS.tags,
     )
@@ -136,9 +137,7 @@ def main(argv):
     else:
         tuner = tune.Tuner(
             trainable,
-            param_space={
-                "train_loop_config": search_space,
-            },
+            param_space={"train_loop_config": search_space},
             tune_config=tune.TuneConfig(
                 search_alg=search_alg,
                 scheduler=scheduler,
@@ -149,26 +148,9 @@ def main(argv):
         )
 
     if FLAGS.get_result:
-        result = tuner.get_results()
+        tuner.get_results()
     else:
-        result = tuner.fit()
-
-    best_trial = result.get_best_result(
-        metric="mape_den",
-        mode="min",
-    )
-    best_trials = result.get_dataframe("mape_den", "min").sort_values("mape_den")
-    best_trials = best_trials[
-        [
-            "mape_den",
-            "train_mape",
-            "trial_id",
-            "training_iteration",
-        ]
-    ]
-    print(f"\nBest trial config:\n {best_trial.config}")
-    print(f"\nBest trial final metrics:\n {best_trial.metrics}")
-    print(f"\nBest trials final metrics:\n {best_trials.head(10)}")
+        tuner.fit()
 
 
 if __name__ == "__main__":

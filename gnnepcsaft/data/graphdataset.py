@@ -6,7 +6,7 @@ from torch.utils.data import Dataset as ds
 from torch_geometric.data import Data, InMemoryDataset
 
 from .graph import from_InChI
-from .preprocess import mw
+from .rdkit_util import mw
 
 
 class ThermoMLDataset(InMemoryDataset):
@@ -41,8 +41,6 @@ class ThermoMLDataset(InMemoryDataset):
         pre_transform=None,
         pre_filter=None,
     ):
-        self.dtype = torch.float64
-
         super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
 
@@ -69,7 +67,6 @@ class ThermoMLDataset(InMemoryDataset):
         for inchi in inchis:
             try:
                 graph = from_InChI(inchi)
-                graph.mw = mw(inchi)
             except (TypeError, ValueError) as e:
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
@@ -77,15 +74,16 @@ class ThermoMLDataset(InMemoryDataset):
             graph.vp = (
                 data.filter(pl.col("inchi1") == inchi, pl.col("tp") == 3)
                 .select("TK", "PPa", "phase", "tp", "m")
-                .to_torch()
+                .to_numpy()
             )
-            graph.rho = (
+            rho = (
                 data.filter(pl.col("inchi1") == inchi, pl.col("tp") == 1)
                 .select("TK", "PPa", "phase", "tp", "m")
-                .to_torch()
+                .to_numpy()
             )
 
-            graph.rho[:, -1] *= 1000 / graph.mw  # convert to mol/ m³
+            rho[:, -1] *= 1000 / mw(inchi)  # convert to mol/ m³
+            graph.rho = rho
 
             datalist.append(graph)
 
@@ -253,6 +251,7 @@ class Esper(InMemoryDataset):
 
     def process(self):
         datalist = []
+        dtype = torch.float32
         data = pl.read_csv(self.raw_paths[0], separator="	")
 
         for row in data.iter_rows():
@@ -267,9 +266,9 @@ class Esper(InMemoryDataset):
                 print(f"Error for InChI:\n {inchi}", e, sep="\n\n", end="\n\n")
                 continue
 
-            graph.para = torch.tensor(para, dtype=torch.float64)
-            graph.assoc = torch.tensor(assoc, dtype=torch.float64).log10().abs()
-            graph.munanb = torch.tensor(munanb, dtype=torch.float64)
+            graph.para = torch.tensor([para], dtype=dtype)
+            graph.assoc = torch.tensor([assoc], dtype=dtype).log10().abs()
+            graph.munanb = torch.tensor([munanb], dtype=dtype)
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])

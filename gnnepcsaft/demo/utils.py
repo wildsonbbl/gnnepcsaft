@@ -10,17 +10,17 @@ import numpy as np
 import seaborn as sns
 import torch
 from rdkit import Chem
+from torch.export.dynamic_shapes import Dim
 
 from ..configs.default import get_config
 from ..data.graph import assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import parameters_gc_pcsaft
-from ..train.models import PNAPCSAFT, PNApcsaftL
+from ..train.models import GNNePCSAFT, GNNePCSAFTL
 from ..train.utils import mape, rhovp_data
 
 sns.set_theme(style="ticks")
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
 markers = itertools.cycle(("o", "v", "^", "<", ">", "*", "s", "p", "P", "D"))
 
 config = get_config()
@@ -50,10 +50,10 @@ for graph in es_loader:
 device = torch.device("cpu")
 
 
-def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
+def loadckp(ckp_path: str, model: Union[GNNePCSAFT, GNNePCSAFTL]):
     """Loads save checkpoint."""
     if osp.exists(ckp_path):
-        state = "model_state_dict" if isinstance(model, PNAPCSAFT) else "state_dict"
+        state = "model_state_dict" if isinstance(model, GNNePCSAFT) else "state_dict"
         checkpoint = torch.load(
             ckp_path, map_location=torch.device("cpu"), weights_only=False
         )
@@ -62,7 +62,7 @@ def loadckp(ckp_path: str, model: Union[PNAPCSAFT, PNApcsaftL]):
 
 
 def plotdata(
-    inchi: str, molecule_name: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT
+    inchi: str, molecule_name: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT
 ):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
@@ -79,8 +79,8 @@ def plotdata(
         return
     list_params = predparams(inchi, models, model_msigmae)
 
-    rho = gh.rho.view(-1, 5).to(torch.float64).numpy()
-    vp = gh.vp.view(-1, 5).to(torch.float64).numpy()
+    rho = gh.rho
+    vp = gh.vp
 
     pred_den_list, pred_vp_list = pred_rhovp(inchi, list_params, rho, vp)
 
@@ -149,7 +149,7 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def predparams(inchi: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT):
+def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
         gh = from_InChI(inchi)
@@ -157,26 +157,10 @@ def predparams(inchi: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT):
         list_params = []
         for model in models:
             model.eval()
-            parameters = model.pred_with_bounds(graphs)
-            params = parameters.squeeze().to(torch.float64)
-            if params.size(0) == 2:
-                if inchi in es_para:
-                    munanb = es_para[inchi][2]
-                else:
-                    munanb = torch.tensor(
-                        (0,) + assoc_number(inchi), dtype=torch.float32
-                    )
-                msigmae = (
-                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-                )
-                params = torch.hstack(
-                    (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
-                )
-            elif params.size(0) == 3:
-                params = torch.hstack((params, torch.zeros(5)))
+            params = params_fn(model_msigmae, graphs, model)
             list_params.append(params.numpy().round(decimals=4))
         if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).round(decimals=4))
+            list_params.append(np.hstack(es_para[inchi]).round(decimals=4)[0])
         try:
             list_params.append(
                 np.asarray(parameters_gc_pcsaft(gh.smiles)).round(decimals=4)
@@ -186,6 +170,26 @@ def predparams(inchi: str, models: list[PNAPCSAFT], model_msigmae: PNAPCSAFT):
             pass
 
     return list_params
+
+
+def params_fn(model_msigmae, graphs, model):
+    "fn to organize params"
+    params = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+    if graphs.InChI in es_para:
+        assoc = es_para[graphs.InChI][1][0]
+        munanb = es_para[graphs.InChI][2][0]
+    else:
+        assoc = torch.zeros(2)
+        munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
+
+    if params.size(0) == 2:
+        msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+        params = torch.hstack(
+            (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
+        )
+    elif params.size(0) == 3:
+        params = torch.hstack((params, assoc, munanb))
+    return params
 
 
 def pred_rhovp(inchi, list_params, rho, vp):
@@ -256,7 +260,7 @@ def plotvp(inchi, molecule_name, models, data):
         plt.show()
 
 
-def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
+def model_para_fn(model: GNNePCSAFT, model_msigmae: GNNePCSAFT):
     """Calculates density and/or vapor pressure mean absolute percentage error
     between ThermoML Archive experimental data and predicted data with ePC-SAFT
     using the model estimated parameters."""
@@ -266,27 +270,8 @@ def model_para_fn(model: PNAPCSAFT, model_msigmae: PNAPCSAFT):
     with torch.no_grad():
         for graphs in tml_loader:
             graphs = graphs.to(device)
-            parameters = model.pred_with_bounds(graphs)
-            params = parameters.squeeze().to(torch.float64)
-            if params.size(0) == 2:
-                if graphs.InChI in es_para:
-                    munanb = es_para[graphs.InChI][2]
-                else:
-                    munanb = torch.tensor(
-                        (0,) + assoc_number(graphs.InChI), dtype=torch.float32
-                    )
-                msigmae = (
-                    model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-                )
-                params = torch.hstack(
-                    (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
-                )
-            elif params.size(0) == 3:
-                params = torch.hstack((params, torch.zeros(5)))
-            params = params.numpy()
-            rho = graphs.rho.view(-1, 5).to(torch.float64).numpy()
-            vp = graphs.vp.view(-1, 5).to(torch.float64).numpy()
-            mden_array, mvp_array = mape(params, rho, vp, False)
+            params = params_fn(model_msigmae, graphs, model)
+            mden_array, mvp_array = mape(params.numpy(), graphs.rho, graphs.vp, False)
             mden, mvp = mden_array.mean(), mvp_array.mean()
             parameters = parameters.tolist()[0]
             model_para[graphs.InChI] = (parameters, mden, mvp)
@@ -318,7 +303,7 @@ def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def plotparams(smiles: list[str], models: list[PNAPCSAFT], xlabel: str = "CnHn+2"):
+def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+2"):
     """
     For plotting te behaviour between parameters and chain length.
     """
@@ -355,7 +340,7 @@ def plotparams(smiles: list[str], models: list[PNAPCSAFT], xlabel: str = "CnHn+2
     plt.show()
 
 
-def predparams2(smiles, models):
+def predparams2(smiles: str, models: list[GNNePCSAFT]):
     "Use models to predict ePC-SAFT parameters from smiles."
     list_array_params = []
     for model in models:
@@ -365,9 +350,39 @@ def predparams2(smiles, models):
             for smile in smiles:
                 graphs = from_smiles(smile)
                 graphs = graphs.to(device)
-                parameters = model(graphs)
+                parameters = model.pred_with_bounds(graphs)
                 params = parameters.squeeze().to(torch.float64).numpy()
                 list_params.append(params)
         array_params = np.asarray(list_params)
         list_array_params.append(array_params)
     return list_array_params
+
+
+def save_exported_program(
+    model: torch.nn.Module, example_input: tuple, path: str
+) -> torch.export.ExportedProgram:
+    """Save model as Exported Program."""
+    model.eval()
+    dynamic_shapes = {
+        "x": (Dim.AUTO, 9),
+        "edge_index": (2, Dim.AUTO),
+        "edge_attr": (Dim.AUTO, 3),
+        "batch": None,
+    }
+
+    exportedprogram = torch.export.export(
+        model,
+        example_input,
+        dynamic_shapes=dynamic_shapes,
+    )
+
+    torch.onnx.export(
+        exportedprogram,
+        example_input,
+        path,
+        verbose=True,
+        external_data=False,
+        optimize=True,
+        verify=True,
+    )
+    return exportedprogram

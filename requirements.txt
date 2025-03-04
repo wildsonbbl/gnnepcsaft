@@ -9,14 +9,13 @@ ogb
 polars
 rdkit
 scipy
-torch
 torch_geometric
 torchmetrics
 wandb
 lightning
 dvc-gs
-hpbandster
 ConfigSpace
+hpbandster
 ray[train]
 ray[tune]
 wheel
@@ -24,3 +23,7 @@ teqp
 PCSAFTsuperanc
 feos
 si-units
+xgboost
+onnx
+onnxscript
+onnxruntime
