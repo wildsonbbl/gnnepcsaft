@@ -8,7 +8,6 @@ import torch
 from absl import app, flags, logging
 from ray import tune
 from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.tune.experiment.trial import Trial
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
@@ -19,38 +18,6 @@ from .train import training_updated
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
 # os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
-
-
-class TrialTerminationReporter(tune.JupyterNotebookReporter):
-    """Reporter for ray to report only when trial is terminated"""
-
-    def __init__(self):
-        super().__init__()
-        self.num_terminated = 0
-
-    def should_report(self, trials, done=False):
-        """
-        Reports only on trial termination events.
-        It does so by tracking increase in number of trials terminated.
-        """
-        old_num_terminated = self.num_terminated
-        self.num_terminated = len([t for t in trials if t.status == Trial.TERMINATED])
-        return self.num_terminated > old_num_terminated
-
-
-class CustomStopper(tune.Stopper):
-    """Custom experiment/trial stopper"""
-
-    def __init__(self, max_iter: int):
-        self.should_stop = False
-        self.max_iter = max_iter
-
-    def __call__(self, trial_id, result):
-        return result["training_iteration"] >= self.max_iter
-
-    def stop_all(self):
-        return False
-
 
 FLAGS = flags.FLAGS
 
@@ -136,6 +103,8 @@ def main(argv):
                 num_samples=FLAGS.num_samples,
                 time_budget_s=FLAGS.time_budget_s,
                 reuse_actors=False,
+                trial_name_creator=lambda trial: trial.trial_id,
+                trial_dirname_creator=lambda trial: trial.trial_id,
             ),
             run_config=tune.RunConfig(
                 name="gnnpcsaft",
