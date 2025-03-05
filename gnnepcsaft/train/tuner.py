@@ -61,7 +61,6 @@ def main(argv):
     search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
-        search_space = None
     # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
         time_attr="training_iteration",
