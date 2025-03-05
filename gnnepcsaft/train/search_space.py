@@ -17,9 +17,11 @@ def get_search_space() -> CS.ConfigurationSpace:
     g = CS.Integer("post_layers", (1, 3))
     h = CS.Integer("pre_layers", (1, 3))
     i = CS.Categorical("towers", [1, 2, 4])
-    cond_i = CS.EqualsCondition(i, e, "PNA")
     cond_f = CS.EqualsCondition(f, e, "GATv2")
+    cond_g = CS.EqualsCondition(g, e, "PNA")
+    cond_h = CS.EqualsCondition(h, e, "PNA")
+    cond_i = CS.EqualsCondition(i, e, "PNA")
     search_space.add([a, b, c, d, e, f, g, h, i])
-    search_space.add([cond_i, cond_f])
+    search_space.add([cond_f, cond_g, cond_h, cond_i])
 
     return search_space
