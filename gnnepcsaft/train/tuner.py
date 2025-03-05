@@ -114,8 +114,8 @@ def main(argv):
             workdir=FLAGS.workdir,
         ),
         resources={
-            "CPU": config.num_cpu,
-            "GPU": config.num_gpus,
+            "CPU": FLAGS.num_cpu,
+            "GPU": FLAGS.num_gpus,
         },
     )
 
