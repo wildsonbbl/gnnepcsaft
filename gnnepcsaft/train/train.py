@@ -13,12 +13,8 @@ from absl import app, flags, logging
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from ml_collections import config_flags
-from ray import train
-from ray.air.integrations.wandb import WandbLoggerCallback
-from ray.train import Checkpoint
-from ray.train.lightning import RayDDPStrategy, RayLightningEnvironment, prepare_trainer
+from ray import train, tune
 from ray.train.torch import TorchTrainer
-from ray.tune import RunConfig
 from torch_geometric.loader import DataLoader
 
 from ..configs.configs_parallel import get_configs
@@ -90,14 +86,11 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
     model = create_model(config, calc_deg(config.dataset, workdir))
     # model = torch.compile(model, dynamic=True) off for old gpus
 
-    # Trainer configs
-    strategy, plugins, enable_checkpointing = get_strategy(config.job_type)
-
     # creating Lighting trainer function
     trainer = L.Trainer(
         devices="auto",
         accelerator=config.accelerator,
-        strategy=strategy,
+        strategy="auto",
         max_steps=config.num_train_steps,
         log_every_n_steps=config.log_every_steps,
         val_check_interval=config.eval_every_steps,
@@ -105,12 +98,12 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         num_sanity_val_steps=0,
         callbacks=callbacks,
         logger=logger,
-        plugins=plugins,
+        plugins=None,
         enable_progress_bar=False,
-        enable_checkpointing=enable_checkpointing,
+        enable_checkpointing=config.job_type == "train",
     )
 
-    trainer, ckpt_path = get_ckpt_path(config, workdir, config.job_type, model, trainer)
+    ckpt_path = get_ckpt_path(config, workdir, config.job_type, model)
 
     # training run
     logging.info("Training run!")
@@ -126,27 +119,13 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
     )
 
 
-def get_strategy(job_type):
-    "gets strategy for training"
-    if job_type == "train":
-        strategy = "auto"
-        plugins = None
-        enable_checkpointing = True
-    else:
-        strategy = RayDDPStrategy()
-        plugins = [RayLightningEnvironment()]
-        enable_checkpointing = False
-    return strategy, plugins, enable_checkpointing
-
-
-def get_ckpt_path(config, workdir, job_type, model, trainer):
+def get_ckpt_path(config, workdir, job_type, model):
     "gets checkpoint path for resuming training"
     ckpt_path = None
     if job_type == "tuning":
-        trainer: L.Trainer = prepare_trainer(trainer)
 
-        checkpoint: Checkpoint = train.get_checkpoint()
-        trial_id = train.get_context().get_trial_id()
+        checkpoint: tune.Checkpoint = tune.get_checkpoint()
+        trial_id = tune.get_context().get_trial_id()
 
         if checkpoint:
             with checkpoint.as_directory() as ckpt_dir:
@@ -159,7 +138,7 @@ def get_ckpt_path(config, workdir, job_type, model, trainer):
             model.load_state_dict(ckpt["state_dict"])
             # pylint: enable=E1120
             ckpt_path = None
-    return trainer, ckpt_path
+    return ckpt_path
 
 
 def get_callbacks_logger(config, workdir):
@@ -249,47 +228,6 @@ def training_updated(
     ltrain_and_evaluate(config, workdir)
 
 
-# pylint: disable=R0913,R0917
-def torch_trainer_config(
-    num_workers: int,
-    num_cpu: float,
-    num_gpus: float,
-    config: ml_collections.ConfigDict,
-    tags: list,
-):
-    """
-    Builds torch trainer configs from ray train to run training in parallel.
-    """
-    scaling_config = train.ScalingConfig(
-        num_workers=num_workers,
-        use_gpu=True,
-        resources_per_worker={"CPU": num_cpu, "GPU": num_gpus},
-    )
-    run_config = RunConfig(
-        name="gnnpcsaft",
-        storage_path=None,
-        checkpoint_config=train.CheckpointConfig(
-            num_to_keep=1,
-        ),
-        progress_reporter=None,
-        log_to_file=False,
-        stop=None,
-        callbacks=(
-            [
-                WandbLoggerCallback(
-                    "gnn-pc-saft",
-                    config.dataset,
-                    tags=["tuning", config.dataset] + tags,
-                )
-            ]
-            if config.job_type == "tuning"
-            else None
-        ),
-    )
-
-    return scaling_config, run_config
-
-
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("workdir", None, "Working Directory.")
@@ -324,12 +262,18 @@ def main(argv):
             str(local_rank): test_configs[local_rank]
             for local_rank in range(FLAGS.num_workers)
         }
-        scaling_config, run_config = torch_trainer_config(
-            FLAGS.num_workers,
-            FLAGS.num_cpu,
-            FLAGS.num_gpus,
-            FLAGS.config,
-            FLAGS.tags,
+        scaling_config = train.ScalingConfig(
+            num_workers=FLAGS.num_workers,
+            use_gpu=True,
+            resources_per_worker={"CPU": FLAGS.num_cpu, "GPU": FLAGS.num_gpus},
+        )
+        run_config = train.RunConfig(
+            name="gnnpcsaft",
+            storage_path=None,
+            progress_reporter=None,
+            log_to_file=False,
+            stop=None,
+            callbacks=(None),
         )
         trainer = TorchTrainer(
             partial(

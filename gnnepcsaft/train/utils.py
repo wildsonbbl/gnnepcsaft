@@ -13,8 +13,7 @@ import torch_geometric.transforms as T
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
-from ray import train
-from ray.train import Checkpoint
+from ray import tune
 from torch.utils.data import ConcatDataset
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
@@ -346,17 +345,17 @@ class CustomRayTrainReportCallback(Callback):
             metrics["step"] = trainer.global_step
 
             checkpoint = None
-            global_rank = train.get_context().get_world_rank()
-            trial_id = train.get_context().get_trial_id()
+            global_rank = tune.get_context().get_world_rank()
+            trial_id = tune.get_context().get_trial_id()
             if global_rank == 0:
                 # Save model checkpoint file to tmpdir
                 ckpt_path = osp.join(tmpdir, f"{trial_id}.pt")
                 trainer.save_checkpoint(ckpt_path, weights_only=False)
 
-                checkpoint = Checkpoint.from_directory(tmpdir)
+                checkpoint = tune.Checkpoint.from_directory(tmpdir)
 
             # Report to train session
-            train.report(metrics=metrics, checkpoint=checkpoint)
+            tune.report(metrics=metrics, checkpoint=checkpoint)
 
 
 def density(parameters: np.ndarray, state: np.ndarray):
