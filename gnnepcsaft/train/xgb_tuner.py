@@ -11,6 +11,11 @@ from ray.tune.search.bohb import TuneBOHB
 from .xgb_training import training
 
 FLAGS = flags.FLAGS
+flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial for ray")
+flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial for ray")
+flags.DEFINE_integer(
+    "max_concurrent", 2, "Maximum concurrent samples from the underlying searcher."
+)
 
 
 def main(argv):
@@ -31,9 +36,13 @@ def main(argv):
     workdir = FLAGS.workdir
     # BOHB search algorithm
     search_alg = TuneBOHB(
-        space=search_space, metric="mape_den", mode="min", seed=77, max_concurrent=2
+        space=search_space,
+        metric="mape_den",
+        mode="min",
+        seed=77,
+        max_concurrent=FLAGS.max_concurrent,
     )
-    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=2)
+    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
     # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
         metric="mape_den",
@@ -65,7 +74,9 @@ def main(argv):
 
     # Run the tuner
     tuner = tune.Tuner(
-        tune.with_resources(tune_xgb, resources={"cpu": 2, "gpu": 0.5}),
+        tune.with_resources(
+            tune_xgb, resources={"cpu": FLAGS.num_cpu, "gpu": FLAGS.num_gpus}
+        ),
         tune_config=tune.TuneConfig(
             num_samples=60, search_alg=search_alg, scheduler=scheduler
         ),

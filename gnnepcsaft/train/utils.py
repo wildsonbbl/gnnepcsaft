@@ -13,8 +13,8 @@ import torch_geometric.transforms as T
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
-from ray import train
-from ray.train import Checkpoint
+from ray import tune
+from ray.tune.experiment.trial import Trial
 from torch.utils.data import ConcatDataset
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
@@ -332,7 +332,7 @@ class VpOff(BaseTransform):
 
 
 class CustomRayTrainReportCallback(Callback):
-    "Custom ray tuner checkpoint."
+    "Lightning Callback for Ray Tune reporting."
 
     def on_validation_end(self, trainer, pl_module):
 
@@ -346,17 +346,45 @@ class CustomRayTrainReportCallback(Callback):
             metrics["step"] = trainer.global_step
 
             checkpoint = None
-            global_rank = train.get_context().get_world_rank()
-            trial_id = train.get_context().get_trial_id()
-            if global_rank == 0:
-                # Save model checkpoint file to tmpdir
-                ckpt_path = osp.join(tmpdir, f"{trial_id}.pt")
-                trainer.save_checkpoint(ckpt_path, weights_only=False)
-
-                checkpoint = Checkpoint.from_directory(tmpdir)
+            trial_id = tune.get_context().get_trial_id()
+            # Save model checkpoint file to tmpdir
+            ckpt_path = osp.join(tmpdir, f"{trial_id}.ckpt")
+            trainer.save_checkpoint(ckpt_path, weights_only=False)
+            checkpoint = tune.Checkpoint.from_directory(tmpdir)
 
             # Report to train session
-            train.report(metrics=metrics, checkpoint=checkpoint)
+            tune.report(metrics=metrics, checkpoint=checkpoint)
+
+
+class TrialTerminationReporter(tune.JupyterNotebookReporter):
+    """Reporter for Ray to report only when trial is terminated"""
+
+    def __init__(self):
+        super().__init__()
+        self.num_terminated = 0
+
+    def should_report(self, trials, done=False):
+        """
+        Reports only on trial termination events.
+        It does so by tracking increase in number of trials terminated.
+        """
+        old_num_terminated = self.num_terminated
+        self.num_terminated = len([t for t in trials if t.status == Trial.TERMINATED])
+        return self.num_terminated > old_num_terminated
+
+
+class CustomStopper(tune.Stopper):
+    """Custom ray tune experiment/trial stopper"""
+
+    def __init__(self, max_iter: int):
+        self.should_stop = False
+        self.max_iter = max_iter
+
+    def __call__(self, trial_id, result):
+        return result["training_iteration"] >= self.max_iter
+
+    def stop_all(self):
+        return False
 
 
 def density(parameters: np.ndarray, state: np.ndarray):
