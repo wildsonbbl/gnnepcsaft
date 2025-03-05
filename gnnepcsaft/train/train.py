@@ -129,7 +129,7 @@ def get_ckpt_path(config, workdir, job_type, model):
 
         if checkpoint:
             with checkpoint.as_directory() as ckpt_dir:
-                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.pt")
+                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.ckpt")
     elif config.checkpoint:
         ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
         if config.change_opt:
@@ -169,8 +169,7 @@ def get_callbacks_logger(config, workdir):
         )
         callbacks.append(checkpoint_train_loss)
 
-        epoch_timer = EpochTimer()
-        callbacks.append(epoch_timer)
+        callbacks.append(EpochTimer())
 
         # Logging training results at wandb
         logger = WandbLogger(
