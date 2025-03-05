@@ -31,7 +31,6 @@ flags.DEFINE_integer(
     "max_concurrent", 4, "Maximum concurrent samples from the underlying searcher."
 )
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
-flags.DEFINE_boolean("get_result", False, "Whether to show results or continue tuning")
 flags.DEFINE_float(
     "time_budget_s",
     3600,
@@ -127,10 +126,7 @@ def main(argv):
             ),
         )
 
-    if FLAGS.get_result:
-        tuner.get_results()
-    else:
-        tuner.fit()
+    tuner.fit()
 
 
 if __name__ == "__main__":
