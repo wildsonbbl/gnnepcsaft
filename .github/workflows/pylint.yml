@@ -26,7 +26,7 @@ jobs:
           uv pip install --upgrade pip
           uv pip install pylint
           uv pip install -r requirements-torch.txt
-          uv install -r requirements.txt
+          uv pip install -r requirements.txt
       - name: Analysing the code with pylint
         run: |
           pylint $(git ls-files '*.py') --rcfile=.pylintrc
