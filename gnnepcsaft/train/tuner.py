@@ -88,7 +88,7 @@ def main(argv):
         tuner = tune.Tuner.restore(
             FLAGS.resumedir,
             trainable,
-            resume_unfinished=False,
+            resume_unfinished=True,
             resume_errored=False,
             restart_errored=True,
         )
