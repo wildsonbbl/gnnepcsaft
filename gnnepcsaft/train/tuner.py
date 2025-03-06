@@ -55,6 +55,26 @@ def main(argv):
         space=search_space,
         metric="mape_den/dataloader_idx_0",
         mode="min",
+        points_to_evaluate=[
+            {
+                "conv": "PNA",
+                "dropout": 0.0,
+                "global_pool": "add",
+                "propagation_depth": 6,
+                "hidden_dim": 256,
+                "post_layers": 3,
+                "pre_layers": 2,
+                "towers": 2,
+            },
+            {
+                "conv": "GATv2",
+                "dropout": 0.0,
+                "global_pool": "add",
+                "propagation_depth": 7,
+                "hidden_dim": 256,
+                "heads": 1,
+            },
+        ],
         seed=77,
         max_concurrent=FLAGS.max_concurrent,
     )
