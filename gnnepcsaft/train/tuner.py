@@ -14,6 +14,7 @@ from ray.tune.search.bohb import TuneBOHB
 
 from .search_space import get_search_space
 from .train import training_updated
+from .utils import CustomStopper
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
@@ -90,7 +91,7 @@ def main(argv):
         stop_last_trials=True,
     )
     # reporter = TrialTerminationReporter()
-    # stopper = CustomStopper(max_t)
+    stopper = CustomStopper(max_t)
 
     trainable = tune.with_resources(
         partial(
@@ -132,7 +133,7 @@ def main(argv):
                 ),
                 progress_reporter=None,
                 log_to_file=False,
-                stop=None,
+                stop=stopper,
                 callbacks=(
                     [
                         WandbLoggerCallback(
