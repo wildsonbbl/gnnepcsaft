@@ -50,6 +50,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
       config: Hyperparameter configuration for training and evaluation.
       workdir: Working Directory.
     """
+    torch.set_float32_matmul_precision("medium")
     # Dataset building
     train_dataset = build_train_dataset(workdir, config.dataset)
     val_dataset, train_val_dataset, val_assoc_dataset = build_test_dataset(

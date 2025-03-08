@@ -14,6 +14,7 @@ from ray.tune.search.bohb import TuneBOHB
 
 from .search_space import get_search_space
 from .train import training_updated
+from .utils import CustomStopper
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
@@ -55,6 +56,26 @@ def main(argv):
         space=search_space,
         metric="mape_den/dataloader_idx_0",
         mode="min",
+        points_to_evaluate=[
+            {
+                "conv": "PNA",
+                "dropout": 0.0,
+                "global_pool": "add",
+                "propagation_depth": 6,
+                "hidden_dim": 256,
+                "post_layers": 3,
+                "pre_layers": 2,
+                "towers": 2,
+            },
+            {
+                "conv": "GATv2",
+                "dropout": 0.0,
+                "global_pool": "add",
+                "propagation_depth": 7,
+                "hidden_dim": 256,
+                "heads": 1,
+            },
+        ],
         seed=77,
         max_concurrent=FLAGS.max_concurrent,
     )
@@ -70,7 +91,7 @@ def main(argv):
         stop_last_trials=True,
     )
     # reporter = TrialTerminationReporter()
-    # stopper = CustomStopper(max_t)
+    stopper = CustomStopper(max_t)
 
     trainable = tune.with_resources(
         partial(
@@ -106,13 +127,13 @@ def main(argv):
             ),
             run_config=tune.RunConfig(
                 name="gnnpcsaft",
-                storage_path=None,
+                storage_path=os.path.join(FLAGS.workdir, "ray_results"),
                 checkpoint_config=tune.CheckpointConfig(
                     num_to_keep=1,
                 ),
                 progress_reporter=None,
                 log_to_file=False,
-                stop=None,
+                stop=stopper,
                 callbacks=(
                     [
                         WandbLoggerCallback(
