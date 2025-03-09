@@ -381,10 +381,7 @@ class CustomStopper(tune.Stopper):
         self.max_iter = max_iter
 
     def __call__(self, trial_id, result):
-        return (
-            result["training_iteration"] >= self.max_iter
-            or result["mape_den/dataloader_idx_0"] >= 0.05
-        )
+        return result["training_iteration"] >= self.max_iter
 
     def stop_all(self):
         return False
