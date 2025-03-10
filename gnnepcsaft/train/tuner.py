@@ -50,7 +50,7 @@ def main(argv):
     config: ml_collections.ConfigDict = FLAGS.config
     # Hyperparameter search space
     search_space = get_search_space()
-    max_t = (config.num_train_steps - 8000) // config.eval_every_steps
+    max_t = config.num_train_steps // config.eval_every_steps
     # BOHB search algorithm
     search_alg = TuneBOHB(
         space=search_space,
