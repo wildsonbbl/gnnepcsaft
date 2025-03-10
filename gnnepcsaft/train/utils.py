@@ -336,24 +336,26 @@ class CustomRayTrainReportCallback(Callback):
 
     def on_validation_end(self, trainer, pl_module):
 
-        with TemporaryDirectory() as tmpdir:
-            # Fetch metrics
-            metrics = trainer.callback_metrics
-            metrics = {k: v.item() for k, v in metrics.items()}
+        if trainer.global_step >= 8000:
 
-            # Add customized metrics
-            metrics["epoch"] = trainer.current_epoch
-            metrics["step"] = trainer.global_step
+            with TemporaryDirectory() as tmpdir:
+                # Fetch metrics
+                metrics = trainer.callback_metrics
+                metrics = {k: v.item() for k, v in metrics.items()}
 
-            checkpoint = None
-            trial_id = tune.get_context().get_trial_id()
-            # Save model checkpoint file to tmpdir
-            ckpt_path = osp.join(tmpdir, f"{trial_id}.ckpt")
-            trainer.save_checkpoint(ckpt_path, weights_only=False)
-            checkpoint = tune.Checkpoint.from_directory(tmpdir)
+                # Add customized metrics
+                metrics["epoch"] = trainer.current_epoch
+                metrics["step"] = trainer.global_step
 
-            # Report to train session
-            tune.report(metrics=metrics, checkpoint=checkpoint)
+                checkpoint = None
+                trial_id = tune.get_context().get_trial_id()
+                # Save model checkpoint file to tmpdir
+                ckpt_path = osp.join(tmpdir, f"{trial_id}.ckpt")
+                trainer.save_checkpoint(ckpt_path, weights_only=False)
+                checkpoint = tune.Checkpoint.from_directory(tmpdir)
+
+                # Report to train session
+                tune.report(metrics=metrics, checkpoint=checkpoint)
 
 
 class TrialTerminationReporter(tune.JupyterNotebookReporter):
