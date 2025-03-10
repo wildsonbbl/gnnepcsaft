@@ -131,6 +131,7 @@ def main(argv):
                 checkpoint_config=tune.CheckpointConfig(
                     num_to_keep=1,
                 ),
+                verbose=0,
                 progress_reporter=None,
                 log_to_file=False,
                 stop=stopper,
