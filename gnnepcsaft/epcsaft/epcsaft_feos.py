@@ -1,7 +1,5 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
-import numpy as np
-
 # pylint: disable = E0401,E0611
 from feos.eos import EquationOfState, PhaseEquilibrium, State
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
@@ -10,7 +8,7 @@ from feos.pcsaft import PcSaftParameters, PcSaftRecord
 from si_units import KELVIN, METER, MOL, PASCAL
 
 
-def pc_saft(parameters: np.ndarray) -> EquationOfState.pcsaft:
+def pc_saft(parameters: list) -> EquationOfState.pcsaft:
     """Returns a ePC-SAFT equation of state."""
     m = max(parameters[0], 1.0)  # units
     s = parameters[1]  # Å
@@ -36,7 +34,7 @@ def pc_saft(parameters: np.ndarray) -> EquationOfState.pcsaft:
     return eos
 
 
-def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+def pure_den_feos(parameters: list, state: list) -> float:
     """Calcules pure component density with ePC-SAFT."""
 
     t = state[0]  # Temperature, K
@@ -55,7 +53,7 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     return den
 
 
-def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+def pure_vp_feos(parameters: list, state: list) -> float:
     """Calcules pure component density with ePC-SAFT."""
 
     t = state[0]  # Temperature, K
