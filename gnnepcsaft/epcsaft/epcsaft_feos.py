@@ -1,7 +1,13 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
 # pylint: disable = E0401,E0611
-from feos.eos import Contributions, EquationOfState, PhaseEquilibrium, State
+from feos.eos import (
+    Contributions,
+    EquationOfState,
+    PhaseDiagram,
+    PhaseEquilibrium,
+    State,
+)
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
 
 # pylint: enable = E0401,E0611
@@ -124,6 +130,15 @@ def pure_viscosity_feos(parameters: list, state: list) -> float:
     )
 
     return statenpt.viscosity()  # / (KILO * PASCAL * SECOND)
+
+
+def phase_diagram_feos(parameters: list, state: list) -> dict:
+    """Calculates phase diagram with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    eos = pc_saft(parameters)
+    phase_diagram = PhaseDiagram.pure(eos, min_temperature=t * KELVIN, npoints=200)
+
+    return phase_diagram.to_dict(Contributions.Residual)
 
 
 def parameters_gc_pcsaft(smiles: str) -> tuple:
