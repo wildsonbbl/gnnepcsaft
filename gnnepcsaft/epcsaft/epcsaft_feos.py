@@ -1,11 +1,11 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
 # pylint: disable = E0401,E0611
-from feos.eos import EquationOfState, PhaseEquilibrium, State
+from feos.eos import Contributions, EquationOfState, PhaseEquilibrium, State
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
 
 # pylint: enable = E0401,E0611
-from si_units import KELVIN, METER, MOL, PASCAL
+from si_units import JOULE, KELVIN, KILO, METER, MOL, PASCAL
 
 
 def pc_saft(parameters: list) -> EquationOfState.pcsaft:
@@ -64,6 +64,25 @@ def pure_vp_feos(parameters: list, state: list) -> float:
     assert t == vle.liquid.temperature / KELVIN
 
     return vle.liquid.pressure() / PASCAL
+
+
+def pure_h_lv_feos(parameters: list, state: list) -> float:
+    """Calcules pure component enthalpy of vaporization with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+
+    liquid_state = vle.liquid
+    vapor_state = vle.vapor
+
+    assert t == liquid_state.temperature / KELVIN
+
+    return (
+        vapor_state.molar_enthalpy(Contributions.Residual)
+        - liquid_state.molar_enthalpy(Contributions.Residual)
+    ) * (MOL / KILO / JOULE)
 
 
 def parameters_gc_pcsaft(smiles: str) -> tuple:
