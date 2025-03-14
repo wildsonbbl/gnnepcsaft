@@ -10,12 +10,8 @@ from feos.pcsaft import PcSaftParameters, PcSaftRecord
 from si_units import KELVIN, METER, MOL, PASCAL
 
 
-# pylint: disable=R0914
-def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calcules pure component density with ePC-SAFT."""
-
-    t = state[0]  # Temperature, K
-
+def pc_saft(parameters: np.ndarray) -> EquationOfState.pcsaft:
+    """Returns a ePC-SAFT equation of state."""
     m = max(parameters[0], 1.0)  # units
     s = parameters[1]  # Å
     e = parameters[2]  # K
@@ -24,8 +20,6 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     mu = parameters[5]  # Debye
     na = parameters[6]
     nb = parameters[7]
-
-    p = state[1]  # Pa
 
     record = PcSaftRecord(
         m=m,
@@ -39,6 +33,16 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     )
     para = PcSaftParameters.from_model_records([record])
     eos = EquationOfState.pcsaft(para)
+    return eos
+
+
+def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+    """Calcules pure component density with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+
+    eos = pc_saft(parameters)
     statenpt = State(
         eos,
         temperature=t * KELVIN,
@@ -56,27 +60,7 @@ def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
 
     t = state[0]  # Temperature, K
 
-    m = max(parameters[0], 1.0)  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-    kappa_ab = parameters[3]
-    epsilon_k_ab = parameters[4]  # K
-    mu = parameters[5]  # Debye
-    na = parameters[6]
-    nb = parameters[7]
-
-    record = PcSaftRecord(
-        m=m,
-        sigma=s,
-        epsilon_k=e,
-        kappa_ab=kappa_ab,
-        epsilon_k_ab=epsilon_k_ab,
-        na=na,
-        nb=nb,
-        mu=mu,
-    )
-    para = PcSaftParameters.from_model_records([record])
-    eos = EquationOfState.pcsaft(para)
+    eos = pc_saft(parameters)
     vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
 
     assert t == vle.liquid.temperature / KELVIN
