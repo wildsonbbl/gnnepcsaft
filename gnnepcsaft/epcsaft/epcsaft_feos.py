@@ -85,6 +85,20 @@ def pure_h_lv_feos(parameters: list, state: list) -> float:
     ) * (MOL / KILO / JOULE)
 
 
+def pure_s_lv_feos(parameters: list, state: list) -> float:
+    """Calcules pure component entropy of vaporization with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+    liquid_state = vle.liquid
+    vapor_state = vle.vapor
+    assert t == liquid_state.temperature / KELVIN
+    return (
+        vapor_state.molar_entropy(Contributions.Residual)
+        - liquid_state.molar_entropy(Contributions.Residual)
+    ) * (MOL * KELVIN / JOULE)
+
+
 def parameters_gc_pcsaft(smiles: str) -> tuple:
     "Calculates PC-SAFT parameters with Group Contribution method."
     pure_record = (
