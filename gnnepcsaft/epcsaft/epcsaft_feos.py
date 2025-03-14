@@ -99,7 +99,7 @@ def pure_s_lv_feos(parameters: list, state: list) -> float:
     ) * (MOL * KELVIN / JOULE)
 
 
-def critical_points(parameters: list) -> list:
+def critical_points_feos(parameters: list) -> list:
     """Calculates critical points with ePC-SAFT."""
     eos = pc_saft(parameters)
     critical_point = State.critical_point(eos)
@@ -108,6 +108,22 @@ def critical_points(parameters: list) -> list:
         critical_point.pressure() / PASCAL,
         critical_point.density * (METER**3) / MOL,
     ]
+
+
+def pure_viscosity_feos(parameters: list, state: list) -> float:
+    """Calcules pure component viscosity with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+
+    eos = pc_saft(parameters)
+    statenpt = State(
+        eos,
+        temperature=t * KELVIN,
+        pressure=p * PASCAL,
+        density_initialization="liquid",
+    )
+
+    return statenpt.viscosity()  # / (KILO * PASCAL * SECOND)
 
 
 def parameters_gc_pcsaft(smiles: str) -> tuple:
