@@ -99,6 +99,17 @@ def pure_s_lv_feos(parameters: list, state: list) -> float:
     ) * (MOL * KELVIN / JOULE)
 
 
+def critical_points(parameters: list) -> list:
+    """Calculates critical points with ePC-SAFT."""
+    eos = pc_saft(parameters)
+    critical_point = State.critical_point(eos)
+    return [
+        critical_point.temperature / KELVIN,
+        critical_point.pressure() / PASCAL,
+        critical_point.density * (METER**3) / MOL,
+    ]
+
+
 def parameters_gc_pcsaft(smiles: str) -> tuple:
     "Calculates PC-SAFT parameters with Group Contribution method."
     pure_record = (
