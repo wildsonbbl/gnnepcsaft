@@ -17,7 +17,7 @@ from ..data.graph import assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import parameters_gc_pcsaft
 from ..train.models import GNNePCSAFT, GNNePCSAFTL
-from ..train.utils import mape, rhovp_data
+from ..train.utils import rhovp_data
 
 sns.set_theme(style="ticks")
 
@@ -258,25 +258,6 @@ def plotvp(inchi, molecule_name, models, data):
             img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
         )
         plt.show()
-
-
-def model_para_fn(model: GNNePCSAFT, model_msigmae: GNNePCSAFT):
-    """Calculates density and/or vapor pressure mean absolute percentage error
-    between ThermoML Archive experimental data and predicted data with ePC-SAFT
-    using the model estimated parameters."""
-    model_para = {}
-    model_array = {}
-    model.eval()
-    with torch.no_grad():
-        for graphs in tml_loader:
-            graphs = graphs.to(device)
-            params = params_fn(model_msigmae, graphs, model)
-            mden_array, mvp_array = mape(params.numpy(), graphs.rho, graphs.vp, False)
-            mden, mvp = mden_array.mean(), mvp_array.mean()
-            parameters = parameters.tolist()[0]
-            model_para[graphs.InChI] = (parameters, mden, mvp)
-            model_array[graphs.InChI] = (mden_array, mvp_array)
-    return model_para, model_array
 
 
 def datacsv(model_para):

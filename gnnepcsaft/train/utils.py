@@ -84,71 +84,13 @@ def savemodel(model, optimizer, scaler, path, step):
     )
 
 
-def mape(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray, mean: bool = True):
-    """
-    Calculates mean absolute percentage error
-    of ePC-SAFT predicted density and vapor pressurre
-    relative to experimental data.
-
-    """
-    parameters = np.abs(parameters)
-    pred_mape = [np.nan]
-    if rho.shape[0] > 2:
-        pred_mape = []
-        for state in rho:
-            try:
-                den = pure_den_feos(parameters, state)
-                mape_den = np.abs((state[-1] - den) / state[-1])
-            except RuntimeError:
-                mape_den = 1.0
-            # if mape_den > 1:  # against algorithm fail
-            #     continue
-            pred_mape += [mape_den]
-
-    den = np.asarray(pred_mape)
-    if mean:
-        den = den.mean()
-
-    pred_mape = [np.nan]
-    if vp.shape[0] > 2:
-        pred_mape = []
-        for state in vp:
-            try:
-                vp_pred = pure_vp_feos(parameters, state)
-                mape_vp = np.abs((state[-1] - vp_pred) / state[-1])
-            except (AssertionError, RuntimeError):
-                mape_vp = 1.0
-            # if mape_vp > 1:  # against algorithm fail
-            #     continue
-            pred_mape += [mape_vp]
-
-    vp = np.asarray(pred_mape)
-    if mean:
-        vp = vp.mean()
-
-    return den, vp
-
-
 def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
-    parameters = np.abs(parameters)
-    den = []
-    for state in rho:
-        try:
-            den += [pure_den_feos(parameters, state)]
-        except (AssertionError, RuntimeError):
-            den += [0.0]
-    den = np.asarray(den)
 
-    vpl = []
-    for state in vp:
-        try:
-            vpl += [pure_vp_feos(parameters, state)]
-        except (AssertionError, RuntimeError):
-            vpl += [0.0]
-    vp = np.asarray(vpl)
+    den_array = rho_single((parameters, rho))
+    vp_array = vp_sigle((parameters, vp))
 
-    return den, vp
+    return den_array, vp_array
 
 
 # pylint: disable=R0903
@@ -381,59 +323,32 @@ class CustomStopper(tune.Stopper):
         self.max_iter = max_iter
 
     def __call__(self, trial_id, result):
-        return (
-            result["training_iteration"] >= self.max_iter
-            or result["mape_den/dataloader_idx_0"] >= 0.05
-        )
+        return result["training_iteration"] >= self.max_iter
 
     def stop_all(self):
         return False
 
 
-def density(parameters: np.ndarray, state: np.ndarray):
-    """Calculates density  with ePC-SAFT"""
-
-    try:
-        den = pure_den_feos(parameters, state)
-    except (AssertionError, RuntimeError):
-        den = 0.0
-
-    return den
-
-
-def vaporpressure(parameters: np.ndarray, state: np.ndarray):
-    """Calculates vapor pressure with ePC-SAFT"""
-    try:
-        vp = pure_vp_feos(parameters, state)
-    except (AssertionError, RuntimeError):
-        vp = 0.0
-
-    return vp
-
-
-def rho_mp(args):
-    "Calculates rho with multiprocessing"
-    parameters, state = args
-    return density(parameters, state)
-
-
-def vp_mp(args):
-    "Calculates vp with multiprocessing"
-    parameters, state = args
-    return vaporpressure(parameters, state)
-
-
 def rho_single(args):
-    """Calculates density  with ePC-SAFT"""
+    """Calculates density with ePC-SAFT for a single pararameter"""
     parameters, states = args
-    den = []
+    rho_for_all_states = []
+
     for state in states:
-        den += [rho_mp((parameters, state))]
-    return np.asarray(den)
+        try:
+            rho_for_state = pure_den_feos(parameters, state)
+        except (AssertionError, RuntimeError):
+            rho_for_state = 0.0
+        rho_for_all_states += [rho_for_state]
+    return np.asarray(rho_for_all_states)
 
 
-def rho_batch(parameters_batch, states_batch):
-    """Calculates density  with ePC-SAFT"""
+def rho_batch(parameters_batch: list, states_batch: list):
+    """
+    Calculates density with ePC-SAFT
+    for a batch of parameters
+    using nested multiprocessing
+    """
     args_list = [
         (para, states)
         for para, states in zip(parameters_batch, states_batch)
@@ -446,16 +361,24 @@ def rho_batch(parameters_batch, states_batch):
 
 
 def vp_sigle(args):
-    """Calculates vapor pressure with ePC-SAFT using nested multiprocessing"""
+    """Calculates vapor pressure with ePC-SAFT for a single pararameter"""
     parameters, states = args
-    vp = []
+    vp_for_all_states = []
     for state in states:
-        vp += [vp_mp((parameters, state))]
-    return np.asarray(vp)
+        try:
+            vp_for_state = pure_vp_feos(parameters, state)
+        except (AssertionError, RuntimeError):
+            vp_for_state = 0.0
+        vp_for_all_states += [vp_for_state]
+    return np.asarray(vp_for_all_states)
 
 
-def vp_batch(parameters_batch, states_batch):
-    """Calculates vapor pressure with ePC-SAFT in batch mode using nested multiprocessing"""
+def vp_batch(parameters_batch: list, states_batch: list):
+    """
+    Calculates vapor pressure with ePC-SAFT
+    for a batch of parameters
+    using nested multiprocessing
+    """
     args_list = [
         (para, states)
         for para, states in zip(parameters_batch, states_batch)

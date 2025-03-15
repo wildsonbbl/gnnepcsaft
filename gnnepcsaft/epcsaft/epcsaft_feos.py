@@ -1,21 +1,21 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
-import numpy as np
-
 # pylint: disable = E0401,E0611
-from feos.eos import EquationOfState, PhaseEquilibrium, State
+from feos.eos import (
+    Contributions,
+    EquationOfState,
+    PhaseDiagram,
+    PhaseEquilibrium,
+    State,
+)
 from feos.pcsaft import PcSaftParameters, PcSaftRecord
 
 # pylint: enable = E0401,E0611
-from si_units import KELVIN, METER, MOL, PASCAL
+from si_units import JOULE, KELVIN, KILO, METER, MOL, PASCAL
 
 
-# pylint: disable=R0914
-def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calcules pure component density with ePC-SAFT."""
-
-    t = state[0]  # Temperature, K
-
+def pc_saft(parameters: list) -> EquationOfState.pcsaft:
+    """Returns a ePC-SAFT equation of state."""
     m = max(parameters[0], 1.0)  # units
     s = parameters[1]  # Å
     e = parameters[2]  # K
@@ -24,8 +24,6 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     mu = parameters[5]  # Debye
     na = parameters[6]
     nb = parameters[7]
-
-    p = state[1]  # Pa
 
     record = PcSaftRecord(
         m=m,
@@ -39,6 +37,16 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     )
     para = PcSaftParameters.from_model_records([record])
     eos = EquationOfState.pcsaft(para)
+    return eos
+
+
+def pure_den_feos(parameters: list, state: list) -> float:
+    """Calcules pure component density with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+
+    eos = pc_saft(parameters)
     statenpt = State(
         eos,
         temperature=t * KELVIN,
@@ -51,37 +59,86 @@ def pure_den_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     return den
 
 
-def pure_vp_feos(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
+def pure_vp_feos(parameters: list, state: list) -> float:
     """Calcules pure component density with ePC-SAFT."""
 
     t = state[0]  # Temperature, K
 
-    m = max(parameters[0], 1.0)  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-    kappa_ab = parameters[3]
-    epsilon_k_ab = parameters[4]  # K
-    mu = parameters[5]  # Debye
-    na = parameters[6]
-    nb = parameters[7]
-
-    record = PcSaftRecord(
-        m=m,
-        sigma=s,
-        epsilon_k=e,
-        kappa_ab=kappa_ab,
-        epsilon_k_ab=epsilon_k_ab,
-        na=na,
-        nb=nb,
-        mu=mu,
-    )
-    para = PcSaftParameters.from_model_records([record])
-    eos = EquationOfState.pcsaft(para)
+    eos = pc_saft(parameters)
     vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
 
     assert t == vle.liquid.temperature / KELVIN
 
     return vle.liquid.pressure() / PASCAL
+
+
+def pure_h_lv_feos(parameters: list, state: list) -> float:
+    """Calcules pure component enthalpy of vaporization with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+
+    liquid_state = vle.liquid
+    vapor_state = vle.vapor
+
+    assert t == liquid_state.temperature / KELVIN
+
+    return (
+        vapor_state.molar_enthalpy(Contributions.Residual)
+        - liquid_state.molar_enthalpy(Contributions.Residual)
+    ) * (MOL / KILO / JOULE)
+
+
+def pure_s_lv_feos(parameters: list, state: list) -> float:
+    """Calcules pure component entropy of vaporization with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+    liquid_state = vle.liquid
+    vapor_state = vle.vapor
+    assert t == liquid_state.temperature / KELVIN
+    return (
+        vapor_state.molar_entropy(Contributions.Residual)
+        - liquid_state.molar_entropy(Contributions.Residual)
+    ) * (MOL * KELVIN / JOULE)
+
+
+def critical_points_feos(parameters: list) -> list:
+    """Calculates critical points with ePC-SAFT."""
+    eos = pc_saft(parameters)
+    critical_point = State.critical_point(eos)
+    return [
+        critical_point.temperature / KELVIN,
+        critical_point.pressure() / PASCAL,
+        critical_point.density * (METER**3) / MOL,
+    ]
+
+
+def pure_viscosity_feos(parameters: list, state: list) -> float:
+    """Calcules pure component viscosity with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+
+    eos = pc_saft(parameters)
+    statenpt = State(
+        eos,
+        temperature=t * KELVIN,
+        pressure=p * PASCAL,
+        density_initialization="liquid",
+    )
+
+    return statenpt.viscosity()  # / (KILO * PASCAL * SECOND)
+
+
+def phase_diagram_feos(parameters: list, state: list) -> dict:
+    """Calculates phase diagram with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    eos = pc_saft(parameters)
+    phase_diagram = PhaseDiagram.pure(eos, min_temperature=t * KELVIN, npoints=200)
+
+    return phase_diagram.to_dict(Contributions.Residual)
 
 
 def parameters_gc_pcsaft(smiles: str) -> tuple:
