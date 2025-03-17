@@ -114,7 +114,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         (
             [train_val_dataloader, val_dataloader]
             if config.dataset == "esper"
-            else [val_assoc_dataloader]
+            else [val_assoc_dataloader, val_assoc_dataloader]
         ),
         ckpt_path=ckpt_path,
     )
