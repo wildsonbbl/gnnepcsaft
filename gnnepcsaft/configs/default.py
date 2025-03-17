@@ -35,13 +35,13 @@ def get_config():
     config.conv = "PNA"
     config.global_pool = "add"
     config.propagation_depth = 6
-    config.hidden_dim = 128
+    config.hidden_dim = 256
     config.dropout = 0.0
     config.add_self_loops = True
     config.num_para = 3
     ## PNA
-    config.post_layers = 1
-    config.pre_layers = 3
+    config.post_layers = 2
+    config.pre_layers = 4
     config.towers = 1  # hidden_dim % towers == 0
     config.deg = []
     ## GatedGraphConv, ARMAConv
