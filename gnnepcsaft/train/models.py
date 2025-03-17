@@ -105,7 +105,7 @@ class GNNePCSAFTL(L.LightningModule):
         return loss
 
     def validation_step(  # pylint: disable=W0613,R0914
-        self, graphs, batch_idx, dataloader_idx
+        self, graphs, batch_idx, dataloader_idx=0
     ) -> STEP_OUTPUT:
         metrics_dict = {}
         pred_para: torch.Tensor = self.model.pred_with_bounds(graphs).squeeze().detach()
@@ -149,7 +149,7 @@ class GNNePCSAFTL(L.LightningModule):
         )
         return metrics_dict
 
-    def test_step(self, graphs, batch_idx, dataloader_idx) -> STEP_OUTPUT:
+    def test_step(self, graphs, batch_idx, dataloader_idx=0) -> STEP_OUTPUT:
         return self.validation_step(graphs, batch_idx, dataloader_idx)
 
 
@@ -382,7 +382,7 @@ class HabitchNNL(L.LightningModule):
         return loss
 
     def validation_step(  # pylint: disable=W0613,R0914
-        self, graphs, batch_idx, dataloader_idx
+        self, graphs, batch_idx, dataloader_idx=0
     ) -> STEP_OUTPUT:
         metrics_dict = {}
         para_msigmae: torch.Tensor = (
@@ -421,7 +421,7 @@ class HabitchNNL(L.LightningModule):
         )
         return metrics_dict
 
-    def test_step(self, graphs, batch_idx, dataloader_idx) -> STEP_OUTPUT:
+    def test_step(self, graphs, batch_idx, dataloader_idx=0) -> STEP_OUTPUT:
         return self.validation_step(graphs, batch_idx, dataloader_idx)
 
 
