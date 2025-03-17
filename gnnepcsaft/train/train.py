@@ -119,6 +119,9 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         ckpt_path=ckpt_path,
     )
 
+    if config.job_type == "train":
+        wandb.finish()
+
 
 def get_ckpt_path(config, workdir, job_type, model):
     "gets checkpoint path for resuming training"
