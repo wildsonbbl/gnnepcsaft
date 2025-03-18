@@ -16,7 +16,7 @@ def get_config():
     config.weight_decay = 1e-2
     config.momentum = 0.9
     config.patience = 5
-    config.warmup_steps = 100
+    config.warmup_steps = 2
 
     # Training hyperparameters.
 
