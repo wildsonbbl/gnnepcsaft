@@ -1,6 +1,7 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
 # pylint: disable = E0401,E0611
+import numpy as np
 from feos.eos import (
     Contributions,
     EquationOfState,
@@ -8,36 +9,78 @@ from feos.eos import (
     PhaseEquilibrium,
     State,
 )
-from feos.pcsaft import PcSaftParameters, PcSaftRecord
+from feos.pcsaft import Identifier, PcSaftParameters, PcSaftRecord, PureRecord
 
 # pylint: enable = E0401,E0611
 from si_units import JOULE, KELVIN, KILO, METER, MOL, PASCAL
 
 
 def pc_saft(parameters: list) -> EquationOfState.pcsaft:
-    """Returns a ePC-SAFT equation of state."""
-    m = max(parameters[0], 1.0)  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-    kappa_ab = parameters[3]
-    epsilon_k_ab = parameters[4]  # K
-    mu = parameters[5]  # Debye
-    na = parameters[6]
-    nb = parameters[7]
+    """Returns a ePC-SAFT equation of state for a pure component."""
+    parameters.append("unknown")
+    parameters.append("unknown")
+    parameters.append(1)
+    return pc_saft_mixture([parameters])
 
-    record = PcSaftRecord(
-        m=m,
-        sigma=s,
-        epsilon_k=e,
-        kappa_ab=kappa_ab,
-        epsilon_k_ab=epsilon_k_ab,
-        na=na,
-        nb=nb,
-        mu=mu,
+
+def pc_saft_mixture(
+    mixture_parameters: list, kij_matrix: list = None
+) -> EquationOfState.pcsaft:
+    """Returns a ePC-SAFT equation of state."""
+    records = []
+    for mol_parameters in mixture_parameters:
+
+        records.append(
+            PureRecord(
+                identifier=Identifier(
+                    smiles=mol_parameters[8],
+                    inchi=mol_parameters[9],
+                ),
+                molarweight=mol_parameters[10],
+                model_record=PcSaftRecord(
+                    m=mol_parameters[0],  # units
+                    sigma=mol_parameters[1],  # Å
+                    epsilon_k=mol_parameters[2],  # K
+                    kappa_ab=mol_parameters[3],
+                    epsilon_k_ab=mol_parameters[4],  # K
+                    mu=mol_parameters[5],  # Debye
+                    na=mol_parameters[6],
+                    nb=mol_parameters[7],
+                ),
+            )
+        )
+
+    if kij_matrix:
+        binary_records = np.asarray(kij_matrix)
+    else:
+        binary_records = np.zeros((len(records), len(records)))
+    pcsaftparameters = PcSaftParameters.from_records(
+        records, binary_records=binary_records
     )
-    para = PcSaftParameters.from_model_records([record])
-    eos = EquationOfState.pcsaft(para)
+    eos = EquationOfState.pcsaft(pcsaftparameters)
     return eos
+
+
+def mix_den_feos(parameters: list, state: list, kij_matrix: list = None) -> float:
+    """Calcules mixture density with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+    x = np.asarray(state[2:])  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix)
+
+    statenpt = State(
+        eos,
+        temperature=t * KELVIN,
+        pressure=p * PASCAL,
+        molefracs=x,
+        density_initialization="liquid",
+    )
+
+    den = statenpt.density * (METER**3) / MOL
+
+    return den
 
 
 def pure_den_feos(parameters: list, state: list) -> float:
@@ -59,8 +102,25 @@ def pure_den_feos(parameters: list, state: list) -> float:
     return den
 
 
+def mix_vp_feos(parameters: list, state: list, kij_matrix: list = None) -> float:
+    """Calcules mixture vapor pressure with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+    x = np.asarray(state[2:])  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+
+    vle = PhaseEquilibrium.bubble_point(
+        eos, temperature_or_pressure=t * KELVIN, liquid_molefracs=x
+    )
+
+    assert t == vle.liquid.temperature / KELVIN
+
+    return vle.liquid.pressure() / PASCAL
+
+
 def pure_vp_feos(parameters: list, state: list) -> float:
-    """Calcules pure component density with ePC-SAFT."""
+    """Calcules pure component vapor pressure with ePC-SAFT."""
 
     t = state[0]  # Temperature, K
 
