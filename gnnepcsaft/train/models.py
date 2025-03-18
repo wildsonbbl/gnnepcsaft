@@ -66,7 +66,9 @@ class GNNePCSAFTL(L.LightningModule):
         return {
             "optimizer": opt,
             "lr_scheduler": {
-                "scheduler": CosineAnnealingWarmRestarts(opt, self.config.warmup_steps),
+                "scheduler": CosineAnnealingWarmRestarts(
+                    opt, self.config.warmup_steps, T_mult=1.0025, eta_min=1e-6
+                ),
                 "interval": "step",
                 "frequency": 1,
             },
