@@ -7,6 +7,7 @@ from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import polars as pl
 import seaborn as sns
 import torch
 from rdkit import Chem
@@ -15,7 +16,7 @@ from torch.export.dynamic_shapes import Dim
 from ..configs.default import get_config
 from ..data.graph import assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
-from ..epcsaft.utils import parameters_gc_pcsaft
+from ..epcsaft.utils import mix_den_feos, parameters_gc_pcsaft
 from ..train.models import GNNePCSAFT, GNNePCSAFTL
 from ..train.utils import rhovp_data
 
@@ -367,3 +368,53 @@ def save_exported_program(
         verify=True,
     )
     return exportedprogram
+
+
+def binary_test(model_msigame, model_assoc):
+    "for testing models performance on binary data"
+
+    binary_data = pl.read_parquet(
+        osp.join(real_path, "../data/thermoml/raw/binary.parquet")
+    )
+
+    inchi_list = [
+        (row["inchi1"], row["inchi2"])
+        for row in binary_data.filter(pl.col("tp") == 1)
+        .unique(("inchi1", "inchi2"))
+        .to_dicts()
+    ]
+
+    with torch.no_grad():
+        all_predictions = []
+        for inchi1, inchi2 in inchi_list:
+            gh1 = from_InChI(inchi1)
+            gh2 = from_InChI(inchi2)
+
+            params1 = params_fn(model_msigame, gh1, model_assoc).tolist()
+            params2 = params_fn(model_msigame, gh2, model_assoc).tolist()
+            params1.append(gh1.smiles)
+            params2.append(gh2.smiles)
+            params1.append(gh1.InChI)
+            params2.append(gh2.InChI)
+            params1.append(gh1.mw)
+            params2.append(gh2.mw)
+
+            rho_data = (
+                binary_data.filter(
+                    (pl.col("inchi1") == inchi1)
+                    & (pl.col("inchi2") == inchi2)
+                    & (pl.col("tp") == 1)
+                )
+                .select("m", "TK", "PPa", "mlc1", "mlc2")
+                .to_numpy()
+            )
+
+            all_rho = []
+            for state in rho_data:
+                rho_for_state = mix_den_feos([params1, params2], state[1:])
+                ref_rho = (
+                    state[0] * 1000 / (gh1.mw * state[3] + gh2.mw * state[4])
+                ).item()
+                all_rho.append((rho_for_state, ref_rho))
+            all_predictions.append(((inchi1, inchi2), all_rho))
+    return all_predictions
