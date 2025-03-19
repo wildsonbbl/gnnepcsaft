@@ -88,7 +88,7 @@ def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
 
     den_array = rho_single((parameters, rho))
-    vp_array = vp_sigle((parameters, vp))
+    vp_array = vp_single((parameters, vp))
 
     return den_array, vp_array
 
@@ -355,8 +355,8 @@ def rho_batch(parameters_batch: list, states_batch: list):
     return den
 
 
-def vp_sigle(args):
-    """Calculates vapor pressure with ePC-SAFT for a single pararameter"""
+def vp_single(args):
+    """Calculates vapor pressure with ePC-SAFT for a single parameter"""
     parameters, states = args
     vp_for_all_states = []
     for state in states:
@@ -381,5 +381,5 @@ def vp_batch(parameters_batch: list, states_batch: list):
     ]
     ctx = mp.get_context("spawn")
     with ctx.Pool(processes=ctx.cpu_count() // 2) as pool:
-        vp = pool.map(vp_sigle, args_list)
+        vp = pool.map(vp_single, args_list)
     return vp
