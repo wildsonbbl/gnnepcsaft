@@ -387,17 +387,7 @@ def binary_test(model_msigame, model_assoc):
     with torch.no_grad():
         all_predictions = []
         for inchi1, inchi2 in inchi_list:
-            gh1 = from_InChI(inchi1)
-            gh2 = from_InChI(inchi2)
-
-            params1 = params_fn(model_msigame, gh1, model_assoc).tolist()
-            params2 = params_fn(model_msigame, gh2, model_assoc).tolist()
-            params1.append(gh1.smiles)
-            params2.append(gh2.smiles)
-            params1.append(gh1.InChI)
-            params2.append(gh2.InChI)
-            params1.append(gh1.mw)
-            params2.append(gh2.mw)
+            mix_params = get_mix_params(model_msigame, model_assoc, [inchi1, inchi2])
 
             rho_data = (
                 binary_data.filter(
@@ -411,10 +401,25 @@ def binary_test(model_msigame, model_assoc):
 
             all_rho = []
             for state in rho_data:
-                rho_for_state = mix_den_feos([params1, params2], state[1:])
+                rho_for_state = mix_den_feos(mix_params, state[1:])
                 ref_rho = (
-                    state[0] * 1000 / (gh1.mw * state[3] + gh2.mw * state[4])
+                    state[0]
+                    * 1000
+                    / (mix_params[0][-1] * state[3] + mix_params[1][-1] * state[4])
                 ).item()
                 all_rho.append((rho_for_state, ref_rho))
             all_predictions.append(((inchi1, inchi2), all_rho))
     return all_predictions
+
+
+def get_mix_params(model_msigame, model_assoc, inchis):
+    "to organize the parameters for the mixture"
+    mix_params = []
+    for inchi in inchis:
+        gh = from_InChI(inchi)
+        para_for_inchi = params_fn(model_msigame, gh, model_assoc).tolist()
+        para_for_inchi.append(gh.smiles)
+        para_for_inchi.append(gh.InChI)
+        para_for_inchi.append(gh.mw.item())
+        mix_params.append(para_for_inchi)
+    return mix_params
