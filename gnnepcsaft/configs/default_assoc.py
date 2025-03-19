@@ -21,7 +21,7 @@ def get_config():
     # Training hyperparameters.
 
     config.accelerator = "gpu"
-    config.batch_size = 387 // 4
+    config.batch_size = 387 // 4 + 1
     config.num_train_steps = 100_000
     config.log_every_steps = 1000
     config.eval_every_steps = 5000
@@ -38,7 +38,7 @@ def get_config():
     config.hidden_dim = 256
     config.dropout = 0.0
     config.add_self_loops = True
-    config.num_para = 3
+    config.num_para = 2
     ## PNA
     config.post_layers = 2
     config.pre_layers = 4

@@ -74,11 +74,14 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         batch_size=len(val_assoc_dataset),
         num_workers=os.cpu_count(),
     )
-    train_val_dataloader = DataLoader(
-        train_val_dataset,
-        batch_size=len(train_val_dataset),
-        num_workers=os.cpu_count(),
-    )
+    if config.dataset == "esper":
+        train_val_dataloader = DataLoader(
+            train_val_dataset,
+            batch_size=len(train_val_dataset),
+            num_workers=os.cpu_count(),
+        )
+    else:
+        train_val_dataloader = None
 
     # trainer callback and logger
     callbacks, logger = get_callbacks_logger(config, workdir)
