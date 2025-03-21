@@ -40,8 +40,8 @@ def get_config():
     config.add_self_loops = True
     config.num_para = 2
     ## PNA
-    config.post_layers = 2
-    config.pre_layers = 4
+    config.post_layers = 4
+    config.pre_layers = 2
     config.towers = 1  # hidden_dim % towers == 0
     config.deg = []
     ## GatedGraphConv, ARMAConv
