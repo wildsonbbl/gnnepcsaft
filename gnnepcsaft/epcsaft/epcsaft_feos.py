@@ -27,9 +27,23 @@ def pc_saft_mixture(
     mixture_parameters: list, kij_matrix: list = None
 ) -> EquationOfState.pcsaft:
     """Returns a ePC-SAFT equation of state."""
+    records = get_records(mixture_parameters)
+
+    if kij_matrix:
+        binary_records = np.asarray(kij_matrix)
+    else:
+        binary_records = np.zeros((len(records), len(records)))
+    pcsaftparameters = PcSaftParameters.from_records(
+        records, binary_records=binary_records
+    )
+    eos = EquationOfState.pcsaft(pcsaftparameters)
+    return eos
+
+
+def get_records(mixture_parameters):
+    """Returns a list of PureRecord."""
     records = []
     for mol_parameters in mixture_parameters:
-
         records.append(
             PureRecord(
                 identifier=Identifier(
@@ -50,15 +64,7 @@ def pc_saft_mixture(
             )
         )
 
-    if kij_matrix:
-        binary_records = np.asarray(kij_matrix)
-    else:
-        binary_records = np.zeros((len(records), len(records)))
-    pcsaftparameters = PcSaftParameters.from_records(
-        records, binary_records=binary_records
-    )
-    eos = EquationOfState.pcsaft(pcsaftparameters)
-    return eos
+    return records
 
 
 def mix_den_feos(parameters: list, state: list, kij_matrix: list = None) -> float:
