@@ -24,7 +24,7 @@ def get_config():
     config.batch_size = 387 // 4 + 1
     config.num_train_steps = 100_000
     config.log_every_steps = 1000
-    config.eval_every_steps = 5000
+    config.eval_every_steps = 2500
     config.dataset = "esper_assoc_only"
     config.checkpoint = ""
     config.model = "gnn"

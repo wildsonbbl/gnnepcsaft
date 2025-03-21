@@ -18,9 +18,7 @@ def get_configs() -> list[dict[str, Any]]:
             "towers": 1,
             "num_para": 3,
             "dataset": "esper",
-            "num_train_steps": 100_000,
-            "log_every_steps": 1000,
-            "eval_every_steps": 2500,
+            "batch_size": 512,
         },
         {
             "model_name": "pna_assoc_1.0",
@@ -34,9 +32,7 @@ def get_configs() -> list[dict[str, Any]]:
             "towers": 1,
             "num_para": 2,
             "dataset": "esper_assoc_only",
-            "num_train_steps": 25_000,
-            "log_every_steps": 250,
-            "eval_every_steps": 625,
+            "batch_size": 387 // 4 + 1,
         },
         {
             "model_name": "gatv2_msigmae_1.0",
@@ -48,9 +44,7 @@ def get_configs() -> list[dict[str, Any]]:
             "heads": 8,
             "num_para": 3,
             "dataset": "esper",
-            "num_train_steps": 100_000,
-            "log_every_steps": 1000,
-            "eval_every_steps": 2500,
+            "batch_size": 512,
         },
         {
             "model_name": "gatv2_assoc_1.0",
@@ -62,9 +56,7 @@ def get_configs() -> list[dict[str, Any]]:
             "heads": 8,
             "num_para": 2,
             "dataset": "esper_assoc_only",
-            "num_train_steps": 25_000,
-            "log_every_steps": 250,
-            "eval_every_steps": 625,
+            "batch_size": 387 // 4 + 1,
         },
     ]
     return configs
