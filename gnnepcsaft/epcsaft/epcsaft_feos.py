@@ -2,6 +2,9 @@
 
 # pylint: disable = E0401,E0611
 import numpy as np
+from feos.dft import HelmholtzEnergyFunctional
+from feos.dft import PhaseDiagram as PhaseDiagramDFT
+from feos.dft import SurfaceTensionDiagram
 from feos.eos import (
     Contributions,
     EquationOfState,
@@ -12,7 +15,7 @@ from feos.eos import (
 from feos.pcsaft import Identifier, PcSaftParameters, PcSaftRecord, PureRecord
 
 # pylint: enable = E0401,E0611
-from si_units import JOULE, KELVIN, KILO, METER, MOL, PASCAL
+from si_units import JOULE, KELVIN, KILO, METER, MILLI, MOL, NEWTON, PASCAL
 
 
 def pc_saft(parameters: list) -> EquationOfState.pcsaft:
@@ -205,6 +208,21 @@ def phase_diagram_feos(parameters: list, state: list) -> dict:
     phase_diagram = PhaseDiagram.pure(eos, min_temperature=t * KELVIN, npoints=200)
 
     return phase_diagram.to_dict(Contributions.Residual)
+
+
+def pure_surface_tension_feos(parameters: list, state: list) -> float:
+    """Calcules pure component surface tension with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    records = get_records([parameters])
+
+    pcsaftparameters = PcSaftParameters.from_records(records)
+    functional = HelmholtzEnergyFunctional.pcsaft(pcsaftparameters)
+    phase_diagram = PhaseDiagramDFT.pure(functional, t * KELVIN, 100)
+    st_diagram = SurfaceTensionDiagram(phase_diagram.states, n_grid=1024)
+
+    st = st_diagram.surface_tension / (MILLI * NEWTON / METER)
+    temp = st_diagram.liquid.temperature / KELVIN
+    return st, temp
 
 
 def parameters_gc_pcsaft(smiles: str) -> tuple:
