@@ -147,8 +147,10 @@ def get_ckpt_path(
             ckpt_path = Path(workdir) / f"train/checkpoints/{config.checkpoint}"
     elif config.checkpoint:
         if logger:
+            ckpt_dir = Path(workdir) / f"train/checkpoints/{config.model_name}"
             artifact = logger.use_artifact(config.checkpoint, "model")
-            ckpt_path = Path(artifact.download(workdir)) / "model.ckpt"
+            artifact.download(ckpt_dir)
+            ckpt_path = ckpt_dir / "model.ckpt"
             if config.change_opt:
 
                 ckpt = torch.load(ckpt_path, weights_only=True)
