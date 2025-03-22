@@ -6,7 +6,6 @@ import time
 from tempfile import TemporaryDirectory
 from typing import Any
 
-import ml_collections
 import numpy as np
 import torch
 import torch_geometric.transforms as T
