@@ -3,6 +3,7 @@
 import os
 import os.path as osp
 from functools import partial
+from pathlib import Path
 
 import lightning as L
 import ml_collections
@@ -18,7 +19,7 @@ from ray.train.torch import TorchTrainer
 from torch_geometric.loader import DataLoader
 
 from ..configs.configs_parallel import get_configs
-from .models import create_model
+from .models import GNNePCSAFTL, create_model
 from .utils import (
     CustomRayTrainReportCallback,
     EpochTimer,
@@ -107,7 +108,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         enable_checkpointing=config.job_type == "train",
     )
 
-    ckpt_path = get_ckpt_path(config, workdir, config.job_type, model)
+    ckpt_path = get_ckpt_path(config, workdir, model, logger)
 
     # training run
     logging.info("Training run!")
@@ -126,25 +127,34 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         wandb.finish()
 
 
-def get_ckpt_path(config, workdir, job_type, model):
+def get_ckpt_path(
+    config: ml_collections.ConfigDict,
+    workdir: str,
+    model: GNNePCSAFTL,
+    logger: WandbLogger,
+):
     "gets checkpoint path for resuming training"
     ckpt_path = None
-    if job_type == "tuning":
+    if config.job_type == "tuning":
 
         checkpoint: tune.Checkpoint = tune.get_checkpoint()
         trial_id = tune.get_context().get_trial_id()
 
         if checkpoint:
             with checkpoint.as_directory() as ckpt_dir:
-                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.ckpt")
+                ckpt_path = Path(ckpt_dir) / f"{trial_id}.ckpt"
+        elif config.checkpoint:
+            ckpt_path = Path(workdir) / f"train/checkpoints/{config.checkpoint}"
     elif config.checkpoint:
-        ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
-        if config.change_opt:
-            # pylint: disable=E1120
-            ckpt = torch.load(ckpt_path, weights_only=False)
-            model.load_state_dict(ckpt["state_dict"])
-            # pylint: enable=E1120
-            ckpt_path = None
+        if logger:
+            artifact = logger.use_artifact(config.checkpoint, "model")
+            ckpt_path = Path(artifact.download(workdir)) / "model.ckpt"
+            if config.change_opt:
+
+                ckpt = torch.load(ckpt_path, weights_only=True)
+                model.load_state_dict(ckpt["state_dict"])
+
+                ckpt_path = None
     return ckpt_path
 
 
