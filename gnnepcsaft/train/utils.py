@@ -50,40 +50,6 @@ def calc_deg(dataset: str, workdir: str) -> list:
     return deg.tolist()
 
 
-def create_optimizer(config: ml_collections.ConfigDict, params):
-    """Creates an optimizer, as specified by the config."""
-    if config.optimizer == "adam":
-        return torch.optim.AdamW(
-            params,
-            lr=config.learning_rate,
-            weight_decay=config.weight_decay,
-            amsgrad=True,
-            eps=1e-5,
-        )
-    if config.optimizer == "sgd":
-        return torch.optim.SGD(
-            params,
-            lr=config.learning_rate,
-            momentum=config.momentum,
-            weight_decay=config.weight_decay,
-            nesterov=True,
-        )
-    raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
-
-
-def savemodel(model, optimizer, scaler, path, step):
-    """To checkpoint model during training."""
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scaler_state_dict": scaler.state_dict(),
-            "step": step,
-        },
-        path,
-    )
-
-
 def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
 
@@ -204,40 +170,6 @@ def build_train_dataset(workdir, dataset, transform=None):
     )
 
 
-def input_artifacts(workdir: str, dataset: str, model="last_checkpoint"):
-    "Creates input wandb artifacts"
-    # pylint: disable=C0415
-    import wandb
-
-    if dataset == "ramirez":
-        ramirez_path = workdir + "/data/ramirez2022"
-        ramirez_art = wandb.Artifact(name="ramirez", type="dataset")
-        ramirez_art.add_dir(local_path=ramirez_path, name="ramirez2022")
-        wandb.use_artifact(ramirez_art)
-    if dataset == "thermoml":
-        thermoml_path = workdir + "/data/thermoml"
-        thermoml_art = wandb.Artifact(name="thermoml", type="dataset")
-        thermoml_art.add_dir(local_path=thermoml_path, name="thermoml")
-        wandb.use_artifact(thermoml_art)
-    model_path = workdir + f"/train/checkpoints/{model}.pth"
-    model_art = wandb.Artifact(name="model", type="model")
-    if osp.exists(model_path):
-        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
-        wandb.use_artifact(model_art)
-
-
-def output_artifacts(workdir: str):
-    "Creates output wandb artifacts"
-    # pylint: disable=C0415
-    import wandb
-
-    model_path = workdir + "/train/checkpoints/last_checkpoint.pth"
-    model_art = wandb.Artifact(name="model", type="model")
-    if osp.exists(model_path):
-        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
-        wandb.log_artifact(model_art)
-
-
 class EpochTimer(Callback):
     "Elapsed time counter."
 
@@ -255,17 +187,6 @@ class EpochTimer(Callback):
         logging.log_first_n(
             logging.INFO, "Elapsed time %.4f min.", 20, elapsed_time / 60
         )
-
-
-# taking vp data off for performance boost
-# pylint: disable=R0903
-class VpOff(BaseTransform):
-    "take vp data off thermoml dataset"
-
-    def forward(self, data: Any) -> Any:
-
-        data.vp = torch.tensor([])
-        return data
 
 
 class CustomRayTrainReportCallback(Callback):
