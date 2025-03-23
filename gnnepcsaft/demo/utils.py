@@ -14,7 +14,7 @@ from rdkit import Chem
 from torch.export.dynamic_shapes import Dim
 
 from ..configs.default import get_config
-from ..data.graph import assoc_number, from_InChI, from_smiles
+from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import mix_den_feos, parameters_gc_pcsaft
 from ..train.models import GNNePCSAFT, GNNePCSAFTL
@@ -158,7 +158,7 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
         list_params = []
         for model in models:
             model.eval()
-            params = params_fn(model_msigmae, graphs, model)
+            params = get_params(model, model_msigmae, graphs)
             list_params.append(params.numpy().round(decimals=4))
         if inchi in es_para:
             list_params.append(np.hstack(es_para[inchi]).round(decimals=4)[0])
@@ -173,8 +173,10 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
     return list_params
 
 
-def params_fn(model_msigmae, graphs, model):
-    "fn to organize params"
+def get_params(
+    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT], graphs: Data
+) -> torch.Tensor:
+    "to get parameters from models"
     params = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
     if graphs.InChI in es_para:
         assoc = es_para[graphs.InChI][1][0]
@@ -370,7 +372,9 @@ def save_exported_program(
     return exportedprogram
 
 
-def binary_test(model_msigame, model_assoc):
+def binary_test(
+    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT] = None
+) -> list[tuple[tuple[str, str], tuple[float, float]]]:
     "for testing models performance on binary data"
 
     binary_data = pl.read_parquet(
@@ -387,7 +391,7 @@ def binary_test(model_msigame, model_assoc):
     with torch.no_grad():
         all_predictions = []
         for inchi1, inchi2 in inchi_list:
-            mix_params = get_mix_params(model_msigame, model_assoc, [inchi1, inchi2])
+            mix_params = get_mix_params(model, model_msigmae, [inchi1, inchi2])
 
             rho_data = (
                 binary_data.filter(
@@ -412,12 +416,14 @@ def binary_test(model_msigame, model_assoc):
     return all_predictions
 
 
-def get_mix_params(model_msigame, model_assoc, inchis):
+def get_mix_params(
+    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT], inchis: list[str]
+) -> list[list[Union[float, str]]]:
     "to organize the parameters for the mixture"
     mix_params = []
     for inchi in inchis:
         gh = from_InChI(inchi)
-        para_for_inchi = params_fn(model_msigame, gh, model_assoc).tolist()
+        para_for_inchi = get_params(model, model_msigmae, gh).tolist()
         para_for_inchi.append(gh.smiles)
         para_for_inchi.append(gh.InChI)
         para_for_inchi.append(gh.mw.item())
