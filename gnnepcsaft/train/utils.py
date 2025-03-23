@@ -4,7 +4,7 @@ import multiprocessing as mp
 import os.path as osp
 import time
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 import torch
@@ -14,7 +14,6 @@ from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 from ray import tune
 from ray.tune.experiment.trial import Trial
-from torch.utils.data import ConcatDataset
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
 
@@ -101,11 +100,15 @@ class LogAssoc(BaseTransform):
         return data
 
 
-def build_test_dataset(workdir, train_dataset, transform=None):
+def build_test_dataset(
+    workdir: str,
+    train_dataset: Union[Esper, Ramirez],
+    transform: Union[None, BaseTransform] = None,
+) -> tuple[ThermoMLDataset, ThermoMLDataset, ThermoMLDataset]:
     "Builds test dataset."
 
     para_data = {}
-    if isinstance(train_dataset, (Esper, ConcatDataset)):
+    if isinstance(train_dataset, (Esper,)):
         for graph in train_dataset:
             para_data[graph.InChI] = (
                 graph.para,
@@ -119,24 +122,24 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     tml_dataset = ThermoMLDataset(
         osp.join(workdir, "data/thermoml"), transform=transform
     )
-    val_assoc_idx = []
-    val_idx = []
-    train_idx = []
+    val_assoc_idx: list[int] = []
+    val_msigmae_idx: list[int] = []
+    train_idx: list[int] = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
         if graph.InChI not in para_data and graph.munanb[0, -1] == 0:
-            val_idx.append(idx)
+            val_msigmae_idx.append(idx)
         if graph.InChI in para_data and graph.munanb[0, -1] > 0:
             val_assoc_idx.append(idx)
         if graph.InChI in para_data and graph.munanb[0, -1] == 0:
             train_idx.append(idx)
     val_assoc_dataset = tml_dataset[val_assoc_idx]
-    val_dataset = tml_dataset[val_idx]
+    val_msigmae_dataset = tml_dataset[val_msigmae_idx]
     train_val_dataset = tml_dataset[train_idx]
-    return val_dataset, train_val_dataset, val_assoc_dataset
+    return val_msigmae_dataset, train_val_dataset, val_assoc_dataset  # type: ignore
 
 
-def build_train_dataset(workdir, dataset, transform=None):
+def build_train_dataset(workdir, dataset, transform=None) -> Union[Esper, Ramirez]:
     "Builds train dataset."
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -147,14 +150,15 @@ def build_train_dataset(workdir, dataset, transform=None):
     if dataset == "esper_assoc":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
-        as_idx = []
-        non_as_idx = []
+        assoc_idx = []
+        non_assoc_idx = []
         for i, graph in enumerate(train_dataset):
             if all(graph.munanb[0, 1:] > 0):
-                as_idx.append(i)
+                assoc_idx.append(i)
             if all(graph.munanb[0, 1:] == 0):
-                non_as_idx.append(i)
-        return ConcatDataset([train_dataset[as_idx]] * 4 + [train_dataset[non_as_idx]])
+                non_assoc_idx.append(i)
+        dataset_idxs = assoc_idx * 4 + non_assoc_idx
+        return train_dataset[dataset_idxs]  # type: ignore
     if dataset == "esper_assoc_only":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
@@ -162,7 +166,7 @@ def build_train_dataset(workdir, dataset, transform=None):
         for i, graph in enumerate(train_dataset):
             if all(graph.munanb[0, 1:] > 0):
                 as_idx.append(i)
-        return train_dataset[as_idx]
+        return train_dataset[as_idx]  # type: ignore
     raise ValueError(
         f"dataset is either ramirez, esper, esper_assoc \
               or esper_assoc_only, got >>> {dataset} <<< instead"
@@ -259,7 +263,7 @@ def rho_single(args: tuple[list, np.ndarray]) -> np.ndarray:
 
 
 def rho_batch(
-    parameters_batch: list[list], states_batch: list[np.ndarray]
+    parameters_batch: list[list[Any]], states_batch: list[np.ndarray]
 ) -> list[np.ndarray]:
     """
     Calculates density with ePC-SAFT
@@ -291,7 +295,7 @@ def vp_single(args: tuple[list, np.ndarray]) -> np.ndarray:
 
 
 def vp_batch(
-    parameters_batch: list[list], states_batch: list[np.ndarray]
+    parameters_batch: list[list[Any]], states_batch: list[np.ndarray]
 ) -> list[np.ndarray]:
     """
     Calculates vapor pressure with ePC-SAFT

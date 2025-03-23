@@ -17,7 +17,7 @@ from ..configs.default import get_config
 from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import mix_den_feos, parameters_gc_pcsaft
-from ..train.models import GNNePCSAFT, GNNePCSAFTL
+from ..train.models import GNNePCSAFT
 from ..train.utils import rhovp_data
 
 sns.set_theme(style="ticks")
@@ -25,7 +25,6 @@ sns.set_theme(style="ticks")
 markers = itertools.cycle(("o", "v", "^", "<", ">", "*", "s", "p", "P", "D"))
 
 config = get_config()
-device = torch.device("cpu")
 # pylint: disable = invalid-name
 model_dtype = torch.float64
 real_path = osp.dirname(__file__)
@@ -48,18 +47,7 @@ for graph in es_loader:
         graph.munanb,
     )
 
-device = torch.device("cpu")
-
-
-def loadckp(ckp_path: str, model: Union[GNNePCSAFT, GNNePCSAFTL]):
-    """Loads save checkpoint."""
-    if osp.exists(ckp_path):
-        state = "model_state_dict" if isinstance(model, GNNePCSAFT) else "state_dict"
-        checkpoint = torch.load(
-            ckp_path, map_location=torch.device("cpu"), weights_only=False
-        )
-        model.load_state_dict(checkpoint[state])
-        del checkpoint
+device = "cpu"
 
 
 def plotdata(
@@ -68,8 +56,8 @@ def plotdata(
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
     parameters"""
-    # pylint: disable=C0415
-    from rdkit.Chem import Draw
+
+    from rdkit.Chem import Draw  # pylint: disable=C0415; # type: ignore
 
     if not osp.exists("images"):
         os.mkdir("images")
@@ -161,7 +149,7 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
             params = get_params(model, model_msigmae, graphs)
             list_params.append(params.tolist())
         if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).tolist()[0])
+            list_params.append(np.hstack(es_para[inchi]).squeeze().tolist())
         try:
             list_params.append(list(parameters_gc_pcsaft(gh.smiles)))
         # pylint: disable=W0702
@@ -184,10 +172,16 @@ def get_params(
         munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
 
     if msigmae_or_log10assoc.size(0) == 2:
-        msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-        return torch.hstack(
-            (msigmae, 10 ** (msigmae_or_log10assoc * torch.tensor([-1.0, 1.0])), munanb)
-        )
+        if model_msigmae:
+            msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+            return torch.hstack(
+                (
+                    msigmae,
+                    10 ** (msigmae_or_log10assoc * torch.tensor([-1.0, 1.0])),
+                    munanb,
+                )
+            )
+        raise ValueError("model_msigmae is None")
     return torch.hstack((msigmae_or_log10assoc, assoc, munanb))
 
 
@@ -322,7 +316,7 @@ def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+
     plt.show()
 
 
-def predparams2(smiles: str, models: list[GNNePCSAFT]):
+def predparams2(smiles: list[str], models: list[GNNePCSAFT]):
     "Use models to predict ePC-SAFT parameters from smiles."
     list_array_params = []
     for model in models:
@@ -346,9 +340,9 @@ def save_exported_program(
     """Save model as Exported Program."""
     model.eval()
     dynamic_shapes = {
-        "x": (Dim.AUTO, 9),
-        "edge_index": (2, Dim.AUTO),
-        "edge_attr": (Dim.AUTO, 3),
+        "x": (Dim.AUTO, 9),  # type: ignore
+        "edge_index": (2, Dim.AUTO),  # type: ignore
+        "edge_attr": (Dim.AUTO, 3),  # type: ignore
         "batch": None,
     }
 
