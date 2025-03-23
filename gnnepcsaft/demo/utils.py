@@ -159,13 +159,11 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
         for model in models:
             model.eval()
             params = get_params(model, model_msigmae, graphs)
-            list_params.append(params.numpy().round(decimals=4))
+            list_params.append(params.tolist())
         if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).round(decimals=4)[0])
+            list_params.append(np.hstack(es_para[inchi]).tolist()[0])
         try:
-            list_params.append(
-                np.asarray(parameters_gc_pcsaft(gh.smiles)).round(decimals=4)
-            )
+            list_params.append(list(parameters_gc_pcsaft(gh.smiles)))
         # pylint: disable=W0702
         except:
             pass
@@ -194,14 +192,14 @@ def get_params(
 
 
 def pred_rhovp(
-    inchi: str, list_params: list[list], rho: np.ndarray, vp: np.ndarray
+    inchi: str, list_params: list[list[float]], rho: np.ndarray, vp: np.ndarray
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     "Predicted density and vapor pressure with ePC-SAFT."
     pred_den_list, pred_vp_list = [], []
     print(f"#### {inchi} ####")
     for i, params in enumerate(list_params):
         print(f"#### Parameters for model {i+1} ####")
-        print(params)
+        print([round(para, 5) for para in params])
         pred_den, pred_vp = rhovp_data(params, rho, vp)
         pred_den_list.append(pred_den)
         pred_vp_list.append(pred_vp)
