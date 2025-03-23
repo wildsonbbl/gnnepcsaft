@@ -104,7 +104,7 @@ def build_test_dataset(
     workdir: str,
     train_dataset: Union[Esper, Ramirez],
     transform: Union[None, BaseTransform] = None,
-) -> tuple[ThermoMLDataset, ThermoMLDataset, ThermoMLDataset]:
+) -> tuple[ThermoMLDataset, ThermoMLDataset]:
     "Builds test dataset."
 
     para_data = {}
@@ -122,21 +122,18 @@ def build_test_dataset(
     tml_dataset = ThermoMLDataset(
         osp.join(workdir, "data/thermoml"), transform=transform
     )
-    val_assoc_idx: list[int] = []
+
     val_msigmae_idx: list[int] = []
     train_idx: list[int] = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
         if graph.InChI not in para_data and graph.munanb[0, -1] == 0:
             val_msigmae_idx.append(idx)
-        if graph.InChI in para_data and graph.munanb[0, -1] > 0:
-            val_assoc_idx.append(idx)
-        if graph.InChI in para_data and graph.munanb[0, -1] == 0:
+        if graph.InChI in para_data:
             train_idx.append(idx)
-    val_assoc_dataset = tml_dataset[val_assoc_idx]
     val_msigmae_dataset = tml_dataset[val_msigmae_idx]
     train_val_dataset = tml_dataset[train_idx]
-    return val_msigmae_dataset, train_val_dataset, val_assoc_dataset  # type: ignore
+    return val_msigmae_dataset, train_val_dataset  # type: ignore
 
 
 def build_train_dataset(workdir, dataset, transform=None) -> Union[Esper, Ramirez]:
