@@ -214,7 +214,7 @@ class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
             else:
                 x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
 
-        if batch:
+        if batch is not None:
             x = self.global_pool(x, batch)
         elif self.global_pool_type == "mean":
             x = x.mean(dim=0, keepdim=True)
