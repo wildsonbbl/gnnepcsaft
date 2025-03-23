@@ -213,7 +213,9 @@ def compute_reward(args):  # pylint: disable=too-many-locals
 
     # Get states
     states_rho, states_vp = tml_data[inchi]
-    rho_pred, vp_pred = rhovp_data(params_full, states_rho.numpy(), states_vp.numpy())
+    rho_pred, vp_pred = rhovp_data(
+        params_full.tolist(), states_rho.numpy(), states_vp.numpy()
+    )
 
     # Get experimental data
     density_exp = states_rho[:, -1].numpy()

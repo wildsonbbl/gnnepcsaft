@@ -1,4 +1,5 @@
 "Module to calculate properties with ePC-SAFT using TEQP."
+
 import numpy as np
 import PCSAFTsuperanc
 import teqp
@@ -12,7 +13,7 @@ def pure_den_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     t = state[0]  # Temperature, K
 
     # pylint: disable=E1101,I1101
-    c = teqp.SAFTCoeffs()
+    c = teqp.SAFTCoeffs()  # type: ignore
     c.m = max(parameters[0], 1.0)  # units
     c.sigma_Angstrom = parameters[1]  # Å
     c.epsilon_over_k = parameters[2]  # K
@@ -46,7 +47,7 @@ def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
     e = parameters[2]  # K
 
     # pylint: disable=E1101,I1101
-    c = teqp.SAFTCoeffs()
+    c = teqp.SAFTCoeffs()  # type: ignore
     c.m = m
     c.sigma_Angstrom = s
     c.epsilon_over_k = e
