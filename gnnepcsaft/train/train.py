@@ -85,7 +85,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         train_val_dataloader = None
 
     # trainer callback and logger
-    callbacks, logger = get_callbacks_logger(config, workdir)
+    callbacks, logger = get_callbacks_and_logger(config, workdir)
 
     # creating model from config
     model = create_model(config, calc_deg(config.dataset, workdir))
@@ -160,7 +160,7 @@ def get_ckpt_path(
     return ckpt_path
 
 
-def get_callbacks_logger(config, workdir):
+def get_callbacks_and_logger(config, workdir):
     """Creates callbacks and logger for training."""
     callbacks = []
     job_type = config.job_type
