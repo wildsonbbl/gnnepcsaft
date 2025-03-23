@@ -170,13 +170,23 @@ def get_callbacks_logger(config, workdir):
         # Checkpointing from val loss (mape_den) and train loss (train_mape)
         checkpoint_mape_den = ModelCheckpoint(
             dirpath=osp.join(workdir, "train/checkpoints"),
-            filename=config.model_name + "-{epoch}-mape_den",
+            filename=config.model_name + "-{epoch}-mape_den_train",
             save_last=False,
             monitor="mape_den/dataloader_idx_0",
             save_top_k=1,
             verbose=True,
         )
         callbacks.append(checkpoint_mape_den)
+
+        checkpoint_mape_den_2 = ModelCheckpoint(
+            dirpath=osp.join(workdir, "train/checkpoints"),
+            filename=config.model_name + "-{epoch}-mape_den_val",
+            save_last=False,
+            monitor="mape_den/dataloader_idx_1",
+            save_top_k=1,
+            verbose=True,
+        )
+        callbacks.append(checkpoint_mape_den_2)
 
         checkpoint_train_loss = ModelCheckpoint(
             dirpath=osp.join(workdir, "train/checkpoints"),
