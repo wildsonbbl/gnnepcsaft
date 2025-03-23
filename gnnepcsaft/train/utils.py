@@ -9,17 +9,25 @@ from typing import Any, Union
 import numpy as np
 import torch
 import torch_geometric.transforms as T
+import xgboost as xgb
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 from ray import tune
 from ray.tune.experiment.trial import Trial
+from sklearn.ensemble import RandomForestRegressor
+from torch_geometric.data import Data
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
+from xgboost import Booster
 
 from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
+
+# PCSAFT parameters bounds
+params_lower_bound = np.array([1.0, 1.9, 50.0, 1e-4, 200.0, 0, 0, 0])
+params_upper_bound = np.array([25.0, 4.5, 550.0, 0.9, 5000.0, np.inf, np.inf, np.inf])
 
 
 def calc_deg(dataset: str, workdir: str) -> list:
@@ -308,3 +316,63 @@ def vp_batch(
     with ctx.Pool(processes=ctx.cpu_count() // 2) as pool:
         vp = pool.map(vp_single, args_list)
     return vp
+
+
+def rf_xgb_evaluation(
+    graphs: Data, model: Union[RandomForestRegressor, Booster]
+) -> tuple[float, float]:
+    """Evaluation function for RF and XGBoost models"""
+    if isinstance(model, Booster):
+        x = xgb.DMatrix(
+            torch.hstack(
+                (
+                    graphs.ecfp,
+                    graphs.mw,
+                    graphs.atom_count,
+                    graphs.ring_count,
+                    graphs.rbond_count,
+                )
+            ).numpy()
+        )
+        pred_msigmae = model.predict(x)
+    else:
+        x = torch.hstack(
+            (
+                graphs.ecfp,
+                graphs.mw,
+                graphs.atom_count,
+                graphs.ring_count,
+                graphs.rbond_count,
+            )
+        ).numpy()
+        pred_msigmae = model.predict(x)
+
+    assert isinstance(pred_msigmae, np.ndarray)
+    assert pred_msigmae.shape == graphs.para.numpy().shape
+    para_assoc = 10 ** (graphs.assoc.numpy() * np.array([-1.0, 1.0]))
+    pred_params = np.hstack([pred_msigmae, para_assoc, graphs.munanb.numpy()])
+    pred_params.clip(params_lower_bound, params_upper_bound, out=pred_params)
+    assert pred_params.shape == (len(graphs.rho), 8)
+    assert isinstance(graphs.rho[0], np.ndarray)
+    assert isinstance(graphs.vp[0], np.ndarray)
+    assert isinstance(graphs.rho, list)
+    assert isinstance(graphs.vp, list)
+    pred_rho = rho_batch(pred_params.tolist(), graphs.rho)
+    pred_vp = vp_batch(pred_params.tolist(), graphs.vp)
+    assert isinstance(pred_rho[0], np.ndarray)
+    assert isinstance(pred_vp[0], np.ndarray)
+    assert isinstance(pred_rho, list)
+    assert isinstance(pred_vp, list)
+    rho = [rho[:, -1] for rho in graphs.rho if rho.shape[0] > 0]
+    vp = [vp[:, -1] for vp in graphs.vp if vp.shape[0] > 0]
+    mape_den = []
+    for pred, exp in zip(pred_rho, rho):
+        assert pred.shape == exp.shape
+        mape_den += [np.mean(np.abs(pred - exp) / exp).item()]
+    mape_den = np.asarray(mape_den).mean().item()
+    mape_vp = []
+    for pred, exp in zip(pred_vp, vp):
+        assert pred.shape == exp.shape
+        mape_vp += [np.mean(np.abs(pred - exp) / exp).item()]
+    mape_vp = np.asarray(mape_vp).mean().item()
+    return mape_den, mape_vp
