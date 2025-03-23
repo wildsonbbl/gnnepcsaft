@@ -3,7 +3,7 @@
 import itertools
 import os
 import os.path as osp
-from typing import Union
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -51,7 +51,10 @@ device = "cpu"
 
 
 def plotdata(
-    inchi: str, molecule_name: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT
+    inchi: str,
+    molecule_name: str,
+    models: list[GNNePCSAFT],
+    model_msigmae: Optional[GNNePCSAFT],
 ):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
@@ -138,7 +141,9 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
+def predparams(
+    inchi: str, models: list[GNNePCSAFT], model_msigmae: Optional[GNNePCSAFT]
+):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
         gh = from_InChI(inchi)
