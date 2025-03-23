@@ -177,7 +177,7 @@ def get_params(
     model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT], graphs: Data
 ) -> torch.Tensor:
     "to get parameters from models"
-    params = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+    msigmae_or_log10assoc = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
     if graphs.InChI in es_para:
         assoc = es_para[graphs.InChI][1][0]
         munanb = es_para[graphs.InChI][2][0]
@@ -185,14 +185,12 @@ def get_params(
         assoc = torch.zeros(2)
         munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
 
-    if params.size(0) == 2:
+    if msigmae_or_log10assoc.size(0) == 2:
         msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-        params = torch.hstack(
-            (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
+        return torch.hstack(
+            (msigmae, 10 ** (msigmae_or_log10assoc * torch.tensor([-1.0, 1.0])), munanb)
         )
-    elif params.size(0) == 3:
-        params = torch.hstack((params, assoc, munanb))
-    return params
+    return torch.hstack((msigmae_or_log10assoc, assoc, munanb))
 
 
 def pred_rhovp(
