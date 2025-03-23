@@ -195,7 +195,9 @@ def get_params(
     return params
 
 
-def pred_rhovp(inchi, list_params, rho, vp):
+def pred_rhovp(
+    inchi: str, list_params: list[list], rho: np.ndarray, vp: np.ndarray
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
     "Predicted density and vapor pressure with ePC-SAFT."
     pred_den_list, pred_vp_list = [], []
     print(f"#### {inchi} ####")
@@ -208,7 +210,12 @@ def pred_rhovp(inchi, list_params, rho, vp):
     return pred_den_list, pred_vp_list
 
 
-def plotden(inchi, molecule_name, models, data):
+def plotden(
+    inchi: str,
+    molecule_name: str,
+    models: list[GNNePCSAFT],
+    data: tuple[np.ndarray, list[np.ndarray]],
+):
     "Plot density data."
 
     rho, pred_den_list = data
@@ -237,7 +244,12 @@ def plotden(inchi, molecule_name, models, data):
             plt.show()
 
 
-def plotvp(inchi, molecule_name, models, data):
+def plotvp(
+    inchi: str,
+    molecule_name: str,
+    models: list[GNNePCSAFT],
+    data: tuple[np.ndarray, list[np.ndarray]],
+):
     "Plot vapor pressure data."
     vp, pred_vp_list = data
     if ~np.all(vp == np.zeros_like(vp)):
@@ -261,16 +273,6 @@ def plotvp(inchi, molecule_name, models, data):
             img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
         )
         plt.show()
-
-
-def datacsv(model_para):
-    """Builds a dataset of InChI, density mape, vapor pressure mape."""
-    data = {"inchis": [], "mden": [], "mvp": []}
-    for inchi in model_para:
-        data["inchis"].append(inchi)
-        data["mden"].append(model_para[inchi][1])
-        data["mvp"].append(model_para[inchi][2])
-    return data
 
 
 def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
