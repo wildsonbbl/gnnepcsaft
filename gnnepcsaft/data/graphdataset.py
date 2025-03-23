@@ -2,8 +2,7 @@
 
 import polars as pl
 import torch
-from torch.utils.data import Dataset as ds
-from torch_geometric.data import Data, InMemoryDataset
+from torch_geometric.data import InMemoryDataset
 
 from .graph import from_InChI
 from .rdkit_util import mw
@@ -88,59 +87,6 @@ class ThermoMLDataset(InMemoryDataset):
             datalist.append(graph)
 
         torch.save(self.collate(datalist), self.processed_paths[0])
-
-
-class ThermoMLPadded(ds):
-    """Class used to make `ThermoMLDataset` suitable for `jax.jit`"""
-
-    def __init__(self, dataset: ThermoMLDataset, pad_size: int = 32):
-        """Initializes the data reader by loading in data."""
-        self.dataset = dataset
-        self.pad = pad_size
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        sample = self.dataset[idx]
-
-        vp = sample.vp
-        n = vp.shape[0]
-        pad = _nearest_bigger_power_of_two(n)
-        pad = min(pad, self.pad)
-        vp = get_padded_array(vp, pad)
-
-        rho = sample.rho
-        n = rho.shape[0]
-        pad = _nearest_bigger_power_of_two(n)
-        pad = min(pad, self.pad)
-        rho = get_padded_array(rho, pad)
-
-        data = Data(
-            x=sample.x,
-            edge_attr=sample.edge_attr,
-            edge_index=sample.edge_index,
-            rho=rho,
-            vp=vp,
-            InChI=sample.InChI,
-        )
-        return data
-
-
-def get_padded_array(states: torch.Tensor, pad_size: int = 2**10) -> torch.Tensor:
-    """Padding to make array suitable for jax.jit"""
-    indexes = torch.randperm(states.shape[0])
-    states = states[indexes]
-    states = states.repeat(pad_size // states.shape[0] + 1, 1)
-    return states[:pad_size, :]
-
-
-def _nearest_bigger_power_of_two(x: int) -> int:
-    """Computes the nearest power of two greater than x for padding."""
-    y = 2
-    while y < x:
-        y *= 2
-    return y
 
 
 class Ramirez(InMemoryDataset):

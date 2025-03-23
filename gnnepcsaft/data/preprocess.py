@@ -48,8 +48,8 @@ def to_inchi(ids: str) -> str:
                 ans = ans.read().decode("utf8").rstrip()
                 ans = ans.split("\n")[0]
         except (TypeError, ValueError, HTTPError):
-            print("not ok:", url)
-            ans = None
+            print("not ok:", ids)
+            ans = ""
     return ans
 
 
