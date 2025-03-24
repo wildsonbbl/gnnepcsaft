@@ -31,7 +31,7 @@ params_upper_bound = np.array([25.0, 4.5, 550.0, 0.9, 5000.0, np.inf, np.inf, np
 
 
 def calc_deg(dataset: str, workdir: str) -> list:
-    """Calculates deg for `PNAPCSAFT` model."""
+    """Calculates deg for `PNA` conv."""
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path)
@@ -84,27 +84,6 @@ class TransformParameters(BaseTransform):
             data.munanb = torch.tensor(
                 [(0,) + assoc_number(data.InChI)], dtype=torch.float32
             )
-        return data
-
-
-class LogAssoc(BaseTransform):
-    "Log10 assoc for training."
-
-    def __init__(self, workdir: str) -> None:
-        super().__init__()
-        path = osp.join(workdir, "data/esper2023")
-        train_dataset = Esper(path)
-        assoc = {}
-        msigmae = {}
-        for graph in train_dataset:
-            assoc[graph.InChI] = torch.abs(torch.log10(graph.assoc))
-            msigmae[graph.InChI] = torch.abs(torch.log10(graph.para))
-        self.assoc = assoc
-        self.msigmae = msigmae
-
-    def forward(self, data: Any) -> Any:
-        data.assoc = self.assoc[data.InChI]
-        data.para = self.msigmae[data.InChI]
         return data
 
 
@@ -211,7 +190,6 @@ class CustomRayTrainReportCallback(Callback):
             metrics["epoch"] = trainer.current_epoch
             metrics["step"] = trainer.global_step
 
-            checkpoint = None
             trial_id = tune.get_context().get_trial_id()
             # Save model checkpoint file to tmpdir
             ckpt_path = osp.join(tmpdir, f"{trial_id}.ckpt")
