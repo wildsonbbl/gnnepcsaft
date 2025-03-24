@@ -5,6 +5,7 @@ from urllib.request import HTTPError, urlopen
 
 from rdkit import Chem
 
+# pyright: reportAttributeAccessIssue=false
 # pylint: disable = no-name-in-module
 from rdkit.Chem.Fragments import (
     fr_Al_OH,
