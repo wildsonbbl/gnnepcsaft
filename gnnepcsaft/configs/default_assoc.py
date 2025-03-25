@@ -32,10 +32,10 @@ def get_config():
 
     # GNN hyperparameters.
     ## General
-    config.conv = "PNA"
+    config.conv = "GATv2"
     config.global_pool = "add"
-    config.propagation_depth = 6
-    config.hidden_dim = 256
+    config.propagation_depth = 3
+    config.hidden_dim = 512
     config.dropout = 0.0
     config.add_self_loops = True
     config.num_para = 2
@@ -48,6 +48,6 @@ def get_config():
     config.num_layers = 2
     config.num_stacks = 2
     ## GAT, GATv2, TransformerConv
-    config.heads = 2  # hidden_dim % heads == 0
+    config.heads = 8  # hidden_dim % heads == 0
 
     return config

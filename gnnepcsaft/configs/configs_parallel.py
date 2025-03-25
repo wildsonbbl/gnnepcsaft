@@ -19,22 +19,7 @@ def get_configs() -> list[dict[str, Any]]:
             "num_para": 3,
             "dataset": "esper",
             "batch_size": 512,
-            "checkpoint": "wildson/gnn-pc-saft/model-vg8dl147:v0",
-        },
-        {
-            "model_name": "pna_assoc_1.0",
-            "model": "gnn",
-            "conv": "PNA",
-            "dropout": 0.0,
-            "propagation_depth": 6,
-            "hidden_dim": 256,
-            "post_layers": 4,
-            "pre_layers": 2,
-            "towers": 1,
-            "num_para": 2,
-            "dataset": "esper_assoc_only",
-            "batch_size": 387 // 4 + 1,
-            "checkpoint": "wildson/gnn-pc-saft/model-wn7dg8ha:v0",
+            "checkpoint": "wildson/gnn-pc-saft/model-ue5236e7:v1",
         },
         {
             "model_name": "gatv2_msigmae_1.0",
@@ -47,7 +32,7 @@ def get_configs() -> list[dict[str, Any]]:
             "num_para": 3,
             "dataset": "esper",
             "batch_size": 512,
-            "checkpoint": "wildson/gnn-pc-saft/model-2hx8x6sh:v0",
+            "checkpoint": "wildson/gnn-pc-saft/model-ocg9ky5x:v1",
         },
         {
             "model_name": "gatv2_assoc_1.0",
@@ -60,7 +45,7 @@ def get_configs() -> list[dict[str, Any]]:
             "num_para": 2,
             "dataset": "esper_assoc_only",
             "batch_size": 387 // 4 + 1,
-            "checkpoint": "wildson/gnn-pc-saft/model-jopu290j:v1",
+            "checkpoint": "wildson/gnn-pc-saft/model-ebe3ut4a:v0",
         },
     ]
     return configs
