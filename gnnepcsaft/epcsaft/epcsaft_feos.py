@@ -117,7 +117,7 @@ def pure_den_feos(parameters: list, state: list) -> float:
 
 def mix_vp_feos(
     parameters: list[list], state: list, kij_matrix: Optional[list] = None
-) -> float:
+) -> tuple[float, float]:
     """Calcules mixture vapor pressure with ePC-SAFT."""
 
     t = state[0]  # Temperature, K
@@ -125,13 +125,24 @@ def mix_vp_feos(
 
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
 
-    vle = PhaseEquilibrium.bubble_point(
+    vle_bubble_point = PhaseEquilibrium.bubble_point(
         eos, temperature_or_pressure=t * si.KELVIN, liquid_molefracs=x
     )
 
-    assert t == vle.liquid.temperature / si.KELVIN
+    vle_dew_point = PhaseEquilibrium.dew_point(
+        eos, temperature_or_pressure=t * si.KELVIN, vapor_molefracs=x
+    )
 
-    return vle.liquid.pressure() / si.PASCAL
+    assert (
+        t == vle_bubble_point.liquid.temperature / si.KELVIN
+    ), "Temperature mismatch for bubble point"
+    assert (
+        t == vle_dew_point.vapor.temperature / si.KELVIN
+    ), "Temperature mismatch for dew point"
+    return (
+        vle_bubble_point.liquid.pressure() / si.PASCAL,
+        vle_dew_point.vapor.pressure() / si.PASCAL,
+    )
 
 
 def pure_vp_feos(parameters: list, state: list) -> float:
