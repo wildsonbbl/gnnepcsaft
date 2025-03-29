@@ -29,7 +29,7 @@ def pc_saft(parameters: list) -> EquationOfState.pcsaft:
 
 
 def pc_saft_mixture(
-    mixture_parameters: list, kij_matrix: Optional[list] = None
+    mixture_parameters: list[list], kij_matrix: Optional[list] = None
 ) -> EquationOfState.pcsaft:
     """Returns a ePC-SAFT equation of state."""
     records = get_records(mixture_parameters)
@@ -45,7 +45,7 @@ def pc_saft_mixture(
     return eos
 
 
-def get_records(mixture_parameters):
+def get_records(mixture_parameters: list[list]) -> list[PureRecord]:
     """Returns a list of PureRecord."""
     records = []
     for mol_parameters in mixture_parameters:
@@ -73,7 +73,7 @@ def get_records(mixture_parameters):
 
 
 def mix_den_feos(
-    parameters: list, state: list, kij_matrix: Optional[list] = None
+    parameters: list[list], state: list, kij_matrix: Optional[list] = None
 ) -> float:
     """Calcules mixture density with ePC-SAFT."""
 
@@ -116,7 +116,7 @@ def pure_den_feos(parameters: list, state: list) -> float:
 
 
 def mix_vp_feos(
-    parameters: list, state: list, kij_matrix: Optional[list] = None
+    parameters: list[list], state: list, kij_matrix: Optional[list] = None
 ) -> float:
     """Calcules mixture vapor pressure with ePC-SAFT."""
 
