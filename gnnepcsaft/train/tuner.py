@@ -3,7 +3,6 @@
 import os
 from functools import partial
 
-import ml_collections
 import torch
 from absl import app, flags, logging
 from ray import tune
@@ -47,10 +46,10 @@ def main(argv):
     logging.info("Calling tuner!")
     torch.set_float32_matmul_precision("medium")
 
-    config: ml_collections.ConfigDict = FLAGS.config
+    config: dict = FLAGS.config
     # Hyperparameter search space
     search_space = get_search_space()
-    max_t = config.num_train_steps // config.eval_every_steps
+    max_t = config["num_train_steps"] // config["eval_every_steps"]
     # BOHB search algorithm
     search_alg = TuneBOHB(
         space=search_space,
@@ -71,9 +70,9 @@ def main(argv):
                 "conv": "GATv2",
                 "dropout": 0.0,
                 "global_pool": "add",
-                "propagation_depth": 7,
+                "propagation_depth": 4,
                 "hidden_dim": 256,
-                "heads": 1,
+                "heads": 2,
             },
         ],
         seed=77,
@@ -139,8 +138,8 @@ def main(argv):
                     [
                         WandbLoggerCallback(
                             "gnn-pc-saft",
-                            config.dataset,
-                            tags=["tuning", config.dataset] + FLAGS.tags,
+                            config["dataset"],
+                            tags=["tuning", config["dataset"]] + FLAGS.tags,
                         )
                     ]
                 ),

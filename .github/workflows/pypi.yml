@@ -10,7 +10,7 @@ jobs:
   publish:
     strategy:
       matrix:
-        runs-on: [ubuntu-latest, windows-latest]
+        runs-on: [ubuntu-latest]
         python-version: ["3.10", "3.11"]
     runs-on: ${{ matrix.runs-on }}
     steps:

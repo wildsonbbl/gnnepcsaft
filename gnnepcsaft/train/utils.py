@@ -4,28 +4,34 @@ import multiprocessing as mp
 import os.path as osp
 import time
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, Union
 
-import ml_collections
 import numpy as np
 import torch
 import torch_geometric.transforms as T
+import xgboost as xgb
 from absl import logging
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 from ray import tune
 from ray.tune.experiment.trial import Trial
-from torch.utils.data import ConcatDataset
+from sklearn.ensemble import RandomForestRegressor
+from torch_geometric.data import Data
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.utils import degree
+from xgboost import Booster
 
 from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..epcsaft.utils import pure_den_feos, pure_vp_feos
 
+# PCSAFT parameters bounds
+params_lower_bound = np.array([1.0, 1.9, 50.0, 1e-4, 200.0, 0, 0, 0])
+params_upper_bound = np.array([25.0, 4.5, 550.0, 0.9, 5000.0, np.inf, np.inf, np.inf])
+
 
 def calc_deg(dataset: str, workdir: str) -> list:
-    """Calculates deg for `PNAPCSAFT` model."""
+    """Calculates deg for `PNA` conv."""
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         train_dataset = Ramirez(path)
@@ -50,45 +56,11 @@ def calc_deg(dataset: str, workdir: str) -> list:
     return deg.tolist()
 
 
-def create_optimizer(config: ml_collections.ConfigDict, params):
-    """Creates an optimizer, as specified by the config."""
-    if config.optimizer == "adam":
-        return torch.optim.AdamW(
-            params,
-            lr=config.learning_rate,
-            weight_decay=config.weight_decay,
-            amsgrad=True,
-            eps=1e-5,
-        )
-    if config.optimizer == "sgd":
-        return torch.optim.SGD(
-            params,
-            lr=config.learning_rate,
-            momentum=config.momentum,
-            weight_decay=config.weight_decay,
-            nesterov=True,
-        )
-    raise ValueError(f"Unsupported optimizer: {config.optimizer}.")
-
-
-def savemodel(model, optimizer, scaler, path, step):
-    """To checkpoint model during training."""
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scaler_state_dict": scaler.state_dict(),
-            "step": step,
-        },
-        path,
-    )
-
-
-def rhovp_data(parameters: np.ndarray, rho: np.ndarray, vp: np.ndarray):
+def rhovp_data(parameters: list, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
 
     den_array = rho_single((parameters, rho))
-    vp_array = vp_sigle((parameters, vp))
+    vp_array = vp_single((parameters, vp))
 
     return den_array, vp_array
 
@@ -115,32 +87,15 @@ class TransformParameters(BaseTransform):
         return data
 
 
-class LogAssoc(BaseTransform):
-    "Log10 assoc for training."
-
-    def __init__(self, workdir: str) -> None:
-        super().__init__()
-        path = osp.join(workdir, "data/esper2023")
-        train_dataset = Esper(path)
-        assoc = {}
-        msigmae = {}
-        for graph in train_dataset:
-            assoc[graph.InChI] = torch.abs(torch.log10(graph.assoc))
-            msigmae[graph.InChI] = torch.abs(torch.log10(graph.para))
-        self.assoc = assoc
-        self.msigmae = msigmae
-
-    def forward(self, data: Any) -> Any:
-        data.assoc = self.assoc[data.InChI]
-        data.para = self.msigmae[data.InChI]
-        return data
-
-
-def build_test_dataset(workdir, train_dataset, transform=None):
+def build_test_dataset(
+    workdir: str,
+    train_dataset: Union[Esper, Ramirez],
+    transform: Union[None, BaseTransform] = None,
+) -> tuple[ThermoMLDataset, ThermoMLDataset]:
     "Builds test dataset."
 
     para_data = {}
-    if isinstance(train_dataset, (Esper, ConcatDataset)):
+    if isinstance(train_dataset, (Esper,)):
         for graph in train_dataset:
             para_data[graph.InChI] = (
                 graph.para,
@@ -154,93 +109,52 @@ def build_test_dataset(workdir, train_dataset, transform=None):
     tml_dataset = ThermoMLDataset(
         osp.join(workdir, "data/thermoml"), transform=transform
     )
-    val_assoc_idx = []
-    val_idx = []
-    train_idx = []
+
+    val_msigmae_idx: list[int] = []
+    train_idx: list[int] = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
         if graph.InChI not in para_data and graph.munanb[0, -1] == 0:
-            val_idx.append(idx)
-        if graph.InChI in para_data and graph.munanb[0, -1] > 0:
-            val_assoc_idx.append(idx)
-        if graph.InChI in para_data and graph.munanb[0, -1] == 0:
+            val_msigmae_idx.append(idx)
+        if graph.InChI in para_data:
             train_idx.append(idx)
-    val_assoc_dataset = tml_dataset[val_assoc_idx]
-    val_dataset = tml_dataset[val_idx]
+    val_msigmae_dataset = tml_dataset[val_msigmae_idx]
     train_val_dataset = tml_dataset[train_idx]
-    return val_dataset, train_val_dataset, val_assoc_dataset
+    return val_msigmae_dataset, train_val_dataset  # type: ignore
 
 
-def build_train_dataset(workdir, dataset, transform=None):
+def build_train_dataset(workdir, dataset, transform=None) -> Union[Esper, Ramirez]:
     "Builds train dataset."
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
-        train_dataset = Ramirez(path, transform=transform)
-    elif dataset == "esper":
+        return Ramirez(path, transform=transform)
+    if dataset == "esper":
+        path = osp.join(workdir, "data/esper2023")
+        return Esper(path, transform=transform)
+    if dataset == "esper_assoc":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
-    elif dataset == "esper_assoc":
+        assoc_idx = []
+        non_assoc_idx = []
+        for i, graph in enumerate(train_dataset):
+            if all(graph.munanb[0, 1:] > 0):
+                assoc_idx.append(i)
+            if all(graph.munanb[0, 1:] == 0):
+                non_assoc_idx.append(i)
+        dataset_idxs = assoc_idx * 4 + non_assoc_idx
+        return train_dataset[dataset_idxs]  # type: ignore
+    if dataset == "esper_assoc_only":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)
         as_idx = []
-        non_as_idx = []
         for i, graph in enumerate(train_dataset):
-            if all(graph.munanb[1:] > 0):
+            if all(graph.munanb[0, 1:] > 0):
                 as_idx.append(i)
-            if all(graph.munanb[1:] == 0):
-                non_as_idx.append(i)
-        train_dataset = ConcatDataset(
-            [train_dataset[as_idx]] * 4 + [train_dataset[non_as_idx]]
-        )
-    elif dataset == "esper_assoc_only":
-        path = osp.join(workdir, "data/esper2023")
-        train_dataset = Esper(path, transform=transform)
-        as_idx = []
-        for i, graph in enumerate(train_dataset):
-            if all(graph.munanb[1:] > 0):
-                as_idx.append(i)
-        train_dataset = train_dataset[as_idx]
-    else:
-        raise ValueError(
-            f"dataset is either ramirez, esper, esper_assoc \
+        return train_dataset[as_idx]  # type: ignore
+    raise ValueError(
+        f"dataset is either ramirez, esper, esper_assoc \
               or esper_assoc_only, got >>> {dataset} <<< instead"
-        )
-
-    return train_dataset
-
-
-def input_artifacts(workdir: str, dataset: str, model="last_checkpoint"):
-    "Creates input wandb artifacts"
-    # pylint: disable=C0415
-    import wandb
-
-    if dataset == "ramirez":
-        ramirez_path = workdir + "/data/ramirez2022"
-        ramirez_art = wandb.Artifact(name="ramirez", type="dataset")
-        ramirez_art.add_dir(local_path=ramirez_path, name="ramirez2022")
-        wandb.use_artifact(ramirez_art)
-    if dataset == "thermoml":
-        thermoml_path = workdir + "/data/thermoml"
-        thermoml_art = wandb.Artifact(name="thermoml", type="dataset")
-        thermoml_art.add_dir(local_path=thermoml_path, name="thermoml")
-        wandb.use_artifact(thermoml_art)
-    model_path = workdir + f"/train/checkpoints/{model}.pth"
-    model_art = wandb.Artifact(name="model", type="model")
-    if osp.exists(model_path):
-        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
-        wandb.use_artifact(model_art)
-
-
-def output_artifacts(workdir: str):
-    "Creates output wandb artifacts"
-    # pylint: disable=C0415
-    import wandb
-
-    model_path = workdir + "/train/checkpoints/last_checkpoint.pth"
-    model_art = wandb.Artifact(name="model", type="model")
-    if osp.exists(model_path):
-        model_art.add_file(local_path=model_path, name="last_checkpoint.pth")
-        wandb.log_artifact(model_art)
+    )
 
 
 class EpochTimer(Callback):
@@ -262,17 +176,6 @@ class EpochTimer(Callback):
         )
 
 
-# taking vp data off for performance boost
-# pylint: disable=R0903
-class VpOff(BaseTransform):
-    "take vp data off thermoml dataset"
-
-    def forward(self, data: Any) -> Any:
-
-        data.vp = torch.tensor([])
-        return data
-
-
 class CustomRayTrainReportCallback(Callback):
     "Lightning Callback for Ray Tune reporting."
 
@@ -287,7 +190,6 @@ class CustomRayTrainReportCallback(Callback):
             metrics["epoch"] = trainer.current_epoch
             metrics["step"] = trainer.global_step
 
-            checkpoint = None
             trial_id = tune.get_context().get_trial_id()
             # Save model checkpoint file to tmpdir
             ckpt_path = osp.join(tmpdir, f"{trial_id}.ckpt")
@@ -329,7 +231,7 @@ class CustomStopper(tune.Stopper):
         return False
 
 
-def rho_single(args):
+def rho_single(args: tuple[list, np.ndarray]) -> np.ndarray:
     """Calculates density with ePC-SAFT for a single pararameter"""
     parameters, states = args
     rho_for_all_states = []
@@ -343,7 +245,9 @@ def rho_single(args):
     return np.asarray(rho_for_all_states)
 
 
-def rho_batch(parameters_batch: list, states_batch: list):
+def rho_batch(
+    parameters_batch: list[list[Any]], states_batch: list[np.ndarray]
+) -> list[np.ndarray]:
     """
     Calculates density with ePC-SAFT
     for a batch of parameters
@@ -360,8 +264,8 @@ def rho_batch(parameters_batch: list, states_batch: list):
     return den
 
 
-def vp_sigle(args):
-    """Calculates vapor pressure with ePC-SAFT for a single pararameter"""
+def vp_single(args: tuple[list, np.ndarray]) -> np.ndarray:
+    """Calculates vapor pressure with ePC-SAFT for a single parameter"""
     parameters, states = args
     vp_for_all_states = []
     for state in states:
@@ -373,7 +277,9 @@ def vp_sigle(args):
     return np.asarray(vp_for_all_states)
 
 
-def vp_batch(parameters_batch: list, states_batch: list):
+def vp_batch(
+    parameters_batch: list[list[Any]], states_batch: list[np.ndarray]
+) -> list[np.ndarray]:
     """
     Calculates vapor pressure with ePC-SAFT
     for a batch of parameters
@@ -386,5 +292,65 @@ def vp_batch(parameters_batch: list, states_batch: list):
     ]
     ctx = mp.get_context("spawn")
     with ctx.Pool(processes=ctx.cpu_count() // 2) as pool:
-        vp = pool.map(vp_sigle, args_list)
+        vp = pool.map(vp_single, args_list)
     return vp
+
+
+def rf_xgb_evaluation(
+    graphs: Data, model: Union[RandomForestRegressor, Booster]
+) -> tuple[float, float]:
+    """Evaluation function for RF and XGBoost models"""
+    if isinstance(model, Booster):
+        x = xgb.DMatrix(
+            torch.hstack(
+                (
+                    graphs.ecfp,
+                    graphs.mw,
+                    graphs.atom_count,
+                    graphs.ring_count,
+                    graphs.rbond_count,
+                )
+            ).numpy()
+        )
+        pred_msigmae = model.predict(x)
+    else:
+        x = torch.hstack(
+            (
+                graphs.ecfp,
+                graphs.mw,
+                graphs.atom_count,
+                graphs.ring_count,
+                graphs.rbond_count,
+            )
+        ).numpy()
+        pred_msigmae = model.predict(x)
+
+    assert isinstance(pred_msigmae, np.ndarray)
+    assert pred_msigmae.shape == graphs.para.numpy().shape
+    para_assoc = 10 ** (graphs.assoc.numpy() * np.array([-1.0, 1.0]))
+    pred_params = np.hstack([pred_msigmae, para_assoc, graphs.munanb.numpy()])
+    pred_params.clip(params_lower_bound, params_upper_bound, out=pred_params)
+    assert pred_params.shape == (len(graphs.rho), 8)
+    assert isinstance(graphs.rho[0], np.ndarray)
+    assert isinstance(graphs.vp[0], np.ndarray)
+    assert isinstance(graphs.rho, list)
+    assert isinstance(graphs.vp, list)
+    pred_rho = rho_batch(pred_params.tolist(), graphs.rho)
+    pred_vp = vp_batch(pred_params.tolist(), graphs.vp)
+    assert isinstance(pred_rho[0], np.ndarray)
+    assert isinstance(pred_vp[0], np.ndarray)
+    assert isinstance(pred_rho, list)
+    assert isinstance(pred_vp, list)
+    rho = [rho[:, -1] for rho in graphs.rho if rho.shape[0] > 0]
+    vp = [vp[:, -1] for vp in graphs.vp if vp.shape[0] > 0]
+    mape_den = []
+    for pred, exp in zip(pred_rho, rho):
+        assert pred.shape == exp.shape
+        mape_den += [np.mean(np.abs(pred - exp) / exp).item()]
+    mape_den = np.asarray(mape_den).mean().item()
+    mape_vp = []
+    for pred, exp in zip(pred_vp, vp):
+        assert pred.shape == exp.shape
+        mape_vp += [np.mean(np.abs(pred - exp) / exp).item()]
+    mape_vp = np.asarray(mape_vp).mean().item()
+    return mape_den, mape_vp

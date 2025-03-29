@@ -1,43 +1,99 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
-# pylint: disable = E0401,E0611
-from feos.eos import (
+from typing import Optional
+
+import numpy as np
+import si_units as si
+from feos import dft  # type: ignore # pylint: disable = E0401
+from feos.eos import (  # type: ignore # pylint: disable = E0401
     Contributions,
     EquationOfState,
     PhaseDiagram,
     PhaseEquilibrium,
     State,
 )
-from feos.pcsaft import PcSaftParameters, PcSaftRecord
-
-# pylint: enable = E0401,E0611
-from si_units import JOULE, KELVIN, KILO, METER, MOL, PASCAL
+from feos.pcsaft import (  # type: ignore # pylint: disable = E0401
+    Identifier,
+    PcSaftParameters,
+    PcSaftRecord,
+    PureRecord,
+)
 
 
 def pc_saft(parameters: list) -> EquationOfState.pcsaft:
-    """Returns a ePC-SAFT equation of state."""
-    m = max(parameters[0], 1.0)  # units
-    s = parameters[1]  # Å
-    e = parameters[2]  # K
-    kappa_ab = parameters[3]
-    epsilon_k_ab = parameters[4]  # K
-    mu = parameters[5]  # Debye
-    na = parameters[6]
-    nb = parameters[7]
+    """Returns a ePC-SAFT equation of state for a pure component."""
+    parameters.append("unknown")
+    parameters.append("unknown")
+    parameters.append(1)
+    return pc_saft_mixture([parameters])
 
-    record = PcSaftRecord(
-        m=m,
-        sigma=s,
-        epsilon_k=e,
-        kappa_ab=kappa_ab,
-        epsilon_k_ab=epsilon_k_ab,
-        na=na,
-        nb=nb,
-        mu=mu,
+
+def pc_saft_mixture(
+    mixture_parameters: list[list], kij_matrix: Optional[list] = None
+) -> EquationOfState.pcsaft:
+    """Returns a ePC-SAFT equation of state."""
+    records = get_records(mixture_parameters)
+
+    if kij_matrix:
+        binary_records = np.asarray(kij_matrix)
+    else:
+        binary_records = np.zeros((len(records), len(records)))
+    pcsaftparameters = PcSaftParameters.from_records(
+        records, binary_records=binary_records
     )
-    para = PcSaftParameters.from_model_records([record])
-    eos = EquationOfState.pcsaft(para)
+    eos = EquationOfState.pcsaft(pcsaftparameters)
     return eos
+
+
+def get_records(mixture_parameters: list[list]) -> list[PureRecord]:
+    """Returns a list of PureRecord."""
+    records = []
+    for mol_parameters in mixture_parameters:
+        records.append(
+            PureRecord(
+                identifier=Identifier(
+                    smiles=mol_parameters[8],
+                    inchi=mol_parameters[9],
+                ),
+                molarweight=mol_parameters[10],
+                model_record=PcSaftRecord(
+                    m=mol_parameters[0],  # units
+                    sigma=mol_parameters[1],  # Å
+                    epsilon_k=mol_parameters[2],  # K
+                    kappa_ab=mol_parameters[3],
+                    epsilon_k_ab=mol_parameters[4],  # K
+                    mu=mol_parameters[5],  # Debye
+                    na=mol_parameters[6],
+                    nb=mol_parameters[7],
+                ),
+            )
+        )
+
+    return records
+
+
+def mix_den_feos(
+    parameters: list[list], state: list, kij_matrix: Optional[list] = None
+) -> float:
+    """Calcules mixture density with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+    x = np.asarray(state[2:])  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix)
+
+    statenpt = State(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        molefracs=x,
+        density_initialization="liquid",
+    )
+
+    den = statenpt.density * (si.METER**3) / si.MOL
+
+    return den
 
 
 def pure_den_feos(parameters: list, state: list) -> float:
@@ -49,27 +105,57 @@ def pure_den_feos(parameters: list, state: list) -> float:
     eos = pc_saft(parameters)
     statenpt = State(
         eos,
-        temperature=t * KELVIN,
-        pressure=p * PASCAL,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
         density_initialization="liquid",
     )
 
-    den = statenpt.density * (METER**3) / MOL
+    den = statenpt.density * (si.METER**3) / si.MOL
 
     return den
 
 
+def mix_vp_feos(
+    parameters: list[list], state: list, kij_matrix: Optional[list] = None
+) -> tuple[float, float]:
+    """Calcules mixture vapor pressure with ePC-SAFT."""
+
+    t = state[0]  # Temperature, K
+    x = np.asarray(state[2:])  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+
+    vle_bubble_point = PhaseEquilibrium.bubble_point(
+        eos, temperature_or_pressure=t * si.KELVIN, liquid_molefracs=x
+    )
+
+    vle_dew_point = PhaseEquilibrium.dew_point(
+        eos, temperature_or_pressure=t * si.KELVIN, vapor_molefracs=x
+    )
+
+    assert (
+        t == vle_bubble_point.liquid.temperature / si.KELVIN
+    ), "Temperature mismatch for bubble point"
+    assert (
+        t == vle_dew_point.vapor.temperature / si.KELVIN
+    ), "Temperature mismatch for dew point"
+    return (
+        vle_bubble_point.liquid.pressure() / si.PASCAL,
+        vle_dew_point.vapor.pressure() / si.PASCAL,
+    )
+
+
 def pure_vp_feos(parameters: list, state: list) -> float:
-    """Calcules pure component density with ePC-SAFT."""
+    """Calcules pure component vapor pressure with ePC-SAFT."""
 
     t = state[0]  # Temperature, K
 
     eos = pc_saft(parameters)
-    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * si.KELVIN)
 
-    assert t == vle.liquid.temperature / KELVIN
+    assert t == vle.liquid.temperature / si.KELVIN
 
-    return vle.liquid.pressure() / PASCAL
+    return vle.liquid.pressure() / si.PASCAL
 
 
 def pure_h_lv_feos(parameters: list, state: list) -> float:
@@ -78,31 +164,31 @@ def pure_h_lv_feos(parameters: list, state: list) -> float:
     t = state[0]  # Temperature, K
 
     eos = pc_saft(parameters)
-    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * si.KELVIN)
 
     liquid_state = vle.liquid
     vapor_state = vle.vapor
 
-    assert t == liquid_state.temperature / KELVIN
+    assert t == liquid_state.temperature / si.KELVIN
 
     return (
         vapor_state.molar_enthalpy(Contributions.Residual)
         - liquid_state.molar_enthalpy(Contributions.Residual)
-    ) * (MOL / KILO / JOULE)
+    ) * (si.MOL / si.KILO / si.JOULE)
 
 
 def pure_s_lv_feos(parameters: list, state: list) -> float:
     """Calcules pure component entropy of vaporization with ePC-SAFT."""
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
-    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * KELVIN)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=t * si.KELVIN)
     liquid_state = vle.liquid
     vapor_state = vle.vapor
-    assert t == liquid_state.temperature / KELVIN
+    assert t == liquid_state.temperature / si.KELVIN
     return (
         vapor_state.molar_entropy(Contributions.Residual)
         - liquid_state.molar_entropy(Contributions.Residual)
-    ) * (MOL * KELVIN / JOULE)
+    ) * (si.MOL * si.KELVIN / si.JOULE)
 
 
 def critical_points_feos(parameters: list) -> list:
@@ -110,9 +196,9 @@ def critical_points_feos(parameters: list) -> list:
     eos = pc_saft(parameters)
     critical_point = State.critical_point(eos)
     return [
-        critical_point.temperature / KELVIN,
-        critical_point.pressure() / PASCAL,
-        critical_point.density * (METER**3) / MOL,
+        critical_point.temperature / si.KELVIN,
+        critical_point.pressure() / si.PASCAL,
+        critical_point.density * (si.METER**3) / si.MOL,
     ]
 
 
@@ -124,8 +210,8 @@ def pure_viscosity_feos(parameters: list, state: list) -> float:
     eos = pc_saft(parameters)
     statenpt = State(
         eos,
-        temperature=t * KELVIN,
-        pressure=p * PASCAL,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
         density_initialization="liquid",
     )
 
@@ -136,9 +222,26 @@ def phase_diagram_feos(parameters: list, state: list) -> dict:
     """Calculates phase diagram with ePC-SAFT."""
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
-    phase_diagram = PhaseDiagram.pure(eos, min_temperature=t * KELVIN, npoints=200)
+    phase_diagram = PhaseDiagram.pure(eos, min_temperature=t * si.KELVIN, npoints=200)
 
     return phase_diagram.to_dict(Contributions.Residual)
+
+
+def pure_surface_tension_feos(
+    parameters: list, state: list
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calcules pure component surface tension with ePC-SAFT."""
+    t = state[0]  # Temperature, K
+    records = get_records([parameters])
+
+    pcsaftparameters = PcSaftParameters.from_records(records)
+    functional = dft.HelmholtzEnergyFunctional.pcsaft(pcsaftparameters)
+    phase_diagram = dft.PhaseDiagram.pure(functional, t * si.KELVIN, 100)
+    st_diagram = dft.SurfaceTensionDiagram(phase_diagram.states, n_grid=1024)
+
+    st = st_diagram.surface_tension / (si.MILLI * si.NEWTON / si.METER)
+    temp = st_diagram.liquid.temperature / si.KELVIN
+    return st, temp
 
 
 def parameters_gc_pcsaft(smiles: str) -> tuple:

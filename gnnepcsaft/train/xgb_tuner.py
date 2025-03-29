@@ -2,7 +2,7 @@
 
 import ConfigSpace as CS
 from absl import app, flags, logging
-from ray import train, tune
+from ray import tune
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
@@ -52,7 +52,7 @@ def main(argv):
     )
 
     # tune run config with wandb logger
-    run_config = train.RunConfig(
+    run_config = tune.RunConfig(
         name="gnnpcsaft",
         storage_path=None,
         callbacks=(
@@ -70,7 +70,7 @@ def main(argv):
         """trainable fun for the xgb model"""
         mape_den, mape_vp = training(workdir, config)
 
-        train.report({"mape_den": mape_den, "mape_vp": mape_vp, "done": True})
+        tune.report({"mape_den": mape_den, "mape_vp": mape_vp, "done": True})
 
     # Run the tuner
     tuner = tune.Tuner(

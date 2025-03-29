@@ -1,10 +1,12 @@
 "Module for helper functions with rdkit"
+
 import numpy as np
 from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 
 # pylint: disable = no-name-in-module
-from rdkit.Chem.Fragments import fr_COO2, fr_Imine, fr_isocyan, fr_isothiocyan
+from rdkit.Chem.Fragments import fr_COO2  # type: ignore
+from rdkit.Chem.Fragments import fr_Imine, fr_isocyan, fr_isothiocyan  # type: ignore
 from rdkit.Chem.rdMolDescriptors import (
     CalcExactMolWt,
     CalcNumHBA,
@@ -13,11 +15,11 @@ from rdkit.Chem.rdMolDescriptors import (
     CalcNumRotatableBonds,
 )
 
-RDLogger.DisableLog("rdApp.*")
+RDLogger.DisableLog("rdApp.*")  # type: ignore
 
 
 # pylint: disable = invalid-name
-def inchitosmiles(InChI, with_hydrogen, kekulize):
+def inchitosmiles(InChI, with_hydrogen, kekulize) -> str:
     "Transform InChI to a SMILES."
     mol = Chem.MolFromInchi(InChI)
     if mol is None:
@@ -33,7 +35,7 @@ def inchitosmiles(InChI, with_hydrogen, kekulize):
     return smiles
 
 
-def smilestoinchi(smiles, with_hydrogen=False, kekulize=False):
+def smilestoinchi(smiles, with_hydrogen=False, kekulize=False) -> str:
     "Transform SMILES to InChI."
     # pylint: disable = no-member
     mol = Chem.MolFromSmiles(smiles)
@@ -46,10 +48,10 @@ def smilestoinchi(smiles, with_hydrogen=False, kekulize=False):
         Chem.Kekulize(mol)
 
     inchi = Chem.MolToInchi(mol)
-    return inchi
+    return inchi  # type: ignore
 
 
-def assoc_number(inchi: str):
+def assoc_number(inchi: str) -> tuple[int, int]:
     "Calculates the number of H-bond acceptors/donors"
 
     exceptions = (
@@ -106,7 +108,7 @@ def ECFP(smiles: str, radius: int = 3, nBits: int = 3072):
     "Calculates ECFP fingerprints."
     try:
         mol = Chem.MolFromSmiles(smiles, sanitize=True)
-        fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits)
+        fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits)  # type: ignore
         fp = np.array([fp], dtype=np.int8)
     except (TypeError, ValueError):
         fp = np.zeros((1, nBits), dtype=np.int8)

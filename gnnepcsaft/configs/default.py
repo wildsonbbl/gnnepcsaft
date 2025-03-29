@@ -16,17 +16,17 @@ def get_config():
     config.weight_decay = 1e-2
     config.momentum = 0.9
     config.patience = 5
-    config.warmup_steps = 100
+    config.warmup_steps = 2
 
     # Training hyperparameters.
 
     config.accelerator = "gpu"
     config.batch_size = 512
-    config.num_train_steps = 100_000
+    config.num_train_steps = 300_000
     config.log_every_steps = 1000
-    config.eval_every_steps = 5000
+    config.eval_every_steps = 2500
     config.dataset = "esper"
-    config.checkpoint = ""
+    config.checkpoint = ""  # wandb artifact path
     config.model = "gnn"
     config.model_name = "gnn"
 
@@ -35,13 +35,13 @@ def get_config():
     config.conv = "PNA"
     config.global_pool = "add"
     config.propagation_depth = 6
-    config.hidden_dim = 128
+    config.hidden_dim = 256
     config.dropout = 0.0
     config.add_self_loops = True
     config.num_para = 3
     ## PNA
-    config.post_layers = 1
-    config.pre_layers = 3
+    config.post_layers = 4
+    config.pre_layers = 2
     config.towers = 1  # hidden_dim % towers == 0
     config.deg = []
     ## GatedGraphConv, ARMAConv

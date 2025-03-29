@@ -5,6 +5,7 @@ from urllib.request import HTTPError, urlopen
 
 from rdkit import Chem
 
+# pyright: reportAttributeAccessIssue=false
 # pylint: disable = no-name-in-module
 from rdkit.Chem.Fragments import (
     fr_Al_OH,
@@ -30,7 +31,7 @@ from rdkit.Chem.Fragments import (
 )
 
 
-def complexity(ids: str) -> str:
+def complexity(ids: str) -> float:
     """Complexity as implemented by `PubChem`."""
     try:
         url = (
@@ -44,14 +45,14 @@ def complexity(ids: str) -> str:
             if ans:
                 ans = float(ans)
     except (TypeError, ValueError, HTTPError):
-        print("not ok:", url)
-        ans = None
+        print("not ok:", ids)
+        ans = float("inf")
 
     # sleep(0.1)
     return ans
 
 
-def get_family_groups(inchi: str) -> set[str]:
+def get_family_groups(inchi: str) -> list[str]:
     """Find a family groups for a molecule."""
     mol = Chem.MolFromInchi(inchi, sanitize=True)
 

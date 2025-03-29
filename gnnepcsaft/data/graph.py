@@ -25,7 +25,7 @@ def from_InChI(
             bonds to single/double bonds. (default: :obj:`False`)
     """
 
-    RDLogger.DisableLog("rdApp.*")
+    RDLogger.DisableLog("rdApp.*")  # type: ignore
 
     smiles = inchitosmiles(InChI, with_hydrogen, kekulize)
     graph = smiles2graph(smiles)

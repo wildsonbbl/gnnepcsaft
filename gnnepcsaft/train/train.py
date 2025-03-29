@@ -3,9 +3,10 @@
 import os
 import os.path as osp
 from functools import partial
+from pathlib import Path
+from typing import Any, Union
 
 import lightning as L
-import ml_collections
 import numpy as np
 import torch
 import wandb
@@ -18,7 +19,7 @@ from ray.train.torch import TorchTrainer
 from torch_geometric.loader import DataLoader
 
 from ..configs.configs_parallel import get_configs
-from .models import create_model
+from .models import GNNePCSAFTL, HabitchNNL, create_model
 from .utils import (
     CustomRayTrainReportCallback,
     EpochTimer,
@@ -42,7 +43,7 @@ def create_logger(config, dataset):
 
 
 def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
-    config: ml_collections.ConfigDict, workdir: str
+    config: dict[str, Any], workdir: str
 ):
     """Execute model training and evaluation loop with lightning.
 
@@ -52,14 +53,12 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
     """
     torch.set_float32_matmul_precision("medium")
     # Dataset building
-    train_dataset = build_train_dataset(workdir, config.dataset)
-    val_dataset, train_val_dataset, val_assoc_dataset = build_test_dataset(
-        workdir, train_dataset
-    )
+    train_dataset = build_train_dataset(workdir, config["dataset"])
+    val_dataset, train_val_dataset = build_test_dataset(workdir, train_dataset)
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=config.batch_size,
+        batch_size=config["batch_size"],
         shuffle=True,
         num_workers=os.cpu_count(),
     )
@@ -69,11 +68,6 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         batch_size=len(val_dataset),
         num_workers=os.cpu_count(),
     )
-    val_assoc_dataloader = DataLoader(
-        val_assoc_dataset,
-        batch_size=len(val_assoc_dataset),
-        num_workers=os.cpu_count(),
-    )
     train_val_dataloader = DataLoader(
         train_val_dataset,
         batch_size=len(train_val_dataset),
@@ -81,30 +75,30 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
     )
 
     # trainer callback and logger
-    callbacks, logger = get_callbacks_logger(config, workdir)
+    callbacks, logger = get_callbacks_and_logger(config, workdir)
 
     # creating model from config
-    model = create_model(config, calc_deg(config.dataset, workdir))
+    model = create_model(config, calc_deg(config["dataset"], workdir))
     # model = torch.compile(model, dynamic=True) off for old gpus
 
     # creating Lighting trainer function
     trainer = L.Trainer(
         devices="auto",
-        accelerator=config.accelerator,
+        accelerator=config["accelerator"],
         strategy="auto",
-        max_steps=config.num_train_steps,
-        log_every_n_steps=config.log_every_steps,
-        val_check_interval=config.eval_every_steps,
+        max_steps=config["num_train_steps"],
+        log_every_n_steps=config["log_every_steps"],
+        val_check_interval=config["eval_every_steps"],
         check_val_every_n_epoch=None,
         num_sanity_val_steps=0,
         callbacks=callbacks,
         logger=logger,
         plugins=None,
         enable_progress_bar=False,
-        enable_checkpointing=config.job_type == "train",
+        enable_checkpointing=config["job_type"] == "train",
     )
 
-    ckpt_path = get_ckpt_path(config, workdir, config.job_type, model)
+    ckpt_path = get_ckpt_path(config, workdir, model, logger)
 
     # training run
     logging.info("Training run!")
@@ -113,36 +107,50 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         train_loader,
         (
             [train_val_dataloader, val_dataloader]
-            if config.dataset == "esper"
-            else [val_assoc_dataloader]
+            if config["dataset"] == "esper"
+            else [train_val_dataloader, train_val_dataloader]
         ),
         ckpt_path=ckpt_path,
     )
 
+    if config["job_type"] == "train":
+        wandb.finish()
 
-def get_ckpt_path(config, workdir, job_type, model):
+
+def get_ckpt_path(
+    config: dict[str, Any],
+    workdir: str,
+    model: Union[GNNePCSAFTL, HabitchNNL],
+    logger: Union[WandbLogger, None],
+):
     "gets checkpoint path for resuming training"
     ckpt_path = None
-    if job_type == "tuning":
+    if config["job_type"] == "tuning":
 
         checkpoint: tune.Checkpoint = tune.get_checkpoint()
         trial_id = tune.get_context().get_trial_id()
 
         if checkpoint:
             with checkpoint.as_directory() as ckpt_dir:
-                ckpt_path = osp.join(ckpt_dir, f"{trial_id}.ckpt")
-    elif config.checkpoint:
-        ckpt_path = osp.join(workdir, f"train/checkpoints/{config.checkpoint}")
-        if config.change_opt:
-            # pylint: disable=E1120
-            ckpt = torch.load(ckpt_path, weights_only=False)
-            model.load_state_dict(ckpt["state_dict"])
-            # pylint: enable=E1120
-            ckpt_path = None
+                ckpt_path = Path(ckpt_dir) / f"{trial_id}.ckpt"
+        elif config["checkpoint"]:
+            ckpt_path = Path(workdir) / f"train/checkpoints/{config['checkpoint']}"
+    elif config["checkpoint"]:
+        if logger:
+            ckpt_dir = Path(workdir) / f"train/checkpoints/{config['model_name']}"
+            artifact = logger.use_artifact(config["checkpoint"], "model")
+            artifact.download(ckpt_dir)
+            ckpt_path = ckpt_dir / "model.ckpt"
+            if config["change_opt"]:
+
+                ckpt = torch.load(ckpt_path, weights_only=True)
+                model.load_state_dict(ckpt["state_dict"])
+
+                ckpt_path = None
     return ckpt_path
 
 
-def get_callbacks_logger(config, workdir):
+def get_callbacks_and_logger(config, workdir):
     """Creates callbacks and logger for training."""
     callbacks = []
     job_type = config.job_type
@@ -152,13 +160,23 @@ def get_callbacks_logger(config, workdir):
         # Checkpointing from val loss (mape_den) and train loss (train_mape)
         checkpoint_mape_den = ModelCheckpoint(
             dirpath=osp.join(workdir, "train/checkpoints"),
-            filename=config.model_name + "-{epoch}-mape_den",
+            filename=config.model_name + "-{epoch}-mape_den_train",
             save_last=False,
             monitor="mape_den/dataloader_idx_0",
             save_top_k=1,
             verbose=True,
         )
         callbacks.append(checkpoint_mape_den)
+
+        checkpoint_mape_den_2 = ModelCheckpoint(
+            dirpath=osp.join(workdir, "train/checkpoints"),
+            filename=config.model_name + "-{epoch}-mape_den_val",
+            save_last=False,
+            monitor="mape_den/dataloader_idx_1",
+            save_top_k=1,
+            verbose=True,
+        )
+        callbacks.append(checkpoint_mape_den_2)
 
         checkpoint_train_loss = ModelCheckpoint(
             dirpath=osp.join(workdir, "train/checkpoints"),
@@ -190,8 +208,8 @@ def get_callbacks_logger(config, workdir):
 
 
 def training_parallel(
-    train_loop_config: list[dict],
-    config: ml_collections.ConfigDict,
+    train_loop_config: dict[str, Any],
+    config: dict[str, Any],
     workdir: str,
 ):
     """Execute model training and evaluation loop in parallel with ray.
@@ -208,8 +226,8 @@ def training_parallel(
 
 
 def training_updated(
-    train_config: dict,
-    config: ml_collections.ConfigDict,
+    train_config: dict[str, Any],
+    config: dict[str, Any],
     workdir: str,
 ):
     """Execute model training and evaluation loop with updated config.
@@ -221,8 +239,10 @@ def training_updated(
 
     for hparam in train_config:
         value = train_config[hparam]
-        if isinstance(value, (np.int64)):
+        if isinstance(value, (np.signedinteger,)):
             value = int(value)
+        if isinstance(value, (np.floating,)):
+            value = float(value)
         config[hparam] = value
 
     ltrain_and_evaluate(config, workdir)

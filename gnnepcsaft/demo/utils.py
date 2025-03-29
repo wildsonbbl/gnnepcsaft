@@ -3,20 +3,21 @@
 import itertools
 import os
 import os.path as osp
-from typing import Union
+from typing import Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import polars as pl
 import seaborn as sns
 import torch
 from rdkit import Chem
 from torch.export.dynamic_shapes import Dim
 
 from ..configs.default import get_config
-from ..data.graph import assoc_number, from_InChI, from_smiles
+from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
-from ..epcsaft.utils import parameters_gc_pcsaft
-from ..train.models import GNNePCSAFT, GNNePCSAFTL
+from ..epcsaft.utils import mix_den_feos, parameters_gc_pcsaft
+from ..train.models import GNNePCSAFT
 from ..train.utils import rhovp_data
 
 sns.set_theme(style="ticks")
@@ -24,7 +25,6 @@ sns.set_theme(style="ticks")
 markers = itertools.cycle(("o", "v", "^", "<", ">", "*", "s", "p", "P", "D"))
 
 config = get_config()
-device = torch.device("cpu")
 # pylint: disable = invalid-name
 model_dtype = torch.float64
 real_path = osp.dirname(__file__)
@@ -47,28 +47,20 @@ for graph in es_loader:
         graph.munanb,
     )
 
-device = torch.device("cpu")
-
-
-def loadckp(ckp_path: str, model: Union[GNNePCSAFT, GNNePCSAFTL]):
-    """Loads save checkpoint."""
-    if osp.exists(ckp_path):
-        state = "model_state_dict" if isinstance(model, GNNePCSAFT) else "state_dict"
-        checkpoint = torch.load(
-            ckp_path, map_location=torch.device("cpu"), weights_only=False
-        )
-        model.load_state_dict(checkpoint[state])
-        del checkpoint
+device = "cpu"
 
 
 def plotdata(
-    inchi: str, molecule_name: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT
+    inchi: str,
+    molecule_name: str,
+    models: list[GNNePCSAFT],
+    model_msigmae: Optional[GNNePCSAFT],
 ):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
     parameters"""
-    # pylint: disable=C0415
-    from rdkit.Chem import Draw
+
+    from rdkit.Chem import Draw  # pylint: disable=C0415; # type: ignore
 
     if not osp.exists("images"):
         os.mkdir("images")
@@ -149,7 +141,9 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
+def predparams(
+    inchi: str, models: list[GNNePCSAFT], model_msigmae: Optional[GNNePCSAFT]
+):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
         gh = from_InChI(inchi)
@@ -157,14 +151,12 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
         list_params = []
         for model in models:
             model.eval()
-            params = params_fn(model_msigmae, graphs, model)
-            list_params.append(params.numpy().round(decimals=4))
+            params = get_params(model, model_msigmae, graphs)
+            list_params.append(params.tolist())
         if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).round(decimals=4)[0])
+            list_params.append(np.hstack(es_para[inchi]).squeeze().tolist())
         try:
-            list_params.append(
-                np.asarray(parameters_gc_pcsaft(gh.smiles)).round(decimals=4)
-            )
+            list_params.append(list(parameters_gc_pcsaft(gh.smiles)))
         # pylint: disable=W0702
         except:
             pass
@@ -172,9 +164,11 @@ def predparams(inchi: str, models: list[GNNePCSAFT], model_msigmae: GNNePCSAFT):
     return list_params
 
 
-def params_fn(model_msigmae, graphs, model):
-    "fn to organize params"
-    params = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+def get_params(
+    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT], graphs: Data
+) -> torch.Tensor:
+    "to get parameters from models"
+    msigmae_or_log10assoc = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
     if graphs.InChI in es_para:
         assoc = es_para[graphs.InChI][1][0]
         munanb = es_para[graphs.InChI][2][0]
@@ -182,30 +176,41 @@ def params_fn(model_msigmae, graphs, model):
         assoc = torch.zeros(2)
         munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
 
-    if params.size(0) == 2:
-        msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-        params = torch.hstack(
-            (msigmae, 10 ** (params * torch.tensor([-1.0, 1.0])), munanb)
-        )
-    elif params.size(0) == 3:
-        params = torch.hstack((params, assoc, munanb))
-    return params
+    if msigmae_or_log10assoc.size(0) == 2:
+        if model_msigmae:
+            msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+            return torch.hstack(
+                (
+                    msigmae,
+                    10 ** (msigmae_or_log10assoc * torch.tensor([-1.0, 1.0])),
+                    munanb,
+                )
+            )
+        raise ValueError("model_msigmae is None")
+    return torch.hstack((msigmae_or_log10assoc, assoc, munanb))
 
 
-def pred_rhovp(inchi, list_params, rho, vp):
+def pred_rhovp(
+    inchi: str, list_params: list[list[float]], rho: np.ndarray, vp: np.ndarray
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
     "Predicted density and vapor pressure with ePC-SAFT."
     pred_den_list, pred_vp_list = [], []
     print(f"#### {inchi} ####")
     for i, params in enumerate(list_params):
         print(f"#### Parameters for model {i+1} ####")
-        print(params)
+        print([round(para, 5) for para in params])
         pred_den, pred_vp = rhovp_data(params, rho, vp)
         pred_den_list.append(pred_den)
         pred_vp_list.append(pred_vp)
     return pred_den_list, pred_vp_list
 
 
-def plotden(inchi, molecule_name, models, data):
+def plotden(
+    inchi: str,
+    molecule_name: str,
+    models: list[GNNePCSAFT],
+    data: tuple[np.ndarray, list[np.ndarray]],
+):
     "Plot density data."
 
     rho, pred_den_list = data
@@ -234,7 +239,12 @@ def plotden(inchi, molecule_name, models, data):
             plt.show()
 
 
-def plotvp(inchi, molecule_name, models, data):
+def plotvp(
+    inchi: str,
+    molecule_name: str,
+    models: list[GNNePCSAFT],
+    data: tuple[np.ndarray, list[np.ndarray]],
+):
     "Plot vapor pressure data."
     vp, pred_vp_list = data
     if ~np.all(vp == np.zeros_like(vp)):
@@ -258,16 +268,6 @@ def plotvp(inchi, molecule_name, models, data):
             img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
         )
         plt.show()
-
-
-def datacsv(model_para):
-    """Builds a dataset of InChI, density mape, vapor pressure mape."""
-    data = {"inchis": [], "mden": [], "mvp": []}
-    for inchi in model_para:
-        data["inchis"].append(inchi)
-        data["mden"].append(model_para[inchi][1])
-        data["mvp"].append(model_para[inchi][2])
-    return data
 
 
 def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
@@ -321,7 +321,7 @@ def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+
     plt.show()
 
 
-def predparams2(smiles: str, models: list[GNNePCSAFT]):
+def predparams2(smiles: list[str], models: list[GNNePCSAFT]):
     "Use models to predict ePC-SAFT parameters from smiles."
     list_array_params = []
     for model in models:
@@ -345,9 +345,9 @@ def save_exported_program(
     """Save model as Exported Program."""
     model.eval()
     dynamic_shapes = {
-        "x": (Dim.AUTO, 9),
-        "edge_index": (2, Dim.AUTO),
-        "edge_attr": (Dim.AUTO, 3),
+        "x": (Dim.AUTO, 9),  # type: ignore
+        "edge_index": (2, Dim.AUTO),  # type: ignore
+        "edge_attr": (Dim.AUTO, 3),  # type: ignore
         "batch": None,
     }
 
@@ -367,3 +367,62 @@ def save_exported_program(
         verify=True,
     )
     return exportedprogram
+
+
+def binary_test(
+    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT] = None
+) -> list[tuple[tuple[str, str], tuple[float, float]]]:
+    "for testing models performance on binary data"
+
+    binary_data = pl.read_parquet(
+        osp.join(real_path, "../data/thermoml/raw/binary.parquet")
+    )
+
+    inchi_list = [
+        (row["inchi1"], row["inchi2"])
+        for row in binary_data.filter(pl.col("tp") == 1)
+        .unique(("inchi1", "inchi2"))
+        .to_dicts()
+    ]
+
+    with torch.no_grad():
+        all_predictions = []
+        for inchi1, inchi2 in inchi_list:
+            mix_params = get_mix_params(model, model_msigmae, [inchi1, inchi2])
+
+            rho_data = (
+                binary_data.filter(
+                    (pl.col("inchi1") == inchi1)
+                    & (pl.col("inchi2") == inchi2)
+                    & (pl.col("tp") == 1)
+                )
+                .select("m", "TK", "PPa", "mlc1", "mlc2")
+                .to_numpy()
+            )
+
+            all_rho = []
+            for state in rho_data:
+                rho_for_state = mix_den_feos(mix_params, state[1:])
+                ref_rho = (
+                    state[0]
+                    * 1000
+                    / (mix_params[0][-1] * state[3] + mix_params[1][-1] * state[4])
+                ).item()
+                all_rho.append((rho_for_state, ref_rho))
+            all_predictions.append(((inchi1, inchi2), all_rho))
+    return all_predictions
+
+
+def get_mix_params(
+    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT], inchis: list[str]
+) -> list[list[Union[float, str]]]:
+    "to organize the parameters for the mixture"
+    mix_params = []
+    for inchi in inchis:
+        gh = from_InChI(inchi)
+        para_for_inchi = get_params(model, model_msigmae, gh).tolist()
+        para_for_inchi.append(gh.smiles)
+        para_for_inchi.append(gh.InChI)
+        para_for_inchi.append(gh.mw.item())
+        mix_params.append(para_for_inchi)
+    return mix_params
