@@ -195,11 +195,13 @@ def get_callbacks_and_logger(config, workdir):
             log_model=True,
             # Set the project where this run will be logged
             project="gnn-pc-saft",
+            id=config.resume_id if config.resume_id else None,
             # Track hyperparameters and run metadata
             config=config.to_dict(),
             group=dataset,
             tags=[dataset, "train", config.model_name],
             job_type="train",
+            resume="must",
         )
     else:
         callbacks.append(CustomRayTrainReportCallback())
