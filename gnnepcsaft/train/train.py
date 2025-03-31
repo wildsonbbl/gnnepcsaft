@@ -201,7 +201,7 @@ def get_callbacks_and_logger(config, workdir):
             group=dataset,
             tags=[dataset, "train", config.model_name],
             job_type="train",
-            resume="must",
+            resume="must" if config.resume_id else "allow",
         )
     else:
         callbacks.append(CustomRayTrainReportCallback())
