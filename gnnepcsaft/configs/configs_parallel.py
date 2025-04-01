@@ -21,7 +21,7 @@ def get_configs() -> list[dict[str, Any]]:
             "batch_size": 512,
             "checkpoint": "wildson/gnn-pc-saft/model-gq9gcgmb:v3",
             "resume_id": "",
-            "num_train_steps": 400_000,
+            "num_train_steps": 425_000,
         },
         {
             "model_name": "gatv2_msigmae_1.0",
@@ -34,9 +34,9 @@ def get_configs() -> list[dict[str, Any]]:
             "num_para": 3,
             "dataset": "esper",
             "batch_size": 512,
-            "checkpoint": "wildson/gnn-pc-saft/model-hc2uvwd8:v5",
+            "checkpoint": "wildson/gnn-pc-saft/model-54730h51:v0",
             "resume_id": "",
-            "num_train_steps": 500_000,
+            "num_train_steps": 600_000,
         },
         {
             "model_name": "gatv2_assoc_1.0",
@@ -49,9 +49,9 @@ def get_configs() -> list[dict[str, Any]]:
             "num_para": 2,
             "dataset": "esper_assoc_only",
             "batch_size": 387 // 4 + 1,
-            "checkpoint": "wildson/gnn-pc-saft/model-vrvtxov3:v3",
+            "checkpoint": "wildson/gnn-pc-saft/model-zme6255l:v1",
             "resume_id": "",
-            "num_train_steps": 500_000,
+            "num_train_steps": 575_000,
         },
     ]
     return configs
