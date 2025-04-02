@@ -6,6 +6,7 @@ on:
       - dev
     paths:
       - "**.py"
+      - "!gnnepcsaft/configs/**"
 
 jobs:
   lint:
