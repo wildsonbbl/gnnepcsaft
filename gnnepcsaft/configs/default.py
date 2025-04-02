@@ -22,14 +22,14 @@ def get_config():
 
     config.accelerator = "gpu"
     config.batch_size = 512
-    config.num_train_steps = 400_000
+    config.num_train_steps = 450_000
     config.log_every_steps = 1000
     config.eval_every_steps = 2500
     config.dataset = "esper"
-    config.checkpoint = ""  # wandb artifact path
+    config.checkpoint = "wildson/gnn-pc-saft/model-dpqz8pqc:v3"  # wandb artifact path
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
-    config.model_name = "gnn"
+    config.model_name = "pna_msigmae_1.0"
 
     # GNN hyperparameters.
     ## General

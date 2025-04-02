@@ -27,6 +27,7 @@ def get_config():
     config.eval_every_steps = 2500
     config.dataset = "esper_assoc_only"
     config.checkpoint = ""  # wandb artifact path
+    config.resume_id = ""  # wandb run id
     config.model = "gnn"
     config.model_name = "gnn_assoc"
 
