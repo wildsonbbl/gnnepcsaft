@@ -37,7 +37,7 @@ def get_config():
     config.global_pool = "add"
     config.propagation_depth = 3
     config.hidden_dim = 512
-    config.dropout = 0.0
+    config.dropout = 0.25
     config.add_self_loops = True
     config.num_para = 3
     ## GAT, GATv2, TransformerConv
