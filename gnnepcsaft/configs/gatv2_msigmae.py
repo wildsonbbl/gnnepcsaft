@@ -44,5 +44,6 @@ def get_config():
     config.num_para = 3
     ## GAT, GATv2, TransformerConv
     config.heads = 8  # hidden_dim % heads == 0
+    config.deg = []
 
     return config
