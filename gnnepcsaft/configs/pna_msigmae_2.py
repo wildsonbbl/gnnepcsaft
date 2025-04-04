@@ -20,13 +20,15 @@ def get_config():
 
     # Training hyperparameters.
 
-    config.accelerator = "gpu"
+    config.accelerator = "auto"
     config.batch_size = 512
-    config.num_train_steps = 100_000
+    config.num_train_steps = 200_000
     config.log_every_steps = 1000
     config.eval_every_steps = 2500
     config.dataset = "esper"
-    config.checkpoint = ""
+    config.checkpoint = (
+        "wildson/gnn-pc-saft/model-5mky7wwy:latest"  # wandb artifact path
+    )
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
     config.model_name = "pna_msigmae_1.1"
