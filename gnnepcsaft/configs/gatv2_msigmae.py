@@ -21,15 +21,17 @@ def get_config():
     # Training hyperparameters.
 
     config.accelerator = "gpu"
-    config.batch_size = 387 // 4 + 1
-    config.num_train_steps = 100_000
+    config.batch_size = 512
+    config.num_train_steps = 700_000
     config.log_every_steps = 1000
     config.eval_every_steps = 2500
-    config.dataset = "esper_assoc_only"
-    config.checkpoint = ""  # wandb artifact path
+    config.dataset = "esper"
+    config.checkpoint = (
+        "wildson/gnn-pc-saft/model-9krgp7kg:latest"  # wandb artifact path
+    )
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
-    config.model_name = "gnn_assoc"
+    config.model_name = "gatv2_msigmae_1.0"
 
     # GNN hyperparameters.
     ## General
@@ -39,16 +41,9 @@ def get_config():
     config.hidden_dim = 512
     config.dropout = 0.0
     config.add_self_loops = True
-    config.num_para = 2
-    ## PNA
-    config.post_layers = 4
-    config.pre_layers = 2
-    config.towers = 1  # hidden_dim % towers == 0
-    config.deg = []
-    ## GatedGraphConv, ARMAConv
-    config.num_layers = 2
-    config.num_stacks = 2
+    config.num_para = 3
     ## GAT, GATv2, TransformerConv
     config.heads = 8  # hidden_dim % heads == 0
+    config.deg = []
 
     return config

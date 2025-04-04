@@ -5,13 +5,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "**/pyproject.toml"
 
 jobs:
   publish:
     strategy:
       matrix:
         runs-on: [ubuntu-latest]
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.10"]
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
