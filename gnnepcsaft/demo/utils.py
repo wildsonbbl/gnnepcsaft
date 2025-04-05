@@ -307,14 +307,14 @@ def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+
     for array_params in list_array_params:
         pltscatter(chain_array, array_params[:, 0] * (array_params[:, 1] ** 3))
 
-    pltcustom2(xlabel=xlabel, ylabel="m * sigma³ (Å³)", n=len(models))
+    pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$", n=len(models))
 
     img_path = osp.join("images", "sigma_" + xlabel + ".png")
     plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
     plt.show()
     for array_params in list_array_params:
         pltscatter(chain_array, array_params[:, 0] * array_params[:, 2])
-    pltcustom2(xlabel=xlabel, ylabel="m * e (K)", n=len(models))
+    pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \mu k_b^{-1} (K)$", n=len(models))
 
     img_path = osp.join("images", "e_" + xlabel + ".png")
     plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
