@@ -190,6 +190,7 @@ def get_callbacks_and_logger(config, workdir):
 
         checkpoint_last_epoch = ModelCheckpoint(
             dirpath=osp.join(workdir, "train/checkpoints"),
+            filename=config.model_name + "-{epoch}-{step}",
             verbose=True,
         )
         callbacks.append(checkpoint_last_epoch)
