@@ -58,7 +58,6 @@ def main(argv):
         points_to_evaluate=[
             {
                 "conv": "PNA",
-                "dropout": 0.0,
                 "global_pool": "add",
                 "propagation_depth": 6,
                 "hidden_dim": 256,
@@ -68,7 +67,6 @@ def main(argv):
             },
             {
                 "conv": "GATv2",
-                "dropout": 0.0,
                 "global_pool": "add",
                 "propagation_depth": 4,
                 "hidden_dim": 256,
