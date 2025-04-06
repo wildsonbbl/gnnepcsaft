@@ -107,9 +107,9 @@ def pltline(x, y):
     return plt.plot(x, y, marker=next(iter(markers)), linewidth=0.5)
 
 
-def pltscatter(x, y):
+def pltscatter(x, y, marker="x"):
     "Scatter plot."
-    return plt.scatter(x, y, marker="x", s=10, c="black", zorder=10)
+    return plt.scatter(x, y, marker=marker, s=10, c="black", zorder=10)
 
 
 def plterr(x, y, m):
@@ -232,11 +232,7 @@ def plotden(
 
             # Customize the plot appearance
             pltcustom(inchi, "linear", "Density (mol / m³)", len(models))
-            img_path = osp.join("images", "den_" + molecule_name + ".png")
-            plt.savefig(
-                img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
-            )
-            plt.show()
+            saveplot("den_" + molecule_name + ".png")
 
 
 def plotvp(
@@ -263,11 +259,7 @@ def plotvp(
         pltcustom(inchi, "log", "Vapor pressure (bar)", len(models))
 
         # Save the plot as a high-quality image file
-        img_path = osp.join("images", "vp_" + molecule_name + ".png")
-        plt.savefig(
-            img_path, dpi=300, format="png", bbox_inches="tight", transparent=True
-        )
-        plt.show()
+        saveplot("vp_" + molecule_name + ".png")
 
 
 def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
@@ -279,7 +271,8 @@ def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
     plt.yscale(scale)
     legend = []
     for i in range(1, n + 1):
-        legend += [f"Modelo {i}"]
+        legend += [f"GNNePCSAFT {i}"]
+        legend += [f"Linear fit {i}"]
     plt.legend(legend, loc=(1.01, 0.75))
     sns.despine(trim=True)
 
@@ -293,35 +286,57 @@ def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+
 
     list_array_params = predparams2(smiles, models)
 
-    chain_array = [range(1, len(smiles) + 1)]
+    x = np.arange(2, 51)
 
     for array_params in list_array_params:
-        pltscatter(chain_array, array_params[:, 0])
+        marker = next(iter(markers))
+        y = array_params[:, 0]
+        pltscatter(x, y, marker)
+        plotlinearfit(x, y, marker)
 
-    pltcustom2(xlabel=xlabel, ylabel="m", n=len(models))
+    pltcustom2(xlabel=xlabel, ylabel=r"$m$", n=len(models))
 
-    img_path = osp.join("images", "m_" + xlabel + ".png")
-    plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
-    plt.show()
+    saveplot("m_" + xlabel + ".png")
 
     for array_params in list_array_params:
-        pltscatter(chain_array, array_params[:, 0] * (array_params[:, 1] ** 3))
+        marker = next(iter(markers))
+        y = array_params[:, 0] * array_params[:, 1] ** 3
+        pltscatter(x, y, marker)
+        plotlinearfit(x, y, marker)
 
     pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$", n=len(models))
 
-    img_path = osp.join("images", "sigma_" + xlabel + ".png")
-    plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
-    plt.show()
+    saveplot("sigma_" + xlabel + ".png")
     for array_params in list_array_params:
-        pltscatter(chain_array, array_params[:, 0] * array_params[:, 2])
+        marker = next(iter(markers))
+        y = array_params[:, 0] * array_params[:, 2]
+        pltscatter(x, y, marker)
+        plotlinearfit(x, y, marker)
     pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \mu k_b^{-1} (K)$", n=len(models))
 
-    img_path = osp.join("images", "e_" + xlabel + ".png")
+    saveplot("e_" + xlabel + ".png")
+
+
+def saveplot(filename: str):
+    "savel current plt figure"
+    img_path = osp.join("images", filename)
     plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
     plt.show()
 
 
-def predparams2(smiles: list[str], models: list[GNNePCSAFT]):
+def plotlinearfit(x, y, marker):
+    """Plot linear fit."""
+    plt.plot(
+        x,
+        np.poly1d(np.polyfit(x, y, 1))(x),
+        color="red",
+        marker=marker,
+        linewidth=0.5,
+        markersize=3,
+    )
+
+
+def predparams2(smiles: list[str], models: list[GNNePCSAFT]) -> list[np.ndarray]:
     "Use models to predict ePC-SAFT parameters from smiles."
     list_array_params = []
     for model in models:
