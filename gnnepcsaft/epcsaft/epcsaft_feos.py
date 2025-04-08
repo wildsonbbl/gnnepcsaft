@@ -1,6 +1,6 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import si_units as si
@@ -20,34 +20,29 @@ from feos.pcsaft import (  # type: ignore # pylint: disable = E0401
 )
 
 
-def pc_saft(parameters: list) -> EquationOfState.pcsaft:
-    """Returns a ePC-SAFT equation of state for a pure component.
+def pc_saft(parameters: List[float]) -> EquationOfState.pcsaft:
+    """Returns a ePC-SAFT equation of state.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-    Returns:
-        output (EquationOfState.pcsaft): A ePC-SAFT equation of state
+
     """
-    parameters.append("unknown")
-    parameters.append("unknown")
-    parameters.append(1)
+    parameters.append(1.0)
     return pc_saft_mixture([parameters])
 
 
 def pc_saft_mixture(
-    mixture_parameters: list[list], kij_matrix: Optional[list] = None
+    mixture_parameters: List[List[float]],
+    kij_matrix: Optional[List[List[float]]] = None,
 ) -> EquationOfState.pcsaft:
     """Returns a ePC-SAFT equation of state.
 
     Args:
-        mixture_parameters (list[list]): A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, SMILES, InChI, MW]`
+        mixture_parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
          for each component of the mixture
-        kij_matrix (list, optional): A matrix of binary interaction parameters
-         made of lists
-    Returns:
-        output (EquationOfState.pcsaft): A ePC-SAFT equation of state
+        kij_matrix: A matrix of binary interaction parameters
     """
     records = get_records(mixture_parameters)
 
@@ -62,25 +57,23 @@ def pc_saft_mixture(
     return eos
 
 
-def get_records(mixture_parameters: list[list]) -> list[PureRecord]:
-    """Returns a list of PureRecord.
+def get_records(mixture_parameters: List[List[float]]) -> list[PureRecord]:
+    """Returns a list of `feos.pcsaft.PureRecord`.
 
     Args:
-        mixture_parameters (list[list]): A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, SMILES, InChI, MW]`
+        mixture_parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
          for each component of the mixture
-    Returns:
-        output (list[PureRecord]): A list of `PureRecord`
     """
     records = []
-    for mol_parameters in mixture_parameters:
+    for idx, mol_parameters in enumerate(mixture_parameters):
         records.append(
             PureRecord(
                 identifier=Identifier(
-                    smiles=mol_parameters[8],
-                    inchi=mol_parameters[9],
+                    smiles=f"SMILES_{idx}",
+                    inchi=f"InChI_{idx}",
                 ),
-                molarweight=mol_parameters[10],
+                molarweight=mol_parameters[-1],  # g/mol
                 model_record=PcSaftRecord(
                     m=mol_parameters[0],  # units
                     sigma=mol_parameters[1],  # Å
@@ -98,20 +91,19 @@ def get_records(mixture_parameters: list[list]) -> list[PureRecord]:
 
 
 def mix_den_feos(
-    parameters: list[list], state: list, kij_matrix: Optional[list] = None
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
 ) -> float:
-    """Calcules mixture density with ePC-SAFT.
+    """Calculates mixture liquid density (mol/m³) with ePC-SAFT.
 
     Args:
-        parameters (list[list]): A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, SMILES, InChI, MW]`
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
          for each component of the mixture
-        state (list): A list with
-         `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`
-        kij_matrix (list, optional): A matrix of binary interaction parameters
-         made of lists
-    Returns:
-        output (float): Calculated liquid density (mol/m³)
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
     """
 
     t = state[0]  # Temperature, K
@@ -133,15 +125,13 @@ def mix_den_feos(
     return den
 
 
-def pure_den_feos(parameters: list, state: list) -> float:
-    """Calcules pure component density with ePC-SAFT.
+def pure_den_feos(parameters: List[float], state: List[float]) -> float:
+    """Calculates pure component liquid density (mol/m³) with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-        state (list): A list with `[Temperature (K), Pressure (Pa)]`
-    Returns:
-        output (float): Calculated liquid density (mol/m³)
+        state: A list with `[Temperature (K), Pressure (Pa)]`
     """
 
     t = state[0]  # Temperature, K
@@ -161,20 +151,19 @@ def pure_den_feos(parameters: list, state: list) -> float:
 
 
 def mix_vp_feos(
-    parameters: list[list], state: list, kij_matrix: Optional[list] = None
-) -> tuple[float, float]:
-    """Calcules mixture vapor pressure with ePC-SAFT.
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> Tuple[float, float]:
+    """Calculates mixture `(Bubble point (Pa), Dew point (Pa))` with ePC-SAFT.
 
     Args:
-        parameters (list[list]): A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, SMILES, InChI, MW]`
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
          for each component of the mixture
-        state (list): A list with
+        state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`
-        kij_matrix (list, optional): A matrix of binary interaction parameters
-         made of lists
-    Returns:
-        output (tuple[float, float]): Calculated properties `[Bubble point (Pa), Dew point (Pa)]`]
+        kij_matrix: A matrix of binary interaction parameters
     """
 
     t = state[0]  # Temperature, K
@@ -202,15 +191,13 @@ def mix_vp_feos(
     )
 
 
-def pure_vp_feos(parameters: list, state: list) -> float:
-    """Calcules pure component vapor pressure with ePC-SAFT.
+def pure_vp_feos(parameters: List[float], state: List[float]) -> float:
+    """Calculates pure component vapor pressure (Pa) with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-        state (list): A list with `[Temperature (K)]`
-    Returns:
-        output (float): Calculated vapor pressure (Pa)
+        state: A list with `[Temperature (K)]`
     """
 
     t = state[0]  # Temperature, K
@@ -223,15 +210,13 @@ def pure_vp_feos(parameters: list, state: list) -> float:
     return vle.liquid.pressure() / si.PASCAL
 
 
-def pure_h_lv_feos(parameters: list, state: list) -> float:
-    """Calcules pure component enthalpy of vaporization with ePC-SAFT.
+def pure_h_lv_feos(parameters: List[float], state: List[float]) -> float:
+    """Calculates pure component enthalpy of vaporization (kJ/mol) with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-        state (list): A list with `[Temperature (K)]`
-    Returns:
-        output (float): Calculated enthalpy of vaporization (kJ/mol)
+        state: A list with `[Temperature (K)]`
     """
 
     t = state[0]  # Temperature, K
@@ -250,15 +235,13 @@ def pure_h_lv_feos(parameters: list, state: list) -> float:
     ) * (si.MOL / si.KILO / si.JOULE)
 
 
-def pure_s_lv_feos(parameters: list, state: list) -> float:
-    """Calcules pure component entropy of vaporization with ePC-SAFT.
+def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
+    """Calcules pure component entropy of vaporization (J/mol*K) with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-        state (list): A list with `[Temperature (K)]`
-    Returns:
-        output (float): Calculated entropy of vaporization (J/mol*K)
+        state: A list with `[Temperature (K)]`
     """
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
@@ -272,14 +255,12 @@ def pure_s_lv_feos(parameters: list, state: list) -> float:
     ) * (si.MOL * si.KELVIN / si.JOULE)
 
 
-def critical_points_feos(parameters: list) -> list:
-    """Calculates critical points with ePC-SAFT.
+def critical_points_feos(parameters: List[float]) -> List[float]:
+    """Calculates critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]` with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-    Returns:
-        output (list[float]): Calculated critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]`
     """
     eos = pc_saft(parameters)
     critical_point = State.critical_point(eos)
@@ -290,15 +271,13 @@ def critical_points_feos(parameters: list) -> list:
     ]
 
 
-def pure_viscosity_feos(parameters: list, state: list) -> float:
-    """Calcules pure component viscosity with ePC-SAFT.
+def pure_viscosity_feos(parameters: List[float], state: List[float]) -> float:
+    """Calcules pure component viscosity (kPa*s) with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-        state (list): A list with `[Temperature (K), Pressure (Pa)]`
-    Returns:
-        output (float): Calculated viscosity (kPa*s)
+        state: A list with `[Temperature (K), Pressure (Pa)]`
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
@@ -314,16 +293,14 @@ def pure_viscosity_feos(parameters: list, state: list) -> float:
     return statenpt.viscosity()  # / (KILO * PASCAL * SECOND)
 
 
-def phase_diagram_feos(parameters: list, state: list) -> dict:
-    """Calculates phase diagram with ePC-SAFT.
+def phase_diagram_feos(parameters: List[float], state: List[float]) -> Dict[str, float]:
+    """Calculates phase diagram from
+    state temperature up to the critical temperature with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
+        parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-        state (list): A list with `[Temperature (K)]`
-    Returns:
-        output (dict): dict with all
-         calculated properties from `state[temperature]` up to the critical temperature
+        state: A list with `[Temperature (K)]`
     """
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
@@ -333,18 +310,15 @@ def phase_diagram_feos(parameters: list, state: list) -> dict:
 
 
 def pure_surface_tension_feos(
-    parameters: list, state: list
-) -> tuple[np.ndarray, np.ndarray]:
-    """Calcules pure component surface tension with ePC-SAFT.
+    parameters: List[float], state: List[float]
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Calculates pure component `[Surface Tension (mN/m), Temperature (K)]` with ePC-SAFT
+    from state temperature up to the critical temperature with ePC-SAFT.
 
     Args:
-        parameters (list): A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, SMILES, InChI, MW]`
-        state (list): A list with `[Temperature (K)]`
-    Returns:
-        output (tuple[np.ndarray, np.ndarray]): tuple with
-         `(Surface tension (mN/m), Temperature (K))` from `state[temperature]`
-         up to the critical temperature
+        parameters: A list with
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+        state: A list with `[Temperature (K)]`
     """
     t = state[0]  # Temperature, K
     records = get_records([parameters])
@@ -359,14 +333,11 @@ def pure_surface_tension_feos(
     return st, temp
 
 
-def parameters_gc_pcsaft(smiles: str) -> tuple:
+def parameters_gc_pcsaft(smiles: str) -> List[float]:
     """Calculates PC-SAFT parameters with Group Contribution method.
 
     Args:
         smiles (str): SMILES of the compound
-    Returns:
-        output (tuple): Tuple with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
     """
     pure_record = (
         PcSaftParameters.from_json_smiles(
@@ -387,4 +358,4 @@ def parameters_gc_pcsaft(smiles: str) -> tuple:
     na = pure_record.na if pure_record.na else 0
     nb = pure_record.nb if pure_record.nb else 0
 
-    return (m, sigma, e, kab, eab, mu, na, nb)
+    return [m, sigma, e, kab, eab, mu, na, nb]
