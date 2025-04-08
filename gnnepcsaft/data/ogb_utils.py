@@ -1,4 +1,5 @@
 "Module to avoid importing ogb for smiles2graph"
+
 # ogb==1.3.6
 import numpy as np
 from rdkit import Chem
@@ -92,8 +93,12 @@ def safe_index(l, e):
 def smiles2graph(smiles_string):
     """
     Converts SMILES string to graph Data object
-    :input: SMILES string (str)
-    :return: graph object
+
+    Args:
+      SMILES_string (str): SMILES
+
+    Returns:
+      graph object (dict)
     """
 
     mol = Chem.MolFromSmiles(smiles_string)
