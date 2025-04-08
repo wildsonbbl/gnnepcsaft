@@ -19,8 +19,16 @@ RDLogger.DisableLog("rdApp.*")  # type: ignore
 
 
 # pylint: disable = invalid-name
-def inchitosmiles(InChI, with_hydrogen, kekulize) -> str:
-    "Transform InChI to a SMILES."
+def inchitosmiles(InChI, with_hydrogen=False, kekulize=False) -> str:
+    """Transform InChI to a SMILES.
+
+    Args:
+        InChI (str): InChI
+        with_hydrogen (bool): Add hydrogens to the molecule
+        kekulize (bool): Kekulize the molecule
+    Returns:
+        output (str): SMILES
+    """
     mol = Chem.MolFromInchi(InChI)
     if mol is None:
         raise ValueError("InChI is not valid")
@@ -36,7 +44,15 @@ def inchitosmiles(InChI, with_hydrogen, kekulize) -> str:
 
 
 def smilestoinchi(smiles, with_hydrogen=False, kekulize=False) -> str:
-    "Transform SMILES to InChI."
+    """Transform SMILES to InChI.
+
+    Args:
+        smiles (str): SMILES
+        with_hydrogen (bool): Add hydrogens to the molecule
+        kekulize (bool): Kekulize the molecule
+    Returns:
+        output (str): InChI
+    """
     # pylint: disable = no-member
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -52,7 +68,13 @@ def smilestoinchi(smiles, with_hydrogen=False, kekulize=False) -> str:
 
 
 def assoc_number(inchi: str) -> tuple[int, int]:
-    "Calculates the number of H-bond acceptors/donors"
+    """Calculates the number of H-bond acceptors/donors
+
+    Args:
+        inchi (str): InChI
+    Returns:
+        output (tuple[int, int]): Number of H-bond acceptors and donors
+    """
 
     exceptions = (
         "InChI=1S/H2O/h1H2",
@@ -94,7 +116,13 @@ def assoc_number(inchi: str) -> tuple[int, int]:
 
 
 def mw(inchi: str) -> float:
-    "Calcultes molecular weight."
+    """Calcultes molecular weight.
+
+    Args:
+        inchi (str): InChI
+    Returns:
+        output (float): Molecular weight
+    """
     try:
         mol = Chem.MolFromInchi(inchi, removeHs=False, sanitize=False)
         mol_weight = CalcExactMolWt(mol)
@@ -104,8 +132,16 @@ def mw(inchi: str) -> float:
     return mol_weight
 
 
-def ECFP(smiles: str, radius: int = 3, nBits: int = 3072):
-    "Calculates ECFP fingerprints."
+def ECFP(smiles: str, radius: int = 3, nBits: int = 3072) -> np.ndarray:
+    """Calculates ECFP fingerprints.
+
+    Args:
+        smiles (str): SMILES
+        radius (int): Radius
+        nBits (int): Number of bits
+    Returns:
+        output (np.ndarray): ECFP fingerprints
+    """
     try:
         mol = Chem.MolFromSmiles(smiles, sanitize=True)
         fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=nBits)  # type: ignore
@@ -116,7 +152,13 @@ def ECFP(smiles: str, radius: int = 3, nBits: int = 3072):
 
 
 def ring_count(smiles: str) -> int:
-    "Calculates the number of rings."
+    """Calculates the number of rings.
+
+    Args:
+        smiles (str): SMILES
+    Returns:
+        output (int): Number of rings
+    """
     try:
         mol = Chem.MolFromSmiles(smiles, sanitize=True)
         _ring_count = CalcNumRings(mol)
@@ -126,7 +168,13 @@ def ring_count(smiles: str) -> int:
 
 
 def rbond_count(smiles: str) -> int:
-    "Calculates the number of rotatable bonds."
+    """Calculates the number of rotatable bonds.
+
+    Args:
+        smiles (str): SMILES
+    Returns:
+        output (int): Number of rotatable bonds
+    """
     try:
         mol = Chem.MolFromSmiles(smiles, sanitize=True)
         _rbond_count = CalcNumRotatableBonds(mol)
@@ -136,7 +184,13 @@ def rbond_count(smiles: str) -> int:
 
 
 def atom_count(smiles: str) -> list:
-    "Calculates the number of atoms."
+    """Count the number of each atom in a molecule.
+
+    Args:
+        smiles (str): SMILES
+    Returns:
+        output (list): Atom count list
+    """
     atom_count_list = [0] * 119
     try:
         mol = Chem.MolFromSmiles(smiles, sanitize=True)
