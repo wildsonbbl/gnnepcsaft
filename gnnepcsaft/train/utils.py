@@ -4,7 +4,7 @@ import multiprocessing as mp
 import os.path as osp
 import time
 from tempfile import TemporaryDirectory
-from typing import Any, Union
+from typing import Any, List, Union
 
 import numpy as np
 import torch
@@ -30,7 +30,7 @@ params_lower_bound = np.array([1.0, 1.9, 50.0, 1e-4, 200.0, 0, 0, 0])
 params_upper_bound = np.array([25.0, 4.5, 550.0, 0.9, 5000.0, np.inf, np.inf, np.inf])
 
 
-def calc_deg(dataset: str, workdir: str) -> list:
+def calc_deg(dataset: str, workdir: str) -> List:
     """Calculates deg for `PNA` conv."""
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
@@ -56,7 +56,7 @@ def calc_deg(dataset: str, workdir: str) -> list:
     return deg.tolist()
 
 
-def rhovp_data(parameters: list, rho: np.ndarray, vp: np.ndarray):
+def rhovp_data(parameters: List, rho: np.ndarray, vp: np.ndarray):
     """Calculates density and vapor pressure with ePC-SAFT"""
 
     den_array = rho_single((parameters, rho))
@@ -110,8 +110,8 @@ def build_test_dataset(
         osp.join(workdir, "data/thermoml"), transform=transform
     )
 
-    val_msigmae_idx: list[int] = []
-    train_idx: list[int] = []
+    val_msigmae_idx: List[int] = []
+    train_idx: List[int] = []
     # separate test and val dataset
     for idx, graph in enumerate(tml_dataset):
         if graph.InChI not in para_data and graph.munanb[0, -1] == 0:
@@ -231,7 +231,7 @@ class CustomStopper(tune.Stopper):
         return False
 
 
-def rho_single(args: tuple[list, np.ndarray]) -> np.ndarray:
+def rho_single(args: tuple[List, np.ndarray]) -> np.ndarray:
     """Calculates density with ePC-SAFT for a single pararameter"""
     parameters, states = args
     rho_for_all_states = []
@@ -246,8 +246,8 @@ def rho_single(args: tuple[list, np.ndarray]) -> np.ndarray:
 
 
 def rho_batch(
-    parameters_batch: list[list[Any]], states_batch: list[np.ndarray]
-) -> list[np.ndarray]:
+    parameters_batch: List[List[Any]], states_batch: List[np.ndarray]
+) -> List[np.ndarray]:
     """
     Calculates density with ePC-SAFT
     for a batch of parameters
@@ -264,7 +264,7 @@ def rho_batch(
     return den
 
 
-def vp_single(args: tuple[list, np.ndarray]) -> np.ndarray:
+def vp_single(args: tuple[List, np.ndarray]) -> np.ndarray:
     """Calculates vapor pressure with ePC-SAFT for a single parameter"""
     parameters, states = args
     vp_for_all_states = []
@@ -278,8 +278,8 @@ def vp_single(args: tuple[list, np.ndarray]) -> np.ndarray:
 
 
 def vp_batch(
-    parameters_batch: list[list[Any]], states_batch: list[np.ndarray]
-) -> list[np.ndarray]:
+    parameters_batch: List[List[Any]], states_batch: List[np.ndarray]
+) -> List[np.ndarray]:
     """
     Calculates vapor pressure with ePC-SAFT
     for a batch of parameters
@@ -333,14 +333,14 @@ def rf_xgb_evaluation(
     assert pred_params.shape == (len(graphs.rho), 8)
     assert isinstance(graphs.rho[0], np.ndarray)
     assert isinstance(graphs.vp[0], np.ndarray)
-    assert isinstance(graphs.rho, list)
-    assert isinstance(graphs.vp, list)
+    assert isinstance(graphs.rho, List)
+    assert isinstance(graphs.vp, List)
     pred_rho = rho_batch(pred_params.tolist(), graphs.rho)
     pred_vp = vp_batch(pred_params.tolist(), graphs.vp)
     assert isinstance(pred_rho[0], np.ndarray)
     assert isinstance(pred_vp[0], np.ndarray)
-    assert isinstance(pred_rho, list)
-    assert isinstance(pred_vp, list)
+    assert isinstance(pred_rho, List)
+    assert isinstance(pred_vp, List)
     rho = [rho[:, -1] for rho in graphs.rho if rho.shape[0] > 0]
     vp = [vp[:, -1] for vp in graphs.vp if vp.shape[0] > 0]
     mape_den = []

@@ -3,7 +3,7 @@
 import itertools
 import os
 import os.path as osp
-from typing import Optional, Union
+from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -53,7 +53,7 @@ device = "cpu"
 def plotdata(
     inchi: str,
     molecule_name: str,
-    models: list[GNNePCSAFT],
+    models: List[GNNePCSAFT],
     model_msigmae: Optional[GNNePCSAFT],
 ):
     """Plots ThermoML Archive experimental density and/or vapor pressure
@@ -142,7 +142,7 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
 
 
 def predparams(
-    inchi: str, models: list[GNNePCSAFT], model_msigmae: Optional[GNNePCSAFT]
+    inchi: str, models: List[GNNePCSAFT], model_msigmae: Optional[GNNePCSAFT]
 ):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
@@ -165,7 +165,7 @@ def predparams(
 
 
 def get_params(
-    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT], graphs: Data
+    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT], graphs: Data
 ) -> torch.Tensor:
     "to get parameters from models"
     msigmae_or_log10assoc = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
@@ -191,8 +191,8 @@ def get_params(
 
 
 def pred_rhovp(
-    inchi: str, list_params: list[list[float]], rho: np.ndarray, vp: np.ndarray
-) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    inchi: str, list_params: List[List[float]], rho: np.ndarray, vp: np.ndarray
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     "Predicted density and vapor pressure with ePC-SAFT."
     pred_den_list, pred_vp_list = [], []
     print(f"#### {inchi} ####")
@@ -208,8 +208,8 @@ def pred_rhovp(
 def plotden(
     inchi: str,
     molecule_name: str,
-    models: list[GNNePCSAFT],
-    data: tuple[np.ndarray, list[np.ndarray]],
+    models: List[GNNePCSAFT],
+    data: Tuple[np.ndarray, List[np.ndarray]],
 ):
     "Plot density data."
 
@@ -238,8 +238,8 @@ def plotden(
 def plotvp(
     inchi: str,
     molecule_name: str,
-    models: list[GNNePCSAFT],
-    data: tuple[np.ndarray, list[np.ndarray]],
+    models: List[GNNePCSAFT],
+    data: Tuple[np.ndarray, List[np.ndarray]],
 ):
     "Plot vapor pressure data."
     vp, pred_vp_list = data
@@ -277,7 +277,7 @@ def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
     sns.despine(trim=True)
 
 
-def plotparams(smiles: list[str], models: list[GNNePCSAFT], xlabel: str = "CnHn+2"):
+def plotparams(smiles: List[str], models: List[GNNePCSAFT], xlabel: str = "CnHn+2"):
     """
     For plotting te behaviour between parameters and chain length.
     """
@@ -336,7 +336,7 @@ def plotlinearfit(x, y, marker):
     )
 
 
-def predparams2(smiles: list[str], models: list[GNNePCSAFT]) -> list[np.ndarray]:
+def predparams2(smiles: List[str], models: List[GNNePCSAFT]) -> List[np.ndarray]:
     "Use models to predict ePC-SAFT parameters from smiles."
     list_array_params = []
     for model in models:
@@ -385,8 +385,8 @@ def save_exported_program(
 
 
 def binary_test(
-    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT] = None
-) -> list[tuple[tuple[str, str], tuple[float, float]]]:
+    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT] = None
+) -> List[Tuple[Tuple[str, str], Tuple[float, float]]]:
     "for testing models performance on binary data"
 
     binary_data = pl.read_parquet(
@@ -429,8 +429,8 @@ def binary_test(
 
 
 def get_mix_params(
-    model: GNNePCSAFT, model_msigmae: Union[None, GNNePCSAFT], inchis: list[str]
-) -> list[list[Union[float, str]]]:
+    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT], inchis: List[str]
+) -> List[List[float]]:
     "to organize the parameters for the mixture"
     mix_params = []
     for inchi in inchis:
