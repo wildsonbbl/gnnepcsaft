@@ -11,7 +11,7 @@ from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 
-from .search_space import get_search_space
+from ..configs.search_space import get_search_space
 from .train import training_updated
 from .utils import CustomStopper
 
