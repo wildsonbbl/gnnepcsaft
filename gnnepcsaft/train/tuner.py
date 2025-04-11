@@ -64,6 +64,7 @@ def main(argv):
                 "post_layers": 3,
                 "pre_layers": 2,
                 "towers": 2,
+                "dropout": 0.0,
             },
             {
                 "conv": "GATv2",
@@ -71,6 +72,7 @@ def main(argv):
                 "propagation_depth": 4,
                 "hidden_dim": 256,
                 "heads": 2,
+                "dropout": 0.0,
             },
         ],
         seed=77,

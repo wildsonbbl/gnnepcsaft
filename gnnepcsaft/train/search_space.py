@@ -10,7 +10,7 @@ def get_search_space() -> CS.ConfigurationSpace:
 
     a = CS.UniformIntegerHyperparameter("propagation_depth", 3, 8, 6)
     b = CS.CategoricalHyperparameter("hidden_dim", [128, 256, 512], 256)
-    c = CS.Constant("dropout", 0.25)
+    c = CS.Constant("dropout", 0.0)
     d = CS.Constant("global_pool", "add")
     e = CS.CategoricalHyperparameter("conv", ["PNA", "GATv2", "Transformer"], "PNA")
     f = CS.CategoricalHyperparameter("heads", [1, 2, 4, 8], 2)
