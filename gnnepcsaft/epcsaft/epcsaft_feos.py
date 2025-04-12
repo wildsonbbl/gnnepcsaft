@@ -47,9 +47,9 @@ def pc_saft_mixture(
     records = get_records(mixture_parameters)
 
     if kij_matrix:
-        binary_records = np.asarray(kij_matrix)
+        binary_records = np.asarray(kij_matrix, dtype=np.float64)
     else:
-        binary_records = np.zeros((len(records), len(records)))
+        binary_records = np.zeros((len(records), len(records)), dtype=np.float32)
     pcsaftparameters = PcSaftParameters.from_records(
         records, binary_records=binary_records
     )
@@ -108,7 +108,7 @@ def mix_den_feos(
 
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
     eos = pc_saft_mixture(parameters, kij_matrix)
 
@@ -167,7 +167,7 @@ def mix_vp_feos(
     """
 
     t = state[0]  # Temperature, K
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
 
