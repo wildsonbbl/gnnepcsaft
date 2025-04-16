@@ -49,7 +49,7 @@ def pc_saft_mixture(
     if kij_matrix:
         binary_records = np.asarray(kij_matrix, dtype=np.float64)
     else:
-        binary_records = np.zeros((len(records), len(records)), dtype=np.float32)
+        binary_records = np.zeros((len(records), len(records)), dtype=np.float64)
     pcsaftparameters = PcSaftParameters.from_records(
         records, binary_records=binary_records
     )
