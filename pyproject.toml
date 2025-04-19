@@ -1,6 +1,6 @@
 [project]
 name = "gnnepcsaft"
-version = "0.2.4"
+version = "0.2.5"
 description = "GNNePCSAFT Project."
 authors = [
     {name = "Wildson Lima"}
