@@ -21,7 +21,8 @@ from feos.pcsaft import (  # type: ignore # pylint: disable = E0401
 
 
 def pc_saft(parameters: List[float]) -> EquationOfState.pcsaft:
-    """Returns a ePC-SAFT equation of state.
+    """
+    Returns a ePC-SAFT equation of state.
 
     Args:
         parameters: A list with
@@ -36,7 +37,8 @@ def pc_saft_mixture(
     mixture_parameters: List[List[float]],
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> EquationOfState.pcsaft:
-    """Returns a ePC-SAFT equation of state.
+    """
+    Returns a ePC-SAFT equation of state.
 
     Args:
         mixture_parameters: A list of
@@ -58,7 +60,8 @@ def pc_saft_mixture(
 
 
 def get_records(mixture_parameters: List[List[float]]) -> list[PureRecord]:
-    """Returns a list of `feos.pcsaft.PureRecord`.
+    """
+    Returns a list of `feos.pcsaft.PureRecord`.
 
     Args:
         mixture_parameters: A list of
@@ -90,12 +93,192 @@ def get_records(mixture_parameters: List[List[float]]) -> list[PureRecord]:
     return records
 
 
+def mix_gibbs_energy(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+):
+    """
+    Calculates mixture `Molar Gibbs Energy/RT` with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+    """
+
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix)
+
+    statenpt = State(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        molefracs=x,
+        density_initialization="liquid",
+    )
+
+    return statenpt.molar_gibbs_energy(Contributions.Residual) / (
+        si.RGAS * t * si.KELVIN
+    )
+
+
+def mix_ln_fugacity_coefficient_pure(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+):
+    """
+    Calculates mixture `ln(fugacity coefficient)` with ePC-SAFT for each pure component.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+    """
+
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix)
+
+    statenpt = State(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        molefracs=x,
+        density_initialization="liquid",
+    )
+
+    return statenpt.ln_phi_pure_liquid()
+
+
+def mix_ln_activity_coefficient(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> List[float]:
+    """
+    Calculates mixture `ln(activity coefficient)` with ePC-SAFT for each component.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+    """
+
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix)
+
+    statenpt = State(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        molefracs=x,
+        density_initialization="liquid",
+    )
+
+    return statenpt.ln_symmetric_activity_coefficient()
+
+
+def mix_e_gibbs_energy(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> float:
+    """
+    Calculates mixture `Molar Excess Gibbs Energy/RT` with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+    """
+
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+
+    return np.sum(mix_ln_activity_coefficient(parameters, state, kij_matrix) * x)
+
+
+def mix_ln_fugacity_coefficient(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> List[float]:
+    """
+    Calculates mixture `ln(fugacity coefficient)` with ePC-SAFT for each component.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix)
+
+    statenpt = State(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        molefracs=x,
+        density_initialization="liquid",
+    )
+
+    return statenpt.ln_phi()
+
+
+def mix_r_gibbs_energy(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> float:
+    """
+    Calculates mixture `Molar Residual Gibbs Energy/RT` with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+    """
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+    return np.sum(mix_ln_fugacity_coefficient(parameters, state, kij_matrix) * x)
+
+
 def mix_den_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> float:
-    """Calculates mixture liquid density (mol/m³) with ePC-SAFT.
+    """
+    Calculates mixture liquid density (mol/m³) with ePC-SAFT.
 
     Args:
         parameters: A list of
@@ -126,7 +309,8 @@ def mix_den_feos(
 
 
 def pure_den_feos(parameters: List[float], state: List[float]) -> float:
-    """Calculates pure component liquid density (mol/m³) with ePC-SAFT.
+    """
+    Calculates pure component liquid density (mol/m³) with ePC-SAFT.
 
     Args:
         parameters: A list with
@@ -155,7 +339,8 @@ def mix_vp_feos(
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> Tuple[float, float]:
-    """Calculates mixture `(Bubble point (Pa), Dew point (Pa))` with ePC-SAFT.
+    """
+    Calculates mixture `(Bubble point (Pa), Dew point (Pa))` with ePC-SAFT.
 
     Args:
         parameters: A list of
@@ -192,7 +377,8 @@ def mix_vp_feos(
 
 
 def pure_vp_feos(parameters: List[float], state: List[float]) -> float:
-    """Calculates pure component vapor pressure (Pa) with ePC-SAFT.
+    """
+    Calculates pure component vapor pressure (Pa) with ePC-SAFT.
 
     Args:
         parameters: A list with
@@ -211,7 +397,8 @@ def pure_vp_feos(parameters: List[float], state: List[float]) -> float:
 
 
 def pure_h_lv_feos(parameters: List[float], state: List[float]) -> float:
-    """Calculates pure component enthalpy of vaporization (kJ/mol) with ePC-SAFT.
+    """
+    Calculates pure component enthalpy of vaporization (kJ/mol) with ePC-SAFT.
 
     Args:
         parameters: A list with
@@ -236,7 +423,8 @@ def pure_h_lv_feos(parameters: List[float], state: List[float]) -> float:
 
 
 def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
-    """Calcules pure component entropy of vaporization (J/mol*K) with ePC-SAFT.
+    """
+    Calcules pure component entropy of vaporization (J/mol*K) with ePC-SAFT.
 
     Args:
         parameters: A list with
@@ -256,7 +444,8 @@ def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
 
 
 def critical_points_feos(parameters: List[float]) -> List[float]:
-    """Calculates critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]` with ePC-SAFT.
+    """
+    Calculates critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]` with ePC-SAFT.
 
     Args:
         parameters: A list with
@@ -272,7 +461,8 @@ def critical_points_feos(parameters: List[float]) -> List[float]:
 
 
 def pure_viscosity_feos(parameters: List[float], state: List[float]) -> float:
-    """Calcules pure component viscosity (kPa*s) with ePC-SAFT.
+    """
+    Calcules pure component viscosity (kPa*s) with ePC-SAFT.
 
     Args:
         parameters: A list with
@@ -294,7 +484,8 @@ def pure_viscosity_feos(parameters: List[float], state: List[float]) -> float:
 
 
 def phase_diagram_feos(parameters: List[float], state: List[float]) -> Dict[str, float]:
-    """Calculates phase diagram from
+    """
+    Calculates phase diagram from
     state temperature up to the critical temperature with ePC-SAFT.
 
     Args:
@@ -312,7 +503,8 @@ def phase_diagram_feos(parameters: List[float], state: List[float]) -> Dict[str,
 def pure_surface_tension_feos(
     parameters: List[float], state: List[float]
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Calculates pure component `[Surface Tension (mN/m), Temperature (K)]` with ePC-SAFT
+    """
+    Calculates pure component `[Surface Tension (mN/m), Temperature (K)]` with ePC-SAFT
     from state temperature up to the critical temperature with ePC-SAFT.
 
     Args:
@@ -334,7 +526,8 @@ def pure_surface_tension_feos(
 
 
 def parameters_gc_pcsaft(smiles: str) -> List[float]:
-    """Calculates PC-SAFT parameters with Group Contribution method.
+    """
+    Calculates PC-SAFT parameters with Group Contribution method.
 
     Args:
         smiles (str): SMILES of the compound
@@ -359,3 +552,97 @@ def parameters_gc_pcsaft(smiles: str) -> List[float]:
     nb = pure_record.nb if pure_record.nb else 0
 
     return [m, sigma, e, kab, eab, mu, na, nb]
+
+
+if __name__ == "__main__":
+
+    import matplotlib.pyplot as plt
+
+    parameters_ = [
+        [2.36931, 2.13688, 229.08936, 0.35375, 2191.07976, 0.0, 1, 1],  # water
+        [3.42422, 4.05778, 287.37372, 0.00236, 3004.83009, 0.0, 1, 1],  # octanol
+    ]
+    parameters_2 = [
+        [1.23923, 3.31619, 89.78633, 0.00086, 1159.69411, 0.0, 2, 0],  # N2
+        [1.0, 3.70632, 151.87309, 0.0, 0.0, 0.0, 0, 0],  # CH4
+    ]
+
+    parameters_3 = [
+        [2.50956, 3.43242, 271.01627, 0.0, 0.0, 0.0, 0, 0],  # ClC(Cl)Cl
+        [3.48832, 3.79358, 237.78816, 0.0, 0.0, 0.0, 0, 0],  # CCCCCCC
+    ]
+
+    parameters_4 = [
+        [2.77575, 3.24163, 230.60544, 0.00018, 1448.962, 0.0, 1, 0],  # CC(=O)C
+        [2.24243, 2.82464, 182.92549, 0.0872, 2447.75103, 0.0, 1, 1],  # CO
+    ]
+    parameters_5 = [
+        [2.77575, 3.24163, 230.60544, 0.00018, 1448.962, 0.0, 1, 0],  # CC(=O)C
+        [2.50956, 3.43242, 271.01627, 0.0, 0.0, 0.0, 0, 0],  # ClC(Cl)Cl
+    ]
+
+    parameters_6 = [
+        [2.87326, 2.96227, 187.37704, 0.05594, 2460.62173, 0.0, 1, 1],  # CCO
+        [3.48832, 3.79358, 237.78816, 0.0, 0.0, 0.0, 0, 0],  # CCCCCCC
+    ]
+
+    parameters_7 = [
+        [2.87326, 2.96227, 187.37704, 0.05594, 2460.62173, 0.0, 1, 1],  # CCO
+        [2.50956, 3.43242, 271.01627, 0.0, 0.0, 0.0, 0, 0],  # ClC(Cl)Cl
+    ]
+
+    parameters_8 = [
+        [2.87326, 2.96227, 187.37704, 0.05594, 2460.62173, 0.0, 1, 1],  # CCO
+        [2.36931, 2.13688, 229.08936, 0.35375, 2191.07976, 0.0, 1, 1],  # water
+    ]
+
+    temperatures = np.linspace(200, 400, 10)
+    fig1 = plt.figure(1)
+    fig2 = plt.figure(2)
+    fig3 = plt.figure(3)
+    for tp in temperatures:
+        ge = []
+        molxs = []
+        gr = []
+        for molx in np.linspace(1e-5, 0.9999, 500):
+            gr.append(
+                mix_r_gibbs_energy(parameters_5, [tp, 101325, molx, 1 - molx], None)
+            )
+            ge.append(
+                mix_e_gibbs_energy(parameters_5, [tp, 101325, molx, 1 - molx], None)
+            )
+            molxs.append(molx)
+
+        plt.figure(fig1.number)
+        plt.plot(molxs, ge, label=f"T = {round(tp, 2)} K")
+        plt.figure(fig2.number)
+        plt.plot(molxs, gr, label=f"T = {round(tp, 2)} K")
+
+    plt.figure(fig1.number)
+    plt.legend(loc=(1.01, 0.0))
+    plt.xlabel("x-water")
+    plt.ylabel(r"$G^{E}/RT$")
+
+    plt.figure(fig2.number)
+    plt.legend(loc=(1.01, 0.0))
+    plt.xlabel("x-water")
+    plt.ylabel(r"$G^{R}/RT$")
+
+    plt.figure(fig3.number)
+    for i in range(3, 9):
+        PARA_NAME = "parameters_" + str(i)
+        para = eval(PARA_NAME)  # pylint: disable=eval-used
+        ge = []
+        molxs = []
+        gr = []
+        for molx in np.linspace(1e-5, 0.9999, 500):
+            gr.append(
+                mix_r_gibbs_energy(para, [273.15 + 50, 101325, molx, 1 - molx], None)
+            )
+            ge.append(
+                mix_e_gibbs_energy(para, [273.15 + 50, 101325, molx, 1 - molx], None)
+            )
+            molxs.append(molx)
+        plt.plot(molxs, ge, label=PARA_NAME)
+    plt.legend(loc=(1.01, 0.0))
+    plt.ylabel(r"$G^{E}/RT$")
