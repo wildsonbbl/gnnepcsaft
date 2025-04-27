@@ -558,7 +558,7 @@ if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
 
-    parameters_ = [
+    parameters_1 = [
         [2.36931, 2.13688, 229.08936, 0.35375, 2191.07976, 0.0, 1, 1],  # water
         [3.42422, 4.05778, 287.37372, 0.00236, 3004.83009, 0.0, 1, 1],  # octanol
     ]
@@ -596,6 +596,121 @@ if __name__ == "__main__":
         [2.36931, 2.13688, 229.08936, 0.35375, 2191.07976, 0.0, 1, 1],  # water
     ]
 
+    parameters_9 = [
+        [
+            1.77033,
+            4.11536,
+            408.98859,
+            0.01119,
+            2028.69335,
+            0.0,
+            3,
+            3,
+        ],  # C(C(CO)O)O
+        [
+            1.87119,
+            4.36345,
+            421.9549,
+            0.00102,
+            2253.55334,
+            0.0,
+            1.0,
+            1.0,
+        ],  # C[N+](C)(C)CCO.[Cl-]
+    ]
+
+    parameters_10 = [
+        [
+            3.18316,
+            2.91089,
+            288.20007,
+            0.0001,
+            198.64934,
+            0.0,
+            1,
+            1,
+        ],  #  CC(=O)O
+        [
+            1.87119,
+            4.36345,
+            421.9549,
+            0.00102,
+            2253.55334,
+            0.0,
+            1.0,
+            1.0,
+        ],  # C[N+](C)(C)CCO.[Cl-]
+    ]
+
+    parameters_11 = [
+        [
+            2.50956,
+            3.43242,
+            271.01627,
+            0.0,
+            0.0,
+            0.0,
+            0,
+            0,
+        ],  # ClC(Cl)Cl
+        [
+            1.87119,
+            4.36345,
+            421.9549,
+            0.00102,
+            2253.55334,
+            0.0,
+            1.0,
+            1.0,
+        ],  # C[N+](C)(C)CCO.[Cl-]
+    ]
+
+    parameters_12 = [
+        [
+            2.77575,
+            3.24163,
+            230.60544,
+            0.00018,
+            1448.962,
+            0.0,
+            1,
+            0,
+        ],  # CC(=O)C
+        [
+            1.87119,
+            4.36345,
+            421.9549,
+            0.00102,
+            2253.55334,
+            0.0,
+            1.0,
+            1.0,
+        ],  # C[N+](C)(C)CCO.[Cl-]
+    ]
+
+    parameters_13 = [
+        [
+            2.77575,
+            3.24163,
+            230.60544,
+            0.00018,
+            1448.962,
+            0.0,
+            1,
+            0,
+        ],  # CC(=O)C
+        [
+            2.47904,
+            3.18442,
+            254.75797,
+            0.0,
+            0.0,
+            0.0,
+            0,
+            0,
+        ],  # ClCCl
+    ]
+
     temperatures = np.linspace(200, 400, 10)
     fig1 = plt.figure(1)
     fig2 = plt.figure(2)
@@ -606,10 +721,10 @@ if __name__ == "__main__":
         gr = []
         for molx in np.linspace(1e-5, 0.9999, 500):
             gr.append(
-                mix_r_gibbs_energy(parameters_5, [tp, 101325, molx, 1 - molx], None)
+                mix_r_gibbs_energy(parameters_1, [tp, 101325, molx, 1 - molx], None)
             )
             ge.append(
-                mix_e_gibbs_energy(parameters_5, [tp, 101325, molx, 1 - molx], None)
+                mix_e_gibbs_energy(parameters_1, [tp, 101325, molx, 1 - molx], None)
             )
             molxs.append(molx)
 
@@ -628,21 +743,38 @@ if __name__ == "__main__":
     plt.xlabel("x-water")
     plt.ylabel(r"$G^{R}/RT$")
 
-    plt.figure(fig3.number)
-    for i in range(3, 9):
+    import math
+
+    N = 13  # número de subplots
+    NCOLS = 4
+    nrows = math.ceil(N / NCOLS)
+    fig, axes = plt.subplots(nrows, NCOLS, figsize=(16, 10), sharex=True, sharey=False)
+    axes = axes.flatten()
+
+    for i in range(1, N + 1):
         PARA_NAME = "parameters_" + str(i)
         para = eval(PARA_NAME)  # pylint: disable=eval-used
         ge = []
         molxs = []
-        gr = []
+        TEMP = 273.15 + 50
         for molx in np.linspace(1e-5, 0.9999, 500):
-            gr.append(
-                mix_r_gibbs_energy(para, [273.15 + 50, 101325, molx, 1 - molx], None)
-            )
             ge.append(
-                mix_e_gibbs_energy(para, [273.15 + 50, 101325, molx, 1 - molx], None)
+                mix_e_gibbs_energy(para, [TEMP, 101325, molx, 1 - molx], None)
+                * si.RGAS
+                * TEMP
+                * si.KELVIN
+                / (si.JOULE / si.MOL)
             )
             molxs.append(molx)
-        plt.plot(molxs, ge, label=PARA_NAME)
-    plt.legend(loc=(1.01, 0.0))
-    plt.ylabel(r"$G^{E}/RT$")
+        ax = axes[i - 1]
+        ax.plot(molxs, ge)
+        ax.set_title(PARA_NAME)
+        ax.set_xlabel("x")
+        ax.set_ylabel(r"$G^{E}$ (J $mol^{-1}$)")
+
+    # Remove subplots vazios, se houver
+    for j in range(N, len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.tight_layout()
+    plt.show()
