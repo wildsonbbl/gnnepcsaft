@@ -109,24 +109,11 @@ def mix_gibbs_energy(
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
     """
-
-    t = state[0]  # Temperature, K
-    p = state[1]  # Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    eos = pc_saft_mixture(parameters, kij_matrix)
+    excess_g = mix_e_gibbs_energy(parameters, state, kij_matrix)
 
-    statenpt = State(
-        eos,
-        temperature=t * si.KELVIN,
-        pressure=p * si.PASCAL,
-        molefracs=x,
-        density_initialization="liquid",
-    )
-
-    return statenpt.molar_gibbs_energy(Contributions.Residual) / (
-        si.RGAS * t * si.KELVIN
-    )
+    return excess_g + np.sum(x * np.log(x))
 
 
 def mix_ln_fugacity_coefficient_pure(
@@ -711,18 +698,16 @@ if __name__ == "__main__":
         ],  # ClCCl
     ]
 
-    temperatures = np.linspace(200, 400, 10)
+    temperatures = np.linspace(300, 370, 10)
     fig1 = plt.figure(1)
     fig2 = plt.figure(2)
     fig3 = plt.figure(3)
     for tp in temperatures:
         ge = []
         molxs = []
-        gr = []
+        g = []
         for molx in np.linspace(1e-5, 0.9999, 500):
-            gr.append(
-                mix_r_gibbs_energy(parameters_1, [tp, 101325, molx, 1 - molx], None)
-            )
+            g.append(mix_gibbs_energy(parameters_1, [tp, 101325, molx, 1 - molx], None))
             ge.append(
                 mix_e_gibbs_energy(parameters_1, [tp, 101325, molx, 1 - molx], None)
             )
@@ -731,7 +716,7 @@ if __name__ == "__main__":
         plt.figure(fig1.number)
         plt.plot(molxs, ge, label=f"T = {round(tp, 2)} K")
         plt.figure(fig2.number)
-        plt.plot(molxs, gr, label=f"T = {round(tp, 2)} K")
+        plt.plot(molxs, g, label=f"T = {round(tp, 2)} K")
 
     plt.figure(fig1.number)
     plt.legend(loc=(1.01, 0.0))
@@ -741,7 +726,7 @@ if __name__ == "__main__":
     plt.figure(fig2.number)
     plt.legend(loc=(1.01, 0.0))
     plt.xlabel("x-water")
-    plt.ylabel(r"$G^{R}/RT$")
+    plt.ylabel(r"$G^{mix}/RT$")
 
     import math
 
