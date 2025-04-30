@@ -41,15 +41,13 @@ def linearity_penalty(
             batch.edge_attr,
             batch.batch,
         )
-        pred[:, 1] = pred[:, 0] * (pred[:, 1] ** 3)
-        pred[:, 2] = pred[:, 0] * pred[:, 2]
-        B = pred  # pylint: disable=C0103
+        m = pred[:, 0]
+        m_sigma_cubic = m * (pred[:, 1] ** 3)
+        m_e = m * pred[:, 2]
+        B = torch.stack([m, m_sigma_cubic, m_e], dim=1)  # pylint: disable=C0103
         a, b = torch.linalg.lstsq(A, B).solution  # pylint: disable=E1102
         y_fit = a.view(1, 3) * x.view(-1, 1) + b.view(1, 3)
-        m_penalty = F.huber_loss(B[:, 0], y_fit[:, 0])
-        sigma_penalty = F.huber_loss(B[:, 1], y_fit[:, 1])
-        e_penalty = F.huber_loss(B[:, 2], y_fit[:, 2])
-        penalty += (m_penalty + sigma_penalty + e_penalty) / 3.0
+        penalty += F.huber_loss(B, y_fit)
 
     return penalty / len(list_of_gh_batch)
 
