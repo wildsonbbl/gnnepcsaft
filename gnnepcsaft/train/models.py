@@ -135,8 +135,14 @@ class GNNePCSAFTL(L.LightningModule):
             lin_penalty = linearity_penalty(self, self.list_of_gh_batch)
             alpha = 0.1  # peso do termo de penalização, ajuste conforme necessário
             loss = loss + alpha * lin_penalty
-        else:
-            lin_penalty = 0.0
+
+            self.log(
+                "linearity_penalty",
+                lin_penalty,
+                on_step=True,
+                batch_size=1,
+                sync_dist=True,
+            )
 
         self.log(
             "train_huber",
@@ -150,13 +156,6 @@ class GNNePCSAFTL(L.LightningModule):
             loss_mape,
             on_step=True,
             batch_size=target.shape[0],
-            sync_dist=True,
-        )
-        self.log(
-            "linearity_penalty",
-            lin_penalty,
-            on_step=True,
-            batch_size=1,
             sync_dist=True,
         )
         return loss
