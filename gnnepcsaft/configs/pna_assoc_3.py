@@ -30,6 +30,7 @@ def get_config():
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
     config.model_name = "pna_assoc_2.0"
+    config.linearity_penalty = False
 
     # GNN hyperparameters.
     ## General
