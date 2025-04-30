@@ -132,7 +132,7 @@ class GNNePCSAFTL(L.LightningModule):
         loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
         if self.config["linearity_penalty"] and self.global_step % 20 == 0:
-            lin_penalty = linearity_penalty(self.forward, self.list_of_gh_batch)
+            lin_penalty = linearity_penalty(self.model, self.list_of_gh_batch)
             alpha = 0.1  # peso do termo de penalização, ajuste conforme necessário
             loss = loss + alpha * lin_penalty
         else:
