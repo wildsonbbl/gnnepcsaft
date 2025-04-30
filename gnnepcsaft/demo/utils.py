@@ -286,7 +286,7 @@ def plotparams(smiles: List[str], models: List[GNNePCSAFT], xlabel: str = "CnHn+
 
     list_array_params = predparams2(smiles, models)
 
-    x = np.arange(2, 51)
+    x = np.arange(2, len(smiles) + 2)
 
     for array_params in list_array_params:
         marker = next(iter(markers))

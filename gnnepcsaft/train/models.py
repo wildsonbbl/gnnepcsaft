@@ -22,9 +22,16 @@ from ..data.graph import from_smiles
 from .utils import rho_batch, vp_batch
 
 
-def linearity_penalty(model, list_of_gh_batch) -> Union[torch.Tensor, float]:
+def linearity_penalty(
+    model, list_of_gh_batch, chain_length
+) -> Union[torch.Tensor, float]:
     """Calculate the linearity penalty for a given model and a list of batches."""
     penalty = 0.0
+    # Use o índice da cadeia como variável independente
+    x = torch.arange(2, chain_length + 1, device=model.device, dtype=model.dtype)
+    A = torch.stack(  # pylint: disable=C0103
+        [x, torch.ones_like(x, device=model.device)], dim=1
+    )
     for batch in list_of_gh_batch:
         # Obtenha as predições do modelo para o batch
         batch = batch.to(device=model.device)
@@ -34,15 +41,16 @@ def linearity_penalty(model, list_of_gh_batch) -> Union[torch.Tensor, float]:
             batch.edge_attr,
             batch.batch,
         )
-        # Use o índice da cadeia como variável independente
-        x = torch.arange(2, 51, device=pred.device, dtype=pred.dtype)
+        pred[:, 1] = pred[:, 0] * (pred[:, 1] ** 3)
+        pred[:, 2] = pred[:, 0] * pred[:, 2]
         B = pred  # pylint: disable=C0103
-        A = torch.stack(  # pylint: disable=C0103
-            [x, torch.ones_like(x, device=pred.device)], dim=1
-        )
         a, b = torch.linalg.lstsq(A, B).solution  # pylint: disable=E1102
         y_fit = a.view(1, 3) * x.view(-1, 1) + b.view(1, 3)
-        penalty += F.mse_loss(B, y_fit)
+        m_penalty = F.huber_loss(B[:, 0], y_fit[:, 0])
+        sigma_penalty = F.huber_loss(B[:, 1], y_fit[:, 1])
+        e_penalty = F.huber_loss(B[:, 2], y_fit[:, 2])
+        penalty += (m_penalty + sigma_penalty + e_penalty) / 3.0
+
     return penalty / len(list_of_gh_batch)
 
 
@@ -59,13 +67,15 @@ class GNNePCSAFTL(L.LightningModule):
 
         self.model = GNNePCSAFT(config)
 
+        self.chain_lenght = 40
+
         list_of_smiles_list = [
-            ["C" * i + "C(=O)OCC" for i in range(1, 50)],  # esters
-            ["C" * i + "C(=O)O" for i in range(1, 50)],  # acid
-            ["C" * i + "C=O" for i in range(1, 50)],  # aldehydes
-            ["C" * i + "C(=O)C" for i in range(1, 50)],  # ketones
-            ["C" * i + "CO" for i in range(1, 50)],  # alcohols
-            ["C" * i + "C" for i in range(1, 50)],  # alkanes
+            ["C" * i + "C(=O)OCC" for i in range(1, self.chain_lenght)],  # esters
+            ["C" * i + "C(=O)O" for i in range(1, self.chain_lenght)],  # acid
+            ["C" * i + "C=O" for i in range(1, self.chain_lenght)],  # aldehydes
+            ["C" * i + "C(=O)C" for i in range(1, self.chain_lenght)],  # ketones
+            ["C" * i + "CO" for i in range(1, self.chain_lenght)],  # alcohols
+            ["C" * i + "C" for i in range(1, self.chain_lenght)],  # alkanes
         ]
         self.list_of_gh_batch = []
         for smiles_list in list_of_smiles_list:
@@ -132,8 +142,10 @@ class GNNePCSAFTL(L.LightningModule):
         loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
         if self.config["linearity_penalty"] and self.global_step % 20 == 0:
-            lin_penalty = linearity_penalty(self, self.list_of_gh_batch)
-            alpha = 0.1  # peso do termo de penalização, ajuste conforme necessário
+            lin_penalty = linearity_penalty(
+                self, self.list_of_gh_batch, self.chain_lenght
+            )
+            alpha = 1e-5  # peso do termo de penalização, ajuste conforme necessário
             loss = loss + alpha * lin_penalty
 
             self.log(
