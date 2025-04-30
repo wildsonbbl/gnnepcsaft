@@ -22,11 +22,12 @@ from ..data.graph import from_smiles
 from .utils import rho_batch, vp_batch
 
 
-def linearity_penalty(model, list_of_gh_batch):
+def linearity_penalty(model, list_of_gh_batch) -> Union[torch.Tensor, float]:
     """Calculate the linearity penalty for a given model and a list of batches."""
     penalty = 0.0
     for batch in list_of_gh_batch:
         # Obtenha as predições do modelo para o batch
+        batch = batch.to(device=model.device)
         pred = model(
             batch.x,
             batch.edge_index,
@@ -36,7 +37,9 @@ def linearity_penalty(model, list_of_gh_batch):
         # Use o índice da cadeia como variável independente
         x = torch.arange(2, 51, device=pred.device, dtype=pred.dtype)
         B = pred  # pylint: disable=C0103
-        A = torch.stack([x, torch.ones_like(x)], dim=1)  # pylint: disable=C0103
+        A = torch.stack(  # pylint: disable=C0103
+            [x, torch.ones_like(x, device=pred.device)], dim=1
+        )
         a, b = torch.linalg.lstsq(A, B).solution  # pylint: disable=E1102
         y_fit = a.view(1, 3) * x.view(-1, 1) + b.view(1, 3)
         penalty += F.mse_loss(B, y_fit)
