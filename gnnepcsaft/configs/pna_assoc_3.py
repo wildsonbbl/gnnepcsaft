@@ -22,15 +22,14 @@ def get_config():
 
     config.accelerator = "auto"
     config.batch_size = 387 // 4 + 1
-    config.num_train_steps = 500_000
+    config.num_train_steps = 600_000
     config.log_every_steps = 1000
     config.eval_every_steps = 2500
     config.dataset = "esper_assoc_only"
-    config.checkpoint = "wildson/gnn-pc-saft/model-afflly1p:v0"  # wandb artifact path
+    config.checkpoint = "wildson/gnn-pc-saft/model-e9wscqlf:v0"  # wandb artifact path
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
     config.model_name = "pna_assoc_2.0"
-    config.linearity_penalty = False
 
     # GNN hyperparameters.
     ## General

@@ -13,43 +13,11 @@ from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 from torch.nn import SELU, BatchNorm1d, Dropout, Linear, ModuleList, ReLU, Sequential
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch_geometric import nn as gnn
-from torch_geometric.data import Batch
 from torch_geometric.data.data import Data
 from torch_geometric.nn import BatchNorm
 from torchmetrics.functional import mean_absolute_percentage_error as mape
 
-from ..data.graph import from_smiles
 from .utils import rho_batch, vp_batch
-
-
-def linearity_penalty(
-    model, list_of_gh_batch, chain_length
-) -> Union[torch.Tensor, float]:
-    """Calculate the linearity penalty for a given model and a list of batches."""
-    penalty = 0.0
-    # Use o índice da cadeia como variável independente
-    x = torch.arange(2, chain_length + 1, device=model.device, dtype=model.dtype)
-    A = torch.stack(  # pylint: disable=C0103
-        [x, torch.ones_like(x, device=model.device)], dim=1
-    )
-    for batch in list_of_gh_batch:
-        # Obtenha as predições do modelo para o batch
-        batch = batch.to(device=model.device)
-        pred = model(
-            batch.x,
-            batch.edge_index,
-            batch.edge_attr,
-            batch.batch,
-        )
-        m = pred[:, 0]
-        m_sigma_cubic = m * (pred[:, 1] ** 3)
-        m_e = m * pred[:, 2]
-        B = torch.stack([m, m_sigma_cubic, m_e], dim=1)  # pylint: disable=C0103
-        a, b = torch.linalg.lstsq(A, B).solution  # pylint: disable=E1102
-        y_fit = a.view(1, 3) * x.view(-1, 1) + b.view(1, 3)
-        penalty += F.huber_loss(B, y_fit)
-
-    return penalty / len(list_of_gh_batch)
 
 
 class GNNePCSAFTL(L.LightningModule):
@@ -64,23 +32,6 @@ class GNNePCSAFTL(L.LightningModule):
         self.config = config
 
         self.model = GNNePCSAFT(config)
-
-        self.chain_lenght = 40
-
-        list_of_smiles_list = [
-            ["C" * i + "C(=O)OCC" for i in range(1, self.chain_lenght)],  # esters
-            ["C" * i + "C(=O)O" for i in range(1, self.chain_lenght)],  # acid
-            ["C" * i + "C=O" for i in range(1, self.chain_lenght)],  # aldehydes
-            ["C" * i + "C(=O)C" for i in range(1, self.chain_lenght)],  # ketones
-            ["C" * i + "CO" for i in range(1, self.chain_lenght)],  # alcohols
-            ["C" * i + "C" for i in range(1, self.chain_lenght)],  # alkanes
-        ]
-        self.list_of_gh_batch = []
-        for smiles_list in list_of_smiles_list:
-            gh_list = []
-            for smiles in smiles_list:
-                gh_list.append(from_smiles(smiles))
-            self.list_of_gh_batch.append(Batch.from_data_list(gh_list))
 
     # pylint: disable=W0221
     def forward(
@@ -139,20 +90,6 @@ class GNNePCSAFTL(L.LightningModule):
         zeros = torch.zeros_like(ape)
         loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
-        if self.config["linearity_penalty"] and self.global_step % 20 == 0:
-            lin_penalty = linearity_penalty(
-                self, self.list_of_gh_batch, self.chain_lenght
-            )
-            alpha = 1e-5  # peso do termo de penalização, ajuste conforme necessário
-            loss = loss + alpha * lin_penalty
-
-            self.log(
-                "linearity_penalty",
-                lin_penalty,
-                on_step=True,
-                batch_size=1,
-                sync_dist=True,
-            )
 
         self.log(
             "train_huber",
