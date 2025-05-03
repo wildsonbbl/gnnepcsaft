@@ -128,7 +128,7 @@ def main(argv):
                 name="gnnpcsaft",
                 storage_path=os.path.join(FLAGS.workdir, "ray_results"),
                 checkpoint_config=tune.CheckpointConfig(
-                    num_to_keep=1,
+                    num_to_keep=2,
                 ),
                 verbose=0,
                 progress_reporter=None,
