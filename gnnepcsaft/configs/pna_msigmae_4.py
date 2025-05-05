@@ -29,7 +29,7 @@ def get_config():
     config.checkpoint = ""  # wandb artifact path
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
-    config.model_name = "pna_msigmae_3.0"
+    config.model_name = "pna_msigmae_3.1"
 
     # GNN hyperparameters.
     ## General
@@ -37,7 +37,7 @@ def get_config():
     config.global_pool = "add"
     config.propagation_depth = 6
     config.hidden_dim = 512
-    config.dropout = 0.25
+    config.dropout = 0.0
     config.num_para = 3
     ## PNA
     config.post_layers = 2
