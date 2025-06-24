@@ -22,11 +22,11 @@ def get_config():
 
     config.accelerator = "auto"
     config.batch_size = 512
-    config.num_train_steps = 3_100_000
+    config.num_train_steps = 3_200_000
     config.log_every_steps = 1000
     config.eval_every_steps = 2500
     config.dataset = "esper"
-    config.checkpoint = "wildson/gnn-pc-saft/model-evdr9a4s:v0"  # wandb artifact path
+    config.checkpoint = "wildson/gnn-pc-saft/model-pcqm7ylp:v0"  # wandb artifact path
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
     config.model_name = "gatv2_msigmae_1.1"
