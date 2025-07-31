@@ -53,7 +53,7 @@ def main(argv):
     # BOHB search algorithm
     search_alg = TuneBOHB(
         space=search_space,
-        metric="mape_den/dataloader_idx_0",
+        metric="mape_den/dataloader_idx_1",
         mode="min",
         points_to_evaluate=[
             {
@@ -61,19 +61,11 @@ def main(argv):
                 "global_pool": "add",
                 "propagation_depth": 6,
                 "hidden_dim": 256,
-                "post_layers": 3,
+                "post_layers": 4,
                 "pre_layers": 2,
-                "towers": 2,
+                "towers": 1,
                 "dropout": 0.0,
-            },
-            {
-                "conv": "GATv2",
-                "global_pool": "add",
-                "propagation_depth": 4,
-                "hidden_dim": 256,
-                "heads": 2,
-                "dropout": 0.0,
-            },
+            }
         ],
         seed=77,
         max_concurrent=FLAGS.max_concurrent,
@@ -84,7 +76,7 @@ def main(argv):
     # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
         time_attr="training_iteration",
-        metric="mape_den/dataloader_idx_0",
+        metric="mape_den/dataloader_idx_1",
         mode="min",
         max_t=max_t,
         stop_last_trials=True,
