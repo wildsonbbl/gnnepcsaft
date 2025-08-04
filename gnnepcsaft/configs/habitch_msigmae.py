@@ -30,5 +30,6 @@ def get_config():
     config.resume_id = ""  # wandb run id
     config.model = "habitch"
     config.model_name = "habitch_msigmae_2"
+    config.deg = []
 
     return config
