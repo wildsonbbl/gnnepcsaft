@@ -8,12 +8,10 @@ from absl import app, flags, logging
 from ray import tune
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.tune.schedulers import HyperBandForBOHB
-from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 
 from ..configs.search_space import get_search_space
 from .train import training_updated
-from .utils import CustomStopper
 
 os.environ["WANDB_SILENT"] = "true"
 # os.environ["WANDB_MODE"] = "offline"
@@ -68,9 +66,7 @@ def main(argv):
             }
         ],
         seed=77,
-        max_concurrent=FLAGS.max_concurrent,
     )
-    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
     # Early stopping scheduler for BOHB
@@ -81,8 +77,6 @@ def main(argv):
         max_t=max_t,
         stop_last_trials=True,
     )
-    # reporter = TrialTerminationReporter()
-    stopper = CustomStopper(max_t)
 
     trainable = tune.with_resources(
         partial(
@@ -125,7 +119,6 @@ def main(argv):
                 verbose=0,
                 progress_reporter=None,
                 log_to_file=False,
-                stop=stopper,
                 callbacks=(
                     [
                         WandbLoggerCallback(
