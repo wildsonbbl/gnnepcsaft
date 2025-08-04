@@ -1,0 +1,34 @@
+"""Module to config traning and model parameters"""
+
+import ml_collections
+
+
+def get_config():
+    """Get the default hyperparameter configuration."""
+    config = ml_collections.ConfigDict()
+    config.job_type = "train"
+
+    # Optimizer.
+    config.optimizer = "adam"
+    config.learning_rate = 1e-3
+    config.change_opt = False
+    config.change_sch = False
+    config.weight_decay = 1e-2
+    config.momentum = 0.9
+    config.patience = 5
+    config.warmup_steps = 2
+
+    # Training hyperparameters.
+
+    config.accelerator = "auto"
+    config.batch_size = 512
+    config.num_train_steps = 100_000
+    config.log_every_steps = 1000
+    config.eval_every_steps = 2500
+    config.dataset = "esper"
+    config.checkpoint = ""  # wandb artifact path
+    config.resume_id = ""  # wandb run id
+    config.model = "habitch"
+    config.model_name = "habitch_msigmae_2"
+
+    return config

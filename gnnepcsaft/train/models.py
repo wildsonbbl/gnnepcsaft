@@ -377,6 +377,7 @@ class HabitchNNL(L.LightningModule):
         zeros = torch.zeros_like(ape)
         loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
+
         self.log(
             "train_huber",
             loss,
