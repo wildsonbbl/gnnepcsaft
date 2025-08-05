@@ -20,348 +20,143 @@ from ..epcsaft.utils import mix_den_feos, parameters_gc_pcsaft
 from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
 
+# Configuration and global settings
 sns.set_theme(style="ticks")
-
-markers = ("o", "v", "^", "<", ">", "*", "s", "p", "P", "D")
-
 config = get_config()
-# pylint: disable = invalid-name
-model_dtype = torch.float64
+DEVICE = "cpu"
+
+# Plot markers and styling
+MARKERS = ("o", "v", "^", "<", ">", "*", "s", "p", "P", "D")
+MARKERS_2 = ("o", "v", "x", "^", "<", ">", "*", "s", "p", "P", "D")
+
+# Data loading and preprocessing
 real_path = osp.dirname(__file__)
-ra_loader = Ramirez(osp.join(real_path, "../data/ramirez2022"))
-ra_para = {}
-for graph in ra_loader:
-    InChI, para = graph.InChI, graph.para.view(-1, 3).round(decimals=2)
-    ra_para[InChI] = para.tolist()[0]
-tml_loader = ThermoMLDataset(osp.join(real_path, "../data/thermoml"))
-tml_para = {}
-for graph in tml_loader:
-    tml_para[graph.InChI] = graph
-
-es_loader = Esper(osp.join(real_path, "../data/esper2023"))
-es_para = {}
-for graph in es_loader:
-    es_para[graph.InChI] = (
-        graph.para,
-        10 ** (graph.assoc * torch.tensor([-1.0, 1.0])),
-        graph.munanb,
-    )
-
-device = "cpu"
 
 
+def _load_ramirez_data() -> dict:
+    """Load Ramirez data and return parameters dictionary."""
+    ra_loader = Ramirez(osp.join(real_path, "../data/ramirez2022"))
+    _ra_para = {}
+    for graph in ra_loader:
+        inchi, para = graph.InChI, graph.para.view(-1, 3).round(decimals=2)
+        _ra_para[inchi] = para.tolist()[0]
+    return _ra_para
+
+
+def _load_thermoml_data() -> dict:
+    """Load ThermoML data and return parameters dictionary."""
+    tml_loader = ThermoMLDataset(osp.join(real_path, "../data/thermoml"))
+    _tml_para = {}
+    for graph in tml_loader:
+        _tml_para[graph.InChI] = graph
+    return _tml_para
+
+
+def _load_esper_data() -> dict:
+    """Load Esper data and return parameters dictionary."""
+    es_loader = Esper(osp.join(real_path, "../data/esper2023"))
+    _es_para = {}
+    for graph in es_loader:
+        _es_para[graph.InChI] = (
+            graph.para,
+            10 ** (graph.assoc * torch.tensor([-1.0, 1.0])),
+            graph.munanb,
+        )
+    return _es_para
+
+
+# Global data dictionaries
+ra_para = _load_ramirez_data()
+tml_para = _load_thermoml_data()
+es_para = _load_esper_data()
+
+
+# Main plotting functions
 def plotdata(
     inchi: str,
     molecule_name: str,
     models: List[Union[GNNePCSAFT, HabitchNN]],
     model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]] = None,
-):
-    """Plots ThermoML Archive experimental density and/or vapor pressure
-    and compares with predicted values by ePC-SAFT with model estimated
-    parameters"""
+) -> None:
+    """Plot ThermoML Archive experimental data and compare with model predictions."""
 
-    from rdkit.Chem import Draw  # pylint: disable=C0415; # type: ignore
+    _ensure_images_directory()
 
-    if not osp.exists("images"):
-        os.mkdir("images")
-
-    if inchi in tml_para:
-        gh = tml_para[inchi]
-    else:
+    if inchi not in tml_para:
         return
-    list_params = predparams(inchi, models, model_msigmae)
 
-    rho = gh.rho
-    vp = gh.vp
+    gh = tml_para[inchi]
+    list_params = _predict_params_from_inchi(inchi, models, model_msigmae)
 
-    pred_den_list, pred_vp_list = pred_rhovp(inchi, list_params, rho, vp)
+    pred_den_list, pred_vp_list = _predict_rho_vp(inchi, list_params, gh.rho, gh.vp)
 
-    plotvp(
-        inchi,
-        molecule_name,
-        models,
-        (
-            vp,
-            pred_vp_list,
-        ),
-    )
-
-    plotden(
-        inchi,
-        molecule_name,
-        models,
-        (
-            rho,
-            pred_den_list,
-        ),
-    )
-
-    mol = Chem.MolFromInchi(inchi)
-    img = Draw.MolToImage(mol, size=(600, 600))
-    img_path = osp.join("images", "mol_" + molecule_name + ".png")
-    img.save(img_path, dpi=(300, 300), format="png", bitmap_format="png")
-
-
-def pltline(x, y, marker="x"):
-    "Line plot."
-    return plt.plot(x, y, marker=marker, linewidth=0.5)
-
-
-def pltscatter(x, y, marker="x"):
-    "Scatter plot."
-    return plt.scatter(x, y, marker=marker, s=40, c="black", zorder=10)
-
-
-def plterr(x, y, m):
-    "Add mean absolute percentage error to plot."
-    tb = 0
-    for i, maperror in enumerate(np.round(m, decimals=1)):
-        ta = x[i]
-        if (maperror > 1) & (ta - tb > 2):
-            tb = ta
-            plt.text(x[i], y[i], f"{maperror} %", ha="center", va="center", fontsize=8)
-
-
-def pltcustom(inchi, scale="linear", ylabel="", n=2):
-    """
-    Add legend and lables for `plotdata`.
-    """
-    plt.xlabel("T (K)")
-    plt.ylabel(ylabel)
-    plt.title("")
-    legend = ["ThermoML Archive"]
-    for i in range(1, n + 1):
-        legend += [f"Model {i}"]
-    if inchi in es_para:
-        legend += ["Esper et al. (2023)"]
-    legend += ["GC PCSAFT"]
-    plt.legend(legend, loc=(1.01, 0.75))
-    plt.grid(False)
-    plt.yscale(scale)
-    sns.despine(trim=True)
-
-
-def predparams(
-    inchi: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
-    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
-):
-    "Use models to predict ePC-SAFT parameters from InChI."
-    with torch.no_grad():
-        gh = from_InChI(inchi)
-        graphs = gh.to(device)
-        list_params = []
-        for model in models:
-            model.eval()
-            params = get_params(model, model_msigmae, graphs)
-            list_params.append(params.tolist())
-        if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).squeeze().tolist())
-        try:
-            list_params.append(list(parameters_gc_pcsaft(gh.smiles)))
-        # pylint: disable=W0702
-        except:
-            pass
-
-    return list_params
-
-
-def get_params(
-    model: Union[GNNePCSAFT, HabitchNN],
-    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
-    graphs: Data,
-) -> torch.Tensor:
-    "to get parameters from models"
-    msigmae_or_log10assoc = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
-    if graphs.InChI in es_para:
-        assoc = es_para[graphs.InChI][1][0]
-        munanb = es_para[graphs.InChI][2][0]
-    else:
-        assoc = torch.zeros(2)
-        munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
-
-    if msigmae_or_log10assoc.size(0) == 2:
-        if model_msigmae:
-            msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-            return torch.hstack(
-                (
-                    msigmae,
-                    10 ** (msigmae_or_log10assoc * torch.tensor([-1.0, 1.0])),
-                    munanb,
-                )
-            )
-        raise ValueError("model_msigmae is None")
-    return torch.hstack((msigmae_or_log10assoc, assoc, munanb))
-
-
-def pred_rhovp(
-    inchi: str, list_params: List[List[float]], rho: np.ndarray, vp: np.ndarray
-) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-    "Predicted density and vapor pressure with ePC-SAFT."
-    pred_den_list, pred_vp_list = [], []
-    print(f"#### {inchi} ####")
-    for i, params in enumerate(list_params):
-        print(f"#### Parameters for model {i+1} ####")
-        print([round(para, 5) for para in params])
-        pred_den, pred_vp = rhovp_data(params, rho, vp)
-        pred_den_list.append(pred_den)
-        pred_vp_list.append(pred_vp)
-    return pred_den_list, pred_vp_list
-
-
-def plotden(
-    inchi: str,
-    molecule_name: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
-    data: Tuple[np.ndarray, List[np.ndarray]],
-):
-    "Plot density data."
-
-    rho, pred_den_list = data
-    if ~np.all(rho == np.zeros_like(rho)):
-        idx_p = abs(rho[:, 1] - 101325) < 1_000
-        rho = rho[idx_p]
-        if rho.shape[0] != 0:
-            idx = np.argsort(rho[:, 0], 0)
-            x = rho[idx, 0]
-            y = rho[idx, -1]
-            pltscatter(x, y)
-
-            for i, pred_den in enumerate(pred_den_list):
-                pred_den = pred_den[idx_p]
-                y = pred_den[idx]
-                pltline(x, y, marker=markers[i])
-                # mden_model = 100 * np.abs(rho[idx, -1] - pred_den[idx]) / rho[idx, -1]
-                # plterr(x, y, mden_model)
-
-            # Customize the plot appearance
-            pltcustom(inchi, "linear", "Density (mol / m³)", len(models))
-            saveplot("den_" + molecule_name + ".png")
-
-
-def plotvp(
-    inchi: str,
-    molecule_name: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
-    data: Tuple[np.ndarray, List[np.ndarray]],
-):
-    "Plot vapor pressure data."
-    vp, pred_vp_list = data
-    if ~np.all(vp == np.zeros_like(vp)):
-        idx = np.argsort(vp[:, 0], 0)
-        x = vp[idx, 0]
-        y = vp[idx, -1] / 100000
-        pltscatter(x, y)
-
-        for i, pred_vp in enumerate(pred_vp_list):
-            y = pred_vp[idx] / 100000
-            pltline(x, y, marker=markers[i])
-            # mvp_model = 100 * np.abs(vp[idx, -1] - pred_vp[idx]) / vp[idx, -1]
-            # plterr(x, y, mvp_model)
-
-        # Customize the plot appearance
-        pltcustom(inchi, "log", "Vapor pressure (bar)", len(models))
-
-        # Save the plot as a high-quality image file
-        saveplot("vp_" + molecule_name + ".png")
-
-
-def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
-    """Add legend and lable to `plotparams`"""
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title("")
-    plt.grid(False)
-    plt.yscale(scale)
-    legend = []
-    for i in range(1, n + 1):
-        legend += [f"Model {i}"]
-    legend += ["Esper et al. (2023)"]
-    plt.legend(legend, loc=(1.01, 0.75))
-    sns.despine(trim=True)
+    _plot_vapor_pressure(inchi, molecule_name, models, gh.vp, pred_vp_list)
+    _plot_density(inchi, molecule_name, models, gh.rho, pred_den_list)
+    _save_molecule_image(inchi, molecule_name)
 
 
 def plotparams(
     smiles: List[str],
     models: List[Union[GNNePCSAFT, HabitchNN]],
     xlabel: str = "CnHn+2",
-):
-    """
-    For plotting te behaviour between parameters and chain length.
-    """
-    if not osp.exists("images"):
-        os.mkdir("images")
+) -> None:
+    """Plot parameter behavior vs chain length."""
+    _ensure_images_directory()
 
-    list_array_params = predparams2(smiles, models)
-
+    list_array_params = _predict_params_from_smiles(smiles, models)
     x = np.arange(2, len(smiles) + 2)
-    markers2 = ("o", "v", "x", "^", "<", ">", "*", "s", "p", "P", "D")
 
-    for i, array_params in enumerate(list_array_params):
-        marker = markers2[i]
-        y = array_params[:, 0]
-        pltscatter(x, y, marker)
-
-    pltcustom2(xlabel=xlabel, ylabel=r"$m$", n=len(models))
-
-    saveplot("m_" + xlabel + ".png")
-
-    for i, array_params in enumerate(list_array_params):
-        marker = markers2[i]
-        y = array_params[:, 0] * array_params[:, 1] ** 3
-        pltscatter(x, y, marker)
-
-    pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$", n=len(models))
-
-    saveplot("sigma_" + xlabel + ".png")
-    for i, array_params in enumerate(list_array_params):
-        marker = markers2[i]
-        y = array_params[:, 0] * array_params[:, 2]
-        pltscatter(x, y, marker)
-    pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \mu k_b^{-1} (K)$", n=len(models))
-
-    saveplot("e_" + xlabel + ".png")
+    _plot_parameter_m(x, list_array_params, xlabel, len(models))
+    _plot_parameter_sigma(x, list_array_params, xlabel, len(models))
+    _plot_parameter_epsilon(x, list_array_params, xlabel, len(models))
 
 
-def saveplot(filename: str):
-    "savel current plt figure"
-    img_path = osp.join("images", filename)
-    plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
-    plt.show()
+# Parameter prediction functions
+def _predict_params_from_inchi(
+    inchi: str,
+    models: List[Union[GNNePCSAFT, HabitchNN]],
+    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
+) -> List[List[float]]:
+    """Predict ePC-SAFT parameters from InChI."""
+    with torch.no_grad():
+        gh = from_InChI(inchi)
+        graphs = gh.to(DEVICE)
+        list_params = []
+
+        for model in models:
+            model.eval()
+            params = _get_model_params(model, model_msigmae, graphs)
+            list_params.append(params.tolist())
+
+        if inchi in es_para:
+            list_params.append(np.hstack(es_para[inchi]).squeeze().tolist())
+
+        try:
+            list_params.append(list(parameters_gc_pcsaft(gh.smiles)))
+        except Exception:  # pylint: disable=W0703
+            pass
+
+    return list_params
 
 
-def plotlinearfit(x, y, marker):
-    """Plot linear fit."""
-    plt.plot(
-        x,
-        np.poly1d(np.polyfit(x, y, 1))(x),
-        color="red",
-        marker=marker,
-        linewidth=0.5,
-        markersize=3,
-    )
-
-
-def predparams2(
+def _predict_params_from_smiles(
     smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]]
 ) -> List[np.ndarray]:
-    """Use models to predict ePC-SAFT parameters from smiles."""
+    """Predict ePC-SAFT parameters from SMILES."""
     list_array_params = []
 
-    # Predict parameters using ML models
     for model in models:
         model.eval()
-        model_params = _predict_params_for_model(model, smiles)
+        model_params = _predict_params_for_single_model(model, smiles)
         list_array_params.append(model_params)
 
-    # Add Esper et al. (2023) reference parameters
-    esper_params = _get_esper_params(smiles)
+    esper_params = _get_esper_reference_params(smiles)
     list_array_params.append(esper_params)
 
     return list_array_params
 
 
-def _predict_params_for_model(
+def _predict_params_for_single_model(
     model: Union[GNNePCSAFT, HabitchNN], smiles: List[str]
 ) -> np.ndarray:
     """Predict parameters for a single model."""
@@ -369,7 +164,7 @@ def _predict_params_for_model(
 
     with torch.no_grad():
         for smile in smiles:
-            graphs = from_smiles(smile).to(device)
+            graphs = from_smiles(smile).to(DEVICE)
             parameters = model.pred_with_bounds(graphs)
             params = parameters.squeeze().to(torch.float64).numpy()
             list_params.append(params)
@@ -377,8 +172,8 @@ def _predict_params_for_model(
     return np.asarray(list_params)
 
 
-def _get_esper_params(smiles: List[str]) -> np.ndarray:
-    """Get Esper et al. (2023) reference parameters for given SMILES."""
+def _get_esper_reference_params(smiles: List[str]) -> np.ndarray:
+    """Get Esper et al. (2023) reference parameters."""
     list_params = []
 
     for smile in smiles:
@@ -391,6 +186,237 @@ def _get_esper_params(smiles: List[str]) -> np.ndarray:
     return np.asarray(list_params)
 
 
+def _get_model_params(
+    model: Union[GNNePCSAFT, HabitchNN],
+    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
+    graphs: Data,
+) -> torch.Tensor:
+    """Extract parameters from models."""
+    msigmae_or_log10assoc = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+
+    if graphs.InChI in es_para:
+        assoc = es_para[graphs.InChI][1][0]
+        munanb = es_para[graphs.InChI][2][0]
+    else:
+        assoc = torch.zeros(2)
+        munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
+
+    if msigmae_or_log10assoc.size(0) == 2:
+        if model_msigmae is None:
+            raise ValueError("model_msigmae is required when using associating model.")
+
+        msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
+        return torch.hstack(
+            (
+                msigmae,
+                10 ** (msigmae_or_log10assoc * torch.tensor([-1.0, 1.0])),
+                munanb,
+            )
+        )
+
+    return torch.hstack((msigmae_or_log10assoc, assoc, munanb))
+
+
+# Prediction and calculation functions
+def _predict_rho_vp(
+    inchi: str, list_params: List[List[float]], rho: np.ndarray, vp: np.ndarray
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+    """Predict density and vapor pressure with ePC-SAFT."""
+    pred_den_list, pred_vp_list = [], []
+    print(f"#### {inchi} ####")
+
+    for i, params in enumerate(list_params):
+        print(f"#### Parameters for model {i+1} ####")
+        print([round(para, 5) for para in params])
+        pred_den, pred_vp = rhovp_data(params, rho, vp)
+        pred_den_list.append(pred_den)
+        pred_vp_list.append(pred_vp)
+
+    return pred_den_list, pred_vp_list
+
+
+# Plotting helper functions
+def _plot_density(
+    inchi: str,
+    molecule_name: str,
+    models: List[Union[GNNePCSAFT, HabitchNN]],
+    rho: np.ndarray,
+    pred_den_list: List[np.ndarray],
+) -> None:
+    """Plot density data."""
+    if np.all(rho == np.zeros_like(rho)):
+        return
+
+    idx_p = abs(rho[:, 1] - 101325) < 1_000
+    rho_filtered = rho[idx_p]
+
+    if rho_filtered.shape[0] == 0:
+        return
+
+    idx = np.argsort(rho_filtered[:, 0], 0)
+    x = rho_filtered[idx, 0]
+    y = rho_filtered[idx, -1]
+
+    _scatter_plot(x, y)
+
+    for i, pred_den in enumerate(pred_den_list):
+        pred_den_filtered = pred_den[idx_p]
+        y_pred = pred_den_filtered[idx]
+        _line_plot(x, y_pred, MARKERS[i])
+
+    _customize_plot(inchi, "linear", "Density (mol / m³)", len(models))
+    _save_plot(f"den_{molecule_name}.png")
+
+
+def _plot_vapor_pressure(
+    inchi: str,
+    molecule_name: str,
+    models: List[Union[GNNePCSAFT, HabitchNN]],
+    vp: np.ndarray,
+    pred_vp_list: List[np.ndarray],
+) -> None:
+    """Plot vapor pressure data."""
+    if np.all(vp == np.zeros_like(vp)):
+        return
+
+    idx = np.argsort(vp[:, 0], 0)
+    x = vp[idx, 0]
+    y = vp[idx, -1] / 100000
+
+    _scatter_plot(x, y)
+
+    for i, pred_vp in enumerate(pred_vp_list):
+        y_pred = pred_vp[idx] / 100000
+        _line_plot(x, y_pred, MARKERS[i])
+
+    _customize_plot(inchi, "log", "Vapor pressure (bar)", len(models))
+    _save_plot(f"vp_{molecule_name}.png")
+
+
+def _plot_parameter_m(
+    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str, n_models: int
+) -> None:
+    """Plot parameter m vs chain length."""
+    for i, array_params in enumerate(list_array_params):
+        y = array_params[:, 0]
+        _scatter_plot(x, y, MARKERS_2[i])
+
+    _customize_plot_params(xlabel=xlabel, ylabel=r"$m$", n=n_models)
+    _save_plot(f"m_{xlabel}.png")
+
+
+def _plot_parameter_sigma(
+    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str, n_models: int
+) -> None:
+    """Plot parameter sigma vs chain length."""
+    for i, array_params in enumerate(list_array_params):
+        y = array_params[:, 0] * array_params[:, 1] ** 3
+        _scatter_plot(x, y, MARKERS_2[i])
+
+    _customize_plot_params(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$", n=n_models)
+    _save_plot(f"sigma_{xlabel}.png")
+
+
+def _plot_parameter_epsilon(
+    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str, n_models: int
+) -> None:
+    """Plot parameter epsilon vs chain length."""
+    for i, array_params in enumerate(list_array_params):
+        y = array_params[:, 0] * array_params[:, 2]
+        _scatter_plot(x, y, MARKERS_2[i])
+
+    _customize_plot_params(
+        xlabel=xlabel, ylabel=r"$m \cdot \mu k_b^{-1} (K)$", n=n_models
+    )
+    _save_plot(f"e_{xlabel}.png")
+
+
+# Basic plotting utilities
+def _line_plot(x: np.ndarray, y: np.ndarray, marker: str = "x") -> None:
+    """Create line plot."""
+    plt.plot(x, y, marker=marker, linewidth=0.5)
+
+
+def _scatter_plot(x: np.ndarray, y: np.ndarray, marker: str = "x") -> None:
+    """Create scatter plot."""
+    plt.scatter(x, y, marker=marker, s=40, c="black", zorder=10)
+
+
+def plot_linear_fit(x: np.ndarray, y: np.ndarray, marker: str) -> None:
+    """Plot linear fit."""
+    plt.plot(
+        x,
+        np.poly1d(np.polyfit(x, y, 1))(x),
+        color="red",
+        marker=marker,
+        linewidth=0.5,
+        markersize=3,
+    )
+
+
+def _customize_plot(
+    inchi: str, scale: str = "linear", ylabel: str = "", n: int = 2
+) -> None:
+    """Customize plot appearance for main plots."""
+    plt.xlabel("T (K)")
+    plt.ylabel(ylabel)
+    plt.title("")
+
+    legend = ["ThermoML Archive"]
+    legend.extend([f"Model {i}" for i in range(1, n + 1)])
+
+    if inchi in es_para:
+        legend.append("Esper et al. (2023)")
+    legend.append("GC PCSAFT")
+
+    plt.legend(legend, loc=(1.01, 0.75))
+    plt.grid(False)
+    plt.yscale(scale)
+    sns.despine(trim=True)
+
+
+def _customize_plot_params(
+    scale: str = "linear", xlabel: str = "", ylabel: str = "", n: int = 2
+) -> None:
+    """Customize plot appearance for parameter plots."""
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title("")
+    plt.grid(False)
+    plt.yscale(scale)
+
+    legend = [f"Model {i}" for i in range(1, n + 1)]
+    legend.append("Esper et al. (2023)")
+
+    plt.legend(legend, loc=(1.01, 0.75))
+    sns.despine(trim=True)
+
+
+# Utility functions
+def _ensure_images_directory() -> None:
+    """Ensure images directory exists."""
+    if not osp.exists("images"):
+        os.mkdir("images")
+
+
+def _save_plot(filename: str) -> None:
+    """Save current plot figure."""
+    img_path = osp.join("images", filename)
+    plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
+    plt.show()
+
+
+def _save_molecule_image(inchi: str, molecule_name: str) -> None:
+    """Save molecule structure as image."""
+    from rdkit.Chem import Draw  # pylint: disable=C0415; # type: ignore
+
+    mol = Chem.MolFromInchi(inchi)
+    img = Draw.MolToImage(mol, size=(600, 600))
+    img_path = osp.join("images", f"mol_{molecule_name}.png")
+    img.save(img_path, dpi=(300, 300), format="png", bitmap_format="png")
+
+
+# Model export and binary testing functions
 def save_exported_program(
     model: torch.nn.Module, example_input: tuple, path: str
 ) -> torch.export.ExportedProgram:
@@ -403,14 +429,12 @@ def save_exported_program(
         "batch": None,
     }
 
-    exportedprogram = torch.export.export(
-        model,
-        example_input,
-        dynamic_shapes=dynamic_shapes,
+    exported_program = torch.export.export(
+        model, example_input, dynamic_shapes=dynamic_shapes
     )
 
     torch.onnx.export(
-        exportedprogram,
+        exported_program,
         example_input,
         path,
         verbose=True,
@@ -418,19 +442,18 @@ def save_exported_program(
         optimize=True,
         verify=True,
     )
-    return exportedprogram
+    return exported_program
 
 
 def binary_test(
     model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT] = None
-) -> List[Tuple[Tuple[str, str], Tuple[float, float]]]:
-    "for testing models performance on binary data"
-
+) -> List[Tuple[Tuple[str, str], List[Tuple[float, float]]]]:
+    """Test model performance on binary data."""
     binary_data = pl.read_parquet(
         osp.join(real_path, "../data/thermoml/raw/binary.parquet")
     )
 
-    inchi_list = [
+    inchi_pairs = [
         (row["inchi1"], row["inchi2"])
         for row in binary_data.filter(pl.col("tp") == 1)
         .unique(("inchi1", "inchi2"))
@@ -439,8 +462,8 @@ def binary_test(
 
     with torch.no_grad():
         all_predictions = []
-        for inchi1, inchi2 in inchi_list:
-            mix_params = get_mix_params(model, model_msigmae, [inchi1, inchi2])
+        for inchi1, inchi2 in inchi_pairs:
+            mix_params = _get_mixture_params(model, model_msigmae, [inchi1, inchi2])
 
             rho_data = (
                 binary_data.filter(
@@ -452,29 +475,29 @@ def binary_test(
                 .to_numpy()
             )
 
-            all_rho = []
+            rho_predictions = []
             for state in rho_data:
-                rho_for_state = mix_den_feos(mix_params, state[1:])
-                ref_rho = (
+                predicted_rho = mix_den_feos(mix_params, state[1:])
+                reference_rho = (
                     state[0]
                     * 1000
                     / (mix_params[0][-1] * state[3] + mix_params[1][-1] * state[4])
                 ).item()
-                all_rho.append((rho_for_state, ref_rho))
-            all_predictions.append(((inchi1, inchi2), all_rho))
+                rho_predictions.append((predicted_rho, reference_rho))
+
+            all_predictions.append(((inchi1, inchi2), rho_predictions))
+
     return all_predictions
 
 
-def get_mix_params(
+def _get_mixture_params(
     model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT], inchis: List[str]
 ) -> List[List[float]]:
-    "to organize the parameters for the mixture"
+    """Organize parameters for mixture calculations."""
     mix_params = []
     for inchi in inchis:
         gh = from_InChI(inchi)
-        para_for_inchi = get_params(model, model_msigmae, gh).tolist()
-        para_for_inchi.append(gh.smiles)
-        para_for_inchi.append(gh.InChI)
-        para_for_inchi.append(gh.mw.item())
-        mix_params.append(para_for_inchi)
+        params = _get_model_params(model, model_msigmae, gh).tolist()
+        params.extend([gh.smiles, gh.InChI, gh.mw.item()])
+        mix_params.append(params)
     return mix_params
