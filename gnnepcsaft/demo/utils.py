@@ -1,9 +1,8 @@
 """Module for functions used in model demonstration."""
 
-import itertools
 import os
 import os.path as osp
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,13 +15,14 @@ from torch.export.dynamic_shapes import Dim
 from ..configs.default import get_config
 from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
+from ..data.rdkit_util import smilestoinchi
 from ..epcsaft.utils import mix_den_feos, parameters_gc_pcsaft
-from ..train.models import GNNePCSAFT
+from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
 
 sns.set_theme(style="ticks")
 
-markers = itertools.cycle(("o", "v", "^", "<", ">", "*", "s", "p", "P", "D"))
+markers = ("o", "v", "^", "<", ">", "*", "s", "p", "P", "D")
 
 config = get_config()
 # pylint: disable = invalid-name
@@ -53,8 +53,8 @@ device = "cpu"
 def plotdata(
     inchi: str,
     molecule_name: str,
-    models: List[GNNePCSAFT],
-    model_msigmae: Optional[GNNePCSAFT],
+    models: List[Union[GNNePCSAFT, HabitchNN]],
+    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]] = None,
 ):
     """Plots ThermoML Archive experimental density and/or vapor pressure
     and compares with predicted values by ePC-SAFT with model estimated
@@ -102,14 +102,14 @@ def plotdata(
     img.save(img_path, dpi=(300, 300), format="png", bitmap_format="png")
 
 
-def pltline(x, y):
+def pltline(x, y, marker="x"):
     "Line plot."
-    return plt.plot(x, y, marker=next(iter(markers)), linewidth=0.5)
+    return plt.plot(x, y, marker=marker, linewidth=0.5)
 
 
 def pltscatter(x, y, marker="x"):
     "Scatter plot."
-    return plt.scatter(x, y, marker=marker, s=10, c="black", zorder=10)
+    return plt.scatter(x, y, marker=marker, s=40, c="black", zorder=10)
 
 
 def plterr(x, y, m):
@@ -131,9 +131,9 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
     plt.title("")
     legend = ["ThermoML Archive"]
     for i in range(1, n + 1):
-        legend += [f"GNNePCSAFT {i}"]
+        legend += [f"Model {i}"]
     if inchi in es_para:
-        legend += ["Ref."]
+        legend += ["Esper et al. (2023)"]
     legend += ["GC PCSAFT"]
     plt.legend(legend, loc=(1.01, 0.75))
     plt.grid(False)
@@ -142,7 +142,9 @@ def pltcustom(inchi, scale="linear", ylabel="", n=2):
 
 
 def predparams(
-    inchi: str, models: List[GNNePCSAFT], model_msigmae: Optional[GNNePCSAFT]
+    inchi: str,
+    models: List[Union[GNNePCSAFT, HabitchNN]],
+    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
 ):
     "Use models to predict ePC-SAFT parameters from InChI."
     with torch.no_grad():
@@ -165,7 +167,9 @@ def predparams(
 
 
 def get_params(
-    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT], graphs: Data
+    model: Union[GNNePCSAFT, HabitchNN],
+    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
+    graphs: Data,
 ) -> torch.Tensor:
     "to get parameters from models"
     msigmae_or_log10assoc = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
@@ -208,7 +212,7 @@ def pred_rhovp(
 def plotden(
     inchi: str,
     molecule_name: str,
-    models: List[GNNePCSAFT],
+    models: List[Union[GNNePCSAFT, HabitchNN]],
     data: Tuple[np.ndarray, List[np.ndarray]],
 ):
     "Plot density data."
@@ -223,10 +227,10 @@ def plotden(
             y = rho[idx, -1]
             pltscatter(x, y)
 
-            for pred_den in pred_den_list:
+            for i, pred_den in enumerate(pred_den_list):
                 pred_den = pred_den[idx_p]
                 y = pred_den[idx]
-                pltline(x, y)
+                pltline(x, y, marker=markers[i])
                 # mden_model = 100 * np.abs(rho[idx, -1] - pred_den[idx]) / rho[idx, -1]
                 # plterr(x, y, mden_model)
 
@@ -238,7 +242,7 @@ def plotden(
 def plotvp(
     inchi: str,
     molecule_name: str,
-    models: List[GNNePCSAFT],
+    models: List[Union[GNNePCSAFT, HabitchNN]],
     data: Tuple[np.ndarray, List[np.ndarray]],
 ):
     "Plot vapor pressure data."
@@ -249,9 +253,9 @@ def plotvp(
         y = vp[idx, -1] / 100000
         pltscatter(x, y)
 
-        for pred_vp in pred_vp_list:
+        for i, pred_vp in enumerate(pred_vp_list):
             y = pred_vp[idx] / 100000
-            pltline(x, y)
+            pltline(x, y, marker=markers[i])
             # mvp_model = 100 * np.abs(vp[idx, -1] - pred_vp[idx]) / vp[idx, -1]
             # plterr(x, y, mvp_model)
 
@@ -271,13 +275,17 @@ def pltcustom2(scale="linear", xlabel="", ylabel="", n=2):
     plt.yscale(scale)
     legend = []
     for i in range(1, n + 1):
-        legend += [f"GNNePCSAFT {i}"]
-        legend += [f"Linear fit {i}"]
+        legend += [f"Model {i}"]
+    legend += ["Esper et al. (2023)"]
     plt.legend(legend, loc=(1.01, 0.75))
     sns.despine(trim=True)
 
 
-def plotparams(smiles: List[str], models: List[GNNePCSAFT], xlabel: str = "CnHn+2"):
+def plotparams(
+    smiles: List[str],
+    models: List[Union[GNNePCSAFT, HabitchNN]],
+    xlabel: str = "CnHn+2",
+):
     """
     For plotting te behaviour between parameters and chain length.
     """
@@ -287,31 +295,29 @@ def plotparams(smiles: List[str], models: List[GNNePCSAFT], xlabel: str = "CnHn+
     list_array_params = predparams2(smiles, models)
 
     x = np.arange(2, len(smiles) + 2)
+    markers2 = ("o", "v", "x", "^", "<", ">", "*", "s", "p", "P", "D")
 
-    for array_params in list_array_params:
-        marker = next(iter(markers))
+    for i, array_params in enumerate(list_array_params):
+        marker = markers2[i]
         y = array_params[:, 0]
         pltscatter(x, y, marker)
-        plotlinearfit(x, y, marker)
 
     pltcustom2(xlabel=xlabel, ylabel=r"$m$", n=len(models))
 
     saveplot("m_" + xlabel + ".png")
 
-    for array_params in list_array_params:
-        marker = next(iter(markers))
+    for i, array_params in enumerate(list_array_params):
+        marker = markers2[i]
         y = array_params[:, 0] * array_params[:, 1] ** 3
         pltscatter(x, y, marker)
-        plotlinearfit(x, y, marker)
 
     pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$", n=len(models))
 
     saveplot("sigma_" + xlabel + ".png")
-    for array_params in list_array_params:
-        marker = next(iter(markers))
+    for i, array_params in enumerate(list_array_params):
+        marker = markers2[i]
         y = array_params[:, 0] * array_params[:, 2]
         pltscatter(x, y, marker)
-        plotlinearfit(x, y, marker)
     pltcustom2(xlabel=xlabel, ylabel=r"$m \cdot \mu k_b^{-1} (K)$", n=len(models))
 
     saveplot("e_" + xlabel + ".png")
@@ -336,22 +342,53 @@ def plotlinearfit(x, y, marker):
     )
 
 
-def predparams2(smiles: List[str], models: List[GNNePCSAFT]) -> List[np.ndarray]:
-    "Use models to predict ePC-SAFT parameters from smiles."
+def predparams2(
+    smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]]
+) -> List[np.ndarray]:
+    """Use models to predict ePC-SAFT parameters from smiles."""
     list_array_params = []
+
+    # Predict parameters using ML models
     for model in models:
         model.eval()
-        with torch.no_grad():
-            list_params = []
-            for smile in smiles:
-                graphs = from_smiles(smile)
-                graphs = graphs.to(device)
-                parameters = model.pred_with_bounds(graphs)
-                params = parameters.squeeze().to(torch.float64).numpy()
-                list_params.append(params)
-        array_params = np.asarray(list_params)
-        list_array_params.append(array_params)
+        model_params = _predict_params_for_model(model, smiles)
+        list_array_params.append(model_params)
+
+    # Add Esper et al. (2023) reference parameters
+    esper_params = _get_esper_params(smiles)
+    list_array_params.append(esper_params)
+
     return list_array_params
+
+
+def _predict_params_for_model(
+    model: Union[GNNePCSAFT, HabitchNN], smiles: List[str]
+) -> np.ndarray:
+    """Predict parameters for a single model."""
+    list_params = []
+
+    with torch.no_grad():
+        for smile in smiles:
+            graphs = from_smiles(smile).to(device)
+            parameters = model.pred_with_bounds(graphs)
+            params = parameters.squeeze().to(torch.float64).numpy()
+            list_params.append(params)
+
+    return np.asarray(list_params)
+
+
+def _get_esper_params(smiles: List[str]) -> np.ndarray:
+    """Get Esper et al. (2023) reference parameters for given SMILES."""
+    list_params = []
+
+    for smile in smiles:
+        inchi = smilestoinchi(smile)
+        if inchi in es_para:
+            list_params.append(es_para[inchi][0].squeeze())
+        else:
+            list_params.append(np.zeros(3) * np.nan)
+
+    return np.asarray(list_params)
 
 
 def save_exported_program(
