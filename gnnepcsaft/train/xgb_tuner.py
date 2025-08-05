@@ -5,7 +5,6 @@ from absl import app, flags, logging
 from ray import tune
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.tune.schedulers import HyperBandForBOHB
-from ray.tune.search import ConcurrencyLimiter
 from ray.tune.search.bohb import TuneBOHB
 
 from .xgb_training import training
@@ -30,7 +29,7 @@ def main(argv):
         CS.UniformFloatHyperparameter("eta", lower=1e-4, upper=1e-1, log=True),
         CS.UniformFloatHyperparameter("lambda", lower=1e-6, upper=1e-1, log=True),
         CS.UniformFloatHyperparameter("alpha", lower=1e-6, upper=1e-1, log=True),
-        CS.Constant("num_boost_round", 5000),
+        CS.Constant("num_boost_round", 1000),
     )
 
     workdir = FLAGS.workdir
@@ -40,9 +39,8 @@ def main(argv):
         metric="mape_den",
         mode="min",
         seed=77,
-        max_concurrent=FLAGS.max_concurrent,
     )
-    search_alg = ConcurrencyLimiter(search_alg, max_concurrent=FLAGS.max_concurrent)
+
     # Early stopping scheduler for BOHB
     scheduler = HyperBandForBOHB(
         metric="mape_den",
