@@ -22,11 +22,11 @@ def get_config():
 
     config.accelerator = "auto"
     config.batch_size = 512
-    config.num_train_steps = 100_000
+    config.num_train_steps = 400_000
     config.log_every_steps = 1000
     config.eval_every_steps = 2500
     config.dataset = "esper"
-    config.checkpoint = ""  # wandb artifact path
+    config.checkpoint = "wildson/gnn-pc-saft/model-fak9504v:v3"  # wandb artifact path
     config.resume_id = ""  # wandb run id
     config.model = "habitch"
     config.model_name = "habitch_msigmae_2"
