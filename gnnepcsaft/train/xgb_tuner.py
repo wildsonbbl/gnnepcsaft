@@ -29,7 +29,7 @@ def main(argv):
         CS.UniformFloatHyperparameter("eta", lower=1e-4, upper=1e-1, log=True),
         CS.UniformFloatHyperparameter("lambda", lower=1e-6, upper=1e-1, log=True),
         CS.UniformFloatHyperparameter("alpha", lower=1e-6, upper=1e-1, log=True),
-        CS.Constant("num_boost_round", 1000),
+        CS.Constant("num_boost_round", 20000),
     )
 
     workdir = FLAGS.workdir
