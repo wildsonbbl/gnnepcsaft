@@ -28,6 +28,10 @@ from ..epcsaft.utils import pure_den_feos, pure_vp_feos
 # PCSAFT parameters bounds
 params_lower_bound = np.array([1.0, 1.9, 50.0, 1e-4, 200.0, 0, 0, 0])
 params_upper_bound = np.array([25.0, 4.5, 550.0, 0.9, 5000.0, np.inf, np.inf, np.inf])
+params_mean_msigmae = torch.tensor([4.0534, 3.6834, 266.8723])
+params_std_msigmae = torch.tensor([2.0430, 0.3976, 57.7073])
+params_mean_assoc = torch.tensor([3.6416, 2.5086])
+params_std_assoc = torch.tensor([0.8802, 0.4257])
 
 
 def calc_deg(dataset: str, workdir: str) -> List:
