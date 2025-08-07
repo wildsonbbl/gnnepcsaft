@@ -1,5 +1,6 @@
 "Module to calculate properties with ePC-SAFT using FEOS."
 
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -522,8 +523,14 @@ def parameters_gc_pcsaft(smiles: str) -> List[float]:
     pure_record = (
         PcSaftParameters.from_json_smiles(
             [smiles],
-            "./gnnepcsaft/data/gc_pcsaft/sauer2014_smarts.json",
-            "./gnnepcsaft/data/gc_pcsaft/rehner2023_hetero.json",
+            str(
+                Path(__file__).resolve().parent.parent
+                / "data/gc_pcsaft/sauer2014_smarts.json"
+            ),
+            str(
+                Path(__file__).resolve().parent.parent
+                / "data/gc_pcsaft/rehner2023_hetero.json"
+            ),
         )
         .pure_records[0]
         .model_record
