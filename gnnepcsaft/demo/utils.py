@@ -9,7 +9,9 @@ import numpy as np
 import polars as pl
 import seaborn as sns
 import torch
+import xgboost as xgb
 from rdkit import Chem
+from sklearn.ensemble import RandomForestRegressor
 from torch.export.dynamic_shapes import Dim
 
 from ..configs.default import get_config
@@ -186,35 +188,78 @@ def _get_esper_reference_params(smiles: List[str]) -> np.ndarray:
     return np.asarray(list_params)
 
 
-def _get_model_params(
-    model: Union[GNNePCSAFT, HabitchNN],
-    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
+def _extract_features(graphs: Data) -> np.ndarray:
+    """Extract features from graph data for ML models."""
+    return torch.hstack(
+        (
+            graphs.ecfp,
+            graphs.mw,
+            graphs.atom_count,
+            graphs.ring_count,
+            graphs.rbond_count,
+        )
+    ).numpy()
+
+
+def _predict_with_model(
+    model: Union[GNNePCSAFT, HabitchNN, RandomForestRegressor, xgb.Booster],
     graphs: Data,
-) -> torch.Tensor:
-    """Extract parameters from models."""
-    msigmae_or_log10assoc = model.pred_with_bounds(graphs).squeeze().to(torch.float64)
+) -> np.ndarray:
+    """Predict parameters using a single model."""
+    if isinstance(model, (GNNePCSAFT, HabitchNN)):
+        return (
+            model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach().numpy()
+        )
 
+    features = _extract_features(graphs)
+
+    if isinstance(model, RandomForestRegressor):
+        return model.predict(features).squeeze()
+    if isinstance(model, xgb.Booster):
+        x_matrix = xgb.DMatrix(features)
+        return model.predict(x_matrix).squeeze()
+    raise TypeError(f"Model type {type(model)} not supported.")
+
+
+def _get_association_params(graphs: Data) -> Tuple[np.ndarray, np.ndarray]:
+    """Get association parameters for the molecule."""
     if graphs.InChI in es_para:
-        assoc = es_para[graphs.InChI][1][0]
-        munanb = es_para[graphs.InChI][2][0]
+        assoc = es_para[graphs.InChI][1][0].numpy()
+        munanb = es_para[graphs.InChI][2][0].numpy()
     else:
-        assoc = torch.zeros(2)
-        munanb = torch.tensor((0,) + assoc_number(graphs.InChI), dtype=torch.float64)
+        assoc = np.zeros(2)
+        munanb = np.array((0,) + assoc_number(graphs.InChI), dtype=np.float64)
 
-    if msigmae_or_log10assoc.size(0) == 2:
+    return assoc, munanb
+
+
+def _get_model_params(
+    model: Union[GNNePCSAFT, HabitchNN, RandomForestRegressor, xgb.Booster],
+    model_msigmae: Optional[
+        Union[GNNePCSAFT, HabitchNN, RandomForestRegressor, xgb.Booster]
+    ],
+    graphs: Data,
+) -> np.ndarray:
+    """Extract parameters from models."""
+    msigmae_or_log10assoc = _predict_with_model(model, graphs)
+    assoc, munanb = _get_association_params(graphs)
+
+    # Handle associating model case
+    if msigmae_or_log10assoc.shape[0] == 2:
         if model_msigmae is None:
             raise ValueError("model_msigmae is required when using associating model.")
 
-        msigmae = model_msigmae.pred_with_bounds(graphs).squeeze().to(torch.float64)
-        return torch.hstack(
+        msigmae = _predict_with_model(model_msigmae, graphs)
+
+        return np.hstack(
             (
                 msigmae,
-                10 ** (msigmae_or_log10assoc * torch.tensor([-1.0, 1.0])),
+                10 ** (msigmae_or_log10assoc * np.array([-1.0, 1.0])),
                 munanb,
             )
         )
 
-    return torch.hstack((msigmae_or_log10assoc, assoc, munanb))
+    return np.hstack((msigmae_or_log10assoc, assoc, munanb))
 
 
 # Prediction and calculation functions
