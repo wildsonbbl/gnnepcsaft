@@ -344,7 +344,7 @@ def _plot_parameter_m(
     """Plot parameter m vs chain length."""
     for i, array_params in enumerate(list_array_params):
         y = array_params[:, 0]
-        _scatter_plot(x, y, MARKERS_2[i])
+        _scatter_plot(x, y, MARKERS_2[i], None)
 
     _customize_plot_params(xlabel=xlabel, ylabel=r"$m$", n=n_models)
     _save_plot(f"m_{xlabel}.png")
@@ -356,7 +356,7 @@ def _plot_parameter_sigma(
     """Plot parameter sigma vs chain length."""
     for i, array_params in enumerate(list_array_params):
         y = array_params[:, 0] * array_params[:, 1] ** 3
-        _scatter_plot(x, y, MARKERS_2[i])
+        _scatter_plot(x, y, MARKERS_2[i], None)
 
     _customize_plot_params(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$", n=n_models)
     _save_plot(f"sigma_{xlabel}.png")
@@ -368,7 +368,7 @@ def _plot_parameter_epsilon(
     """Plot parameter epsilon vs chain length."""
     for i, array_params in enumerate(list_array_params):
         y = array_params[:, 0] * array_params[:, 2]
-        _scatter_plot(x, y, MARKERS_2[i])
+        _scatter_plot(x, y, MARKERS_2[i], None)
 
     _customize_plot_params(
         xlabel=xlabel, ylabel=r"$m \cdot \mu k_b^{-1} (K)$", n=n_models
@@ -382,9 +382,11 @@ def _line_plot(x: np.ndarray, y: np.ndarray, marker: str = "x") -> None:
     plt.plot(x, y, marker=marker, linewidth=0.5)
 
 
-def _scatter_plot(x: np.ndarray, y: np.ndarray, marker: str = "x") -> None:
+def _scatter_plot(
+    x: np.ndarray, y: np.ndarray, marker: str = "x", color: Optional[str] = "black"
+) -> None:
     """Create scatter plot."""
-    plt.scatter(x, y, marker=marker, s=40, c="black", zorder=10)
+    plt.scatter(x, y, marker=marker, s=40, c=color, zorder=10)
 
 
 def plot_linear_fit(x: np.ndarray, y: np.ndarray, marker: str) -> None:
