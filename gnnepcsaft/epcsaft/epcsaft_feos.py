@@ -488,6 +488,37 @@ def phase_diagram_feos(parameters: List[float], state: List[float]) -> Dict[str,
     return phase_diagram.to_dict(Contributions.Residual)
 
 
+def mix_tp_flash_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    density_initialization: Optional[str] = None,
+) -> PhaseEquilibrium:
+    """
+    Calculates mixture phase equilibrium at
+    state temperature and pressure with ePC-SAFT.
+
+    Args:
+        parameters: A list with
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+        state:
+         A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:])  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    statenpt = State(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        molefracs=x,
+        density_initialization=density_initialization,
+    )
+
+    return statenpt.tp_flash(max_iter=100_000, tol=1e-3)
+
+
 def pure_surface_tension_feos(
     parameters: List[float], state: List[float]
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -592,24 +623,26 @@ if __name__ == "__main__":
 
     parameters_9 = [
         [
-            1.77033,
-            4.11536,
-            408.98859,
-            0.01119,
-            2028.69335,
+            1.79511,
+            4.09449,
+            405.71359,
+            0.01148,
+            2043.87069,
             0.0,
-            3,
-            3,
+            3.0,
+            3.0,
+            92.09,
         ],  # C(C(CO)O)O
         [
-            1.87119,
-            4.36345,
-            421.9549,
-            0.00102,
-            2253.55334,
+            2.17906,
+            4.47864,
+            377.43726,
+            0.00682,
+            1841.09787,
             0.0,
             1.0,
             1.0,
+            139.62,
         ],  # C[N+](C)(C)CCO.[Cl-]
     ]
 
@@ -705,36 +738,6 @@ if __name__ == "__main__":
         ],  # ClCCl
     ]
 
-    temperatures = np.linspace(300, 370, 10)
-    fig1 = plt.figure(1)
-    fig2 = plt.figure(2)
-    fig3 = plt.figure(3)
-    for tp in temperatures:
-        ge = []
-        molxs = []
-        g = []
-        for molx in np.linspace(1e-5, 0.9999, 500):
-            g.append(mix_gibbs_energy(parameters_1, [tp, 101325, molx, 1 - molx], None))
-            ge.append(
-                mix_e_gibbs_energy(parameters_1, [tp, 101325, molx, 1 - molx], None)
-            )
-            molxs.append(molx)
-
-        plt.figure(fig1.number)
-        plt.plot(molxs, ge, label=f"T = {round(tp, 2)} K")
-        plt.figure(fig2.number)
-        plt.plot(molxs, g, label=f"T = {round(tp, 2)} K")
-
-    plt.figure(fig1.number)
-    plt.legend(loc=(1.01, 0.0))
-    plt.xlabel("x-water")
-    plt.ylabel(r"$G^{E}/RT$")
-
-    plt.figure(fig2.number)
-    plt.legend(loc=(1.01, 0.0))
-    plt.xlabel("x-water")
-    plt.ylabel(r"$G^{mix}/RT$")
-
     import math
 
     N = 13  # número de subplots
@@ -748,10 +751,10 @@ if __name__ == "__main__":
         para = eval(PARA_NAME)  # pylint: disable=eval-used
         ge = []
         molxs = []
-        TEMP = 273.15 + 50
+        TEMP = 273.15 + 25
         for molx in np.linspace(1e-5, 0.9999, 500):
             ge.append(
-                mix_e_gibbs_energy(para, [TEMP, 101325, molx, 1 - molx], None)
+                mix_gibbs_energy(para, [TEMP, 101325, molx, 1 - molx], None)
                 * si.RGAS
                 * TEMP
                 * si.KELVIN
@@ -761,8 +764,9 @@ if __name__ == "__main__":
         ax = axes[i - 1]
         ax.plot(molxs, ge)
         ax.set_title(PARA_NAME)
-        ax.set_xlabel("x")
-        ax.set_ylabel(r"$G^{E}$ (J $mol^{-1}$)")
+        ax.set_xlabel(r"$x_1$")
+        ax.set_ylabel(r"$G^{mix}$ (J $mol^{-1}$)")
+        ax.set_xticks(np.arange(0, 1.1, 0.1))
 
     # Remove subplots vazios, se houver
     for j in range(N, len(axes)):
