@@ -11,6 +11,7 @@ ENV PYTHONUNBUFFERED=1
 # Install requirements
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # COPY requirements.txt .
+# COPY requirements-torch.txt .
 # RUN uv venv
 # RUN uv pip install -r requirements-torch.txt
 # RUN uv pip install -r requirements.txt
