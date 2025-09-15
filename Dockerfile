@@ -9,7 +9,8 @@ ENV PYTHONUNBUFFERED=1
 
 
 # Install requirements
-RUN python -m pip install --upgrade pip
-COPY requirements.txt .
-# RUN python -m pip install -r requirements.txt
-# RUN sh install_pcsaft.sh
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# COPY requirements.txt .
+# RUN uv venv
+# RUN uv pip install -r requirements-torch.txt
+# RUN uv pip install -r requirements.txt
