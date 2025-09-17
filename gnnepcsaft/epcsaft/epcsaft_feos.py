@@ -499,8 +499,9 @@ def mix_tp_flash_feos(
     state temperature and pressure with ePC-SAFT.
 
     Args:
-        parameters: A list with
+        parameters: A list of
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
     """
@@ -516,7 +517,96 @@ def mix_tp_flash_feos(
         density_initialization=density_initialization,
     )
 
-    return statenpt.tp_flash(max_iter=100_000, tol=1e-3)
+    return statenpt.tp_flash(max_iter=100_000)
+
+
+def mix_lle_diagram_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> Dict[str, float]:
+    """
+    Calculates mixture LLE phase diagram at
+    state constant pressure and variable temperature with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for each component of the mixture
+        state:
+         A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:])  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    dia_t = PhaseDiagram.lle(
+        eos,
+        temperature_or_pressure=p * si.PASCAL,
+        feed=x * si.MOL,
+        min_tp=t * si.KELVIN,
+        max_tp=(t + 50) * si.KELVIN,
+        npoints=200,
+    )
+
+    return dia_t.to_dict(Contributions.Residual)
+
+
+def mix_vle_diagram_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> Dict[str, float]:
+    """
+    Calculates binary mixture VLE phase diagram at
+    state constant pressure and variable temperature with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for each component of the mixture
+        state:
+         A list with `[Pressure (Pa)]`
+    """
+    p = state[0]  # Pressure, Pa
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    dia_t = PhaseDiagram.binary_vle(
+        eos,
+        temperature_or_pressure=p * si.PASCAL,
+    )
+
+    return dia_t.to_dict(Contributions.Residual)
+
+
+def mix_vlle_diagram_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> Dict[str, float]:
+    """
+    Calculates binary mixture VLLE phase diagram at
+    state constant pressure and variable temperature with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for each component of the mixture
+        state:
+         A list with `[Temperature (K), Pressure (Pa), mole_fractions_1]`
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    x = np.asarray(state[2])  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    dia_t = PhaseDiagram.binary_vlle(
+        eos,
+        temperature_or_pressure=p * si.PASCAL,
+        x_lle=x,
+        tp_lim_lle=t * si.KELVIN,
+        tp_init_vlle=t * si.KELVIN,
+    )
+
+    return dia_t.to_dict(Contributions.Residual)
 
 
 def pure_surface_tension_feos(
