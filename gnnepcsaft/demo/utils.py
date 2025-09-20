@@ -10,6 +10,7 @@ import polars as pl
 import seaborn as sns
 import torch
 import xgboost as xgb
+from joblib import Parallel, delayed
 from rdkit import Chem
 from sklearn.ensemble import RandomForestRegressor
 from torch.export.dynamic_shapes import Dim
@@ -18,7 +19,8 @@ from ..configs.default import get_config
 from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..data.rdkit_util import smilestoinchi
-from ..epcsaft.utils import mix_den_feos, parameters_gc_pcsaft
+from ..epcsaft.epcsaft_feos import mix_gibbs_energy
+from ..epcsaft.utils import mix_den_feos, mix_lle_diagram_feos, parameters_gc_pcsaft
 from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
 
@@ -111,6 +113,95 @@ def plotparams(
     _plot_parameter_m(x, list_array_params, xlabel, len(models))
     _plot_parameter_sigma(x, list_array_params, xlabel, len(models))
     _plot_parameter_epsilon(x, list_array_params, xlabel, len(models))
+
+
+def plot_binary_gibbs_energy(
+    params: List[List[float]], k_12: float, state: List[float]
+) -> None:
+    """
+    Plot the binary Gibbs energy for a given set of ePCSAFT parameters and state.
+
+    Args:
+        params: List of ePC-SAFT parameters
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for the two components.
+        k_12: Binary interaction parameter.
+        state: List containing `[T_min (K), T_max (K), P (Pa)]` for the plot.
+    """
+    x = np.linspace(1e-5, 0.999, 100)
+    t = np.linspace(state[0], state[1], 20).round(2)
+    p = state[2]
+
+    kij_matrix = [
+        [0, k_12],
+        [k_12, 0],
+    ]
+
+    def gibbs_at(tloc, xi):
+        yi = 1 - xi
+        return mix_gibbs_energy(params, [tloc, p, xi, yi], kij_matrix)
+
+    for tloc in t:
+        g = np.asarray(
+            Parallel(n_jobs=-1, backend="loky")(delayed(gibbs_at)(tloc, xi) for xi in x)
+        )
+        plt.plot(x, g, "-")
+
+    plt.xlim(0, 1)
+    plt.xticks(np.arange(0, 1.04, 0.04), minor=True)
+    plt.grid(which="minor", axis="both", color="gray", linestyle="--", linewidth=0.5)
+    plt.grid(which="major", axis="both", color="black", linestyle="--", linewidth=1.0)
+    plt.legend(t, title="T (K)", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.xlabel("x1")
+    plt.ylabel(r"$g_{mix}$")
+    plt.show()
+
+
+def plot_binary_lle_phase_diagram(
+    params: List[List[float]], k_12: float, state: List[float]
+) -> None:
+    """
+    Plot the binary LLE phase diagram for a given set of ePCSAFT parameters and state.
+
+
+    Args:
+        params: List of ePC-SAFT parameters
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for the two components.
+        k_12: Binary interaction parameter.
+        state:
+         List containing initial state
+         `[T (K), P (Pa), mole_fractions_1, mole_fractions_2]` for the plot.
+
+    """
+
+    kij_matrix = [
+        [0, k_12],
+        [k_12, 0],
+    ]
+    dia_t = mix_lle_diagram_feos(params, state, kij_matrix)
+
+    plt.plot(dia_t["x0"], dia_t["temperature"], color="b")
+    plt.plot(dia_t["y0"], dia_t["temperature"], color="r")
+    plt.xlim(0, 1)
+    plt.xticks(np.arange(0, 1.04, 0.04), minor=True)
+    plt.yticks(
+        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2),
+        minor=True,
+    )
+    plt.yticks(
+        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 10),
+        minor=False,
+    )
+    plt.grid(which="minor", color="gray", linestyle="--", linewidth=0.5)
+    plt.grid(which="major", color="black", linestyle="--", linewidth=1.0)
+    plt.legend(
+        ["LLE phase 1", "LLE phase 2"], bbox_to_anchor=(1.05, 1), loc="upper left"
+    )
+    plt.xlabel("x1")
+    plt.ylabel("T (K)")
+
+    plt.show()
 
 
 # Parameter prediction functions
