@@ -471,7 +471,9 @@ def pure_viscosity_feos(parameters: List[float], state: List[float]) -> float:
     return statenpt.viscosity()  # / (KILO * PASCAL * SECOND)
 
 
-def phase_diagram_feos(parameters: List[float], state: List[float]) -> Dict[str, float]:
+def phase_diagram_feos(
+    parameters: List[float], state: List[float]
+) -> Dict[str, List[float]]:
     """
     Calculates phase diagram from
     state temperature up to the critical temperature with ePC-SAFT.
@@ -555,7 +557,7 @@ def mix_lle_diagram_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
-) -> Dict[str, float]:
+) -> Dict[str, List[float]]:
     """
     Calculates mixture LLE phase diagram at
     state constant pressure and variable temperature with ePC-SAFT.
@@ -587,7 +589,7 @@ def mix_vle_diagram_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
-) -> Dict[str, float]:
+) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLE phase diagram at
     state constant pressure and variable temperature with ePC-SAFT.
@@ -613,7 +615,7 @@ def mix_vlle_diagram_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
-) -> Dict[str, float]:
+) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLLE phase diagram at
     state constant pressure and variable temperature with ePC-SAFT.
@@ -644,7 +646,7 @@ def pure_surface_tension_feos(
     parameters: List[float], state: List[float]
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Calculates pure component `[Surface Tension (mN/m), Temperature (K)]` with ePC-SAFT
+    Calculates pure component `([Surface Tension (mN/m)], [Temperature (K)])` with ePC-SAFT
     from state temperature up to the critical temperature with ePC-SAFT.
 
     Args:
