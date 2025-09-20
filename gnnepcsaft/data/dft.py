@@ -113,7 +113,7 @@ def run_dft_dipole(symbols, coords, config: Optional[DFTConfig] = None):
     return mu_vec, mu_mag, mf
 
 
-def get_dipole_moment(
+def get_dft_dipole_moment(
     smiles: str,
     config: Optional[DFTConfig] = None,
 ) -> float:
