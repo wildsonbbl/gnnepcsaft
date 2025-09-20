@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 import polars as pl
 import seaborn as sns
 import torch
@@ -202,6 +203,57 @@ def plot_binary_lle_phase_diagram(
     plt.ylabel("T (K)")
 
     plt.show()
+
+
+def plot_ternary_gibbs_surface(
+    params: List[List[float]], kij_matrix: List[List[float]], state: List[float]
+) -> None:
+    """
+    Plot the ternary Gibbs energy surface for a given set of ePCSAFT parameters and state.
+
+    Args:
+        params: List of ePC-SAFT parameters
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for the three components.
+        kij_matrix: 3x3 matrix of binary interaction parameters.
+        state: List containing `[T (K), P (Pa)]` for the plot.
+
+    """
+    t = state[0]
+    p = state[1]
+
+    # Malha de composições
+    xi = np.linspace(1e-5, 0.999, 200, dtype=np.float64)
+    x1, x2 = np.meshgrid(xi, xi, indexing="xy")
+    x3 = 1.0 - x1 - x2
+
+    # Máscara do simplesio (x3 >= 0)
+    mask = x3 >= 0.0
+
+    # Matriz de Gibbs com NaN fora do simplesio
+    z = np.full_like(x1, np.nan)
+
+    # Calcula somente nos pontos válidos
+    valid_idx = np.argwhere(mask)
+    for i, j in valid_idx:
+        z[i, j] = mix_gibbs_energy(
+            params,
+            [t, p, x1[i, j].item(), x2[i, j].item(), x3[i, j].item()],
+            kij_matrix,
+        )
+
+    # Plot da superfície
+    fig = go.Figure(
+        data=[go.Surface(z=z, x=xi, y=xi, colorbar_title="g<sub>mix</sub>")]
+    )
+    fig.update_layout(
+        scene={
+            "xaxis_title": "x<sub>1</sub>",
+            "yaxis_title": "x<sub>2</sub>",
+            "zaxis": {"title": "g<sub>mix</sub>"},
+        }
+    )
+    fig.show()
 
 
 # Parameter prediction functions
