@@ -492,10 +492,41 @@ def mix_tp_flash_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
-    density_initialization: Optional[str] = None,
 ) -> PhaseEquilibrium:
     """
     Calculates mixture phase equilibrium at
+    state temperature and pressure with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for each component of the mixture
+        state:
+         A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:])  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    tp_flash = PhaseEquilibrium.tp_flash(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        feed=x * si.MOL,
+        max_iter=100_000,
+    )
+
+    return tp_flash
+
+
+def henry_constant_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    density_initialization: Optional[str] = None,
+) -> np.ndarray:
+    """
+    Calculates Henry's constant of every solute at
     state temperature and pressure with ePC-SAFT.
 
     Args:
@@ -517,7 +548,7 @@ def mix_tp_flash_feos(
         density_initialization=density_initialization,
     )
 
-    return statenpt.tp_flash(max_iter=100_000)
+    return statenpt.henrys_law_constant(eos, t * si.KELVIN, x)
 
 
 def mix_lle_diagram_feos(
