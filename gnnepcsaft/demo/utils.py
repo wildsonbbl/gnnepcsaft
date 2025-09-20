@@ -247,11 +247,13 @@ def plot_ternary_gibbs_surface(
         data=[go.Surface(z=z, x=xi, y=xi, colorbar_title="g<sub>mix</sub>")]
     )
     fig.update_layout(
+        width=800,
+        height=800,
         scene={
             "xaxis_title": "x<sub>1</sub>",
             "yaxis_title": "x<sub>2</sub>",
             "zaxis": {"title": "g<sub>mix</sub>"},
-        }
+        },
     )
     fig.show()
 
