@@ -21,7 +21,12 @@ from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..data.rdkit_util import smilestoinchi
 from ..epcsaft.epcsaft_feos import mix_gibbs_energy
-from ..epcsaft.utils import mix_den_feos, mix_lle_diagram_feos, parameters_gc_pcsaft
+from ..epcsaft.utils import (
+    mix_den_feos,
+    mix_lle_diagram_feos,
+    mix_lle_feos,
+    parameters_gc_pcsaft,
+)
 from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
 
@@ -207,7 +212,7 @@ def plot_binary_lle_phase_diagram(
 
 def plot_ternary_gibbs_surface(
     params: List[List[float]], kij_matrix: List[List[float]], state: List[float]
-) -> None:
+) -> go.Figure:
     """
     Plot the ternary Gibbs energy surface for a given set of ePCSAFT parameters and state.
 
@@ -255,7 +260,113 @@ def plot_ternary_gibbs_surface(
             "zaxis": {"title": "g<sub>mix</sub>"},
         },
     )
-    fig.show()
+    return fig
+
+
+def plot_ternary_lle_diagram(
+    params: List[List[float]], kij_matrix: List[List[float]], state: List[float]
+) -> go.Figure:
+    """
+    Plot the ternary LLE diagram for a given set of ePCSAFT parameters and state.
+
+    Args:
+        params: List of ePC-SAFT parameters
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for the three components.
+        kij_matrix: 3x3 matrix of binary interaction parameters.
+        state: List containing `[T (K), P (Pa)]` for the plot.
+
+    """
+    t, p = state  # Temperatura (K) e pressão (Pa)
+
+    def _grid(n_pts: int = 50):
+        xi = np.linspace(1e-5, 0.999, n_pts, dtype=np.float64)
+        x1_m, x2_m = np.meshgrid(xi, xi, indexing="xy")
+        x3_m = 1.0 - x1_m - x2_m
+        return x1_m, x2_m, x3_m, (x3_m >= 0.0)
+
+    def _collect_tie_lines(x1_m, x2_m, x3_m, mask):
+        valid_idx = np.argwhere(mask)
+        lines = []
+        for i, j in valid_idx:
+            try:
+                lle = mix_lle_feos(
+                    params,
+                    [t, p, x1_m[i, j].item(), x2_m[i, j].item(), x3_m[i, j].item()],
+                    kij_matrix,
+                )
+            except (RuntimeError, ValueError):
+                continue
+            # For LLE, y is one phase and x is the other phase
+            lines.append(
+                [
+                    lle["y0"] + lle["y1"] + lle["y2"],
+                    lle["x0"] + lle["x1"] + lle["x2"],
+                ]
+            )
+        return np.asarray(lines)
+
+    x1, x2, x3, mask = _grid()
+    tl = _collect_tie_lines(x1, x2, x3, mask)
+
+    if tl.size == 0:
+        # Nada convergiu; evita IndexError e informa usuário.
+        fig = go.Figure()
+        fig.update_layout(title=f"Nenhuma fase encontrada em T={t} K, P={p/1e5} bar")
+
+        return fig
+
+    fig = go.Figure()
+    # Fase 1
+    fig.add_trace(
+        go.Scatterternary(
+            a=tl[:, 0, 0],
+            b=tl[:, 0, 1],
+            c=tl[:, 0, 2],
+            mode="markers",
+            marker={"symbol": "circle", "size": 5, "color": "blue"},
+            name="Phase 1",
+        )
+    )
+    # Fase 2
+    fig.add_trace(
+        go.Scatterternary(
+            a=tl[:, 1, 0],
+            b=tl[:, 1, 1],
+            c=tl[:, 1, 2],
+            mode="markers",
+            marker={"symbol": "circle", "size": 5, "color": "red"},
+            name="Phase 2",
+        )
+    )
+
+    fig.update_layout(
+        ternary={
+            "sum": 1,
+            "aaxis": {
+                "title": "A",
+                "min": 0.0,
+                "linewidth": 2,
+                "ticks": "outside",
+            },
+            "baxis": {
+                "title": "B",
+                "min": 0.0,
+                "linewidth": 2,
+                "ticks": "outside",
+            },
+            "caxis": {
+                "title": "C",
+                "min": 0.0,
+                "linewidth": 2,
+                "ticks": "outside",
+            },
+        },
+        title=f"LLE Diagram at T={t} K and P={p/1e5} bar",
+        width=800,
+        height=800,
+    )
+    return fig
 
 
 # Parameter prediction functions
