@@ -582,6 +582,43 @@ def mix_lle_diagram_feos(
         npoints=200,
     )
 
+    if len(dia_t.states) == 0:
+        raise ValueError("No LLE found at the given conditions.")
+
+    return dia_t.to_dict(Contributions.Residual)
+
+
+def mix_lle_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+) -> Dict[str, List[float]]:
+    """
+    Calculates mixture LLE at state pressure and temperature with ePC-SAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for each component of the mixture
+        state:
+         A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:])  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    dia_t = PhaseDiagram.lle(
+        eos,
+        temperature_or_pressure=p * si.PASCAL,
+        feed=x * si.MOL,
+        min_tp=t * si.KELVIN,
+        max_tp=t * si.KELVIN,
+        npoints=1,
+    )
+
+    if len(dia_t.states) == 0:
+        raise ValueError("No LLE found at the given conditions.")
+
     return dia_t.to_dict(Contributions.Residual)
 
 
@@ -607,6 +644,9 @@ def mix_vle_diagram_feos(
         eos,
         temperature_or_pressure=p * si.PASCAL,
     )
+
+    if len(dia_t.states) == 0:
+        raise ValueError("No VLE found at the given conditions.")
 
     return dia_t.to_dict(Contributions.Residual)
 
@@ -638,6 +678,8 @@ def mix_vlle_diagram_feos(
         tp_lim_lle=t * si.KELVIN,
         tp_init_vlle=t * si.KELVIN,
     )
+    if len(dia_t.states) == 0:
+        raise ValueError("No VLLE found at the given conditions.")
 
     return dia_t.to_dict(Contributions.Residual)
 
@@ -700,200 +742,3 @@ def parameters_gc_pcsaft(smiles: str) -> List[float]:
     nb = pure_record.nb if pure_record.nb else 0
 
     return [m, sigma, e, kab, eab, mu, na, nb]
-
-
-if __name__ == "__main__":
-
-    import matplotlib.pyplot as plt
-
-    parameters_1 = [
-        [2.36931, 2.13688, 229.08936, 0.35375, 2191.07976, 0.0, 1, 1],  # water
-        [3.42422, 4.05778, 287.37372, 0.00236, 3004.83009, 0.0, 1, 1],  # octanol
-    ]
-    parameters_2 = [
-        [1.23923, 3.31619, 89.78633, 0.00086, 1159.69411, 0.0, 2, 0],  # N2
-        [1.0, 3.70632, 151.87309, 0.0, 0.0, 0.0, 0, 0],  # CH4
-    ]
-
-    parameters_3 = [
-        [2.50956, 3.43242, 271.01627, 0.0, 0.0, 0.0, 0, 0],  # ClC(Cl)Cl
-        [3.48832, 3.79358, 237.78816, 0.0, 0.0, 0.0, 0, 0],  # CCCCCCC
-    ]
-
-    parameters_4 = [
-        [2.77575, 3.24163, 230.60544, 0.00018, 1448.962, 0.0, 1, 0],  # CC(=O)C
-        [2.24243, 2.82464, 182.92549, 0.0872, 2447.75103, 0.0, 1, 1],  # CO
-    ]
-    parameters_5 = [
-        [2.77575, 3.24163, 230.60544, 0.00018, 1448.962, 0.0, 1, 0],  # CC(=O)C
-        [2.50956, 3.43242, 271.01627, 0.0, 0.0, 0.0, 0, 0],  # ClC(Cl)Cl
-    ]
-
-    parameters_6 = [
-        [2.87326, 2.96227, 187.37704, 0.05594, 2460.62173, 0.0, 1, 1],  # CCO
-        [3.48832, 3.79358, 237.78816, 0.0, 0.0, 0.0, 0, 0],  # CCCCCCC
-    ]
-
-    parameters_7 = [
-        [2.87326, 2.96227, 187.37704, 0.05594, 2460.62173, 0.0, 1, 1],  # CCO
-        [2.50956, 3.43242, 271.01627, 0.0, 0.0, 0.0, 0, 0],  # ClC(Cl)Cl
-    ]
-
-    parameters_8 = [
-        [2.87326, 2.96227, 187.37704, 0.05594, 2460.62173, 0.0, 1, 1],  # CCO
-        [2.36931, 2.13688, 229.08936, 0.35375, 2191.07976, 0.0, 1, 1],  # water
-    ]
-
-    parameters_9 = [
-        [
-            1.79511,
-            4.09449,
-            405.71359,
-            0.01148,
-            2043.87069,
-            0.0,
-            3.0,
-            3.0,
-            92.09,
-        ],  # C(C(CO)O)O
-        [
-            2.17906,
-            4.47864,
-            377.43726,
-            0.00682,
-            1841.09787,
-            0.0,
-            1.0,
-            1.0,
-            139.62,
-        ],  # C[N+](C)(C)CCO.[Cl-]
-    ]
-
-    parameters_10 = [
-        [
-            3.18316,
-            2.91089,
-            288.20007,
-            0.0001,
-            198.64934,
-            0.0,
-            1,
-            1,
-        ],  #  CC(=O)O
-        [
-            1.87119,
-            4.36345,
-            421.9549,
-            0.00102,
-            2253.55334,
-            0.0,
-            1.0,
-            1.0,
-        ],  # C[N+](C)(C)CCO.[Cl-]
-    ]
-
-    parameters_11 = [
-        [
-            2.50956,
-            3.43242,
-            271.01627,
-            0.0,
-            0.0,
-            0.0,
-            0,
-            0,
-        ],  # ClC(Cl)Cl
-        [
-            1.87119,
-            4.36345,
-            421.9549,
-            0.00102,
-            2253.55334,
-            0.0,
-            1.0,
-            1.0,
-        ],  # C[N+](C)(C)CCO.[Cl-]
-    ]
-
-    parameters_12 = [
-        [
-            2.77575,
-            3.24163,
-            230.60544,
-            0.00018,
-            1448.962,
-            0.0,
-            1,
-            0,
-        ],  # CC(=O)C
-        [
-            1.87119,
-            4.36345,
-            421.9549,
-            0.00102,
-            2253.55334,
-            0.0,
-            1.0,
-            1.0,
-        ],  # C[N+](C)(C)CCO.[Cl-]
-    ]
-
-    parameters_13 = [
-        [
-            2.77575,
-            3.24163,
-            230.60544,
-            0.00018,
-            1448.962,
-            0.0,
-            1,
-            0,
-        ],  # CC(=O)C
-        [
-            2.47904,
-            3.18442,
-            254.75797,
-            0.0,
-            0.0,
-            0.0,
-            0,
-            0,
-        ],  # ClCCl
-    ]
-
-    import math
-
-    N = 13  # número de subplots
-    NCOLS = 4
-    nrows = math.ceil(N / NCOLS)
-    fig, axes = plt.subplots(nrows, NCOLS, figsize=(16, 10), sharex=True, sharey=False)
-    axes = axes.flatten()
-
-    for i in range(1, N + 1):
-        PARA_NAME = "parameters_" + str(i)
-        para = eval(PARA_NAME)  # pylint: disable=eval-used
-        ge = []
-        molxs = []
-        TEMP = 273.15 + 25
-        for molx in np.linspace(1e-5, 0.9999, 500):
-            ge.append(
-                mix_gibbs_energy(para, [TEMP, 101325, molx, 1 - molx], None)
-                * si.RGAS
-                * TEMP
-                * si.KELVIN
-                / (si.JOULE / si.MOL)
-            )
-            molxs.append(molx)
-        ax = axes[i - 1]
-        ax.plot(molxs, ge)
-        ax.set_title(PARA_NAME)
-        ax.set_xlabel(r"$x_1$")
-        ax.set_ylabel(r"$G^{mix}$ (J $mol^{-1}$)")
-        ax.set_xticks(np.arange(0, 1.1, 0.1))
-
-    # Remove subplots vazios, se houver
-    for j in range(N, len(axes)):
-        fig.delaxes(axes[j])
-
-    plt.tight_layout()
-    plt.show()
