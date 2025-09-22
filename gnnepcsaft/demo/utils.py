@@ -25,6 +25,7 @@ from ..epcsaft.utils import (
     mix_den_feos,
     mix_lle_diagram_feos,
     mix_lle_feos,
+    mix_vle_diagram_feos,
     parameters_gc_pcsaft,
 )
 from ..train.models import GNNePCSAFT, HabitchNN
@@ -204,6 +205,51 @@ def plot_binary_lle_phase_diagram(
     plt.legend(
         ["LLE phase 1", "LLE phase 2"], bbox_to_anchor=(1.05, 1), loc="upper left"
     )
+    plt.xlabel("x1")
+    plt.ylabel("T (K)")
+
+    plt.show()
+
+
+def plot_binary_vle_phase_diagram(
+    params: List[List[float]], k_12: float, state: List[float]
+) -> None:
+    """
+    Plot the binary VLE phase diagram for a given set of PCSAFT parameters and state.
+
+
+    Args:
+        params: List of PCSAFT parameters
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         for the two components.
+        k_12: Binary interaction parameter.
+        state:
+         List containing initial state
+         `[P (Pa)]` for the plot.
+
+    """
+
+    kij_matrix = [
+        [0, k_12],
+        [k_12, 0],
+    ]
+    dia_t = mix_vle_diagram_feos(params, state, kij_matrix)
+
+    plt.plot(dia_t["x0"], dia_t["temperature"], color="b")
+    plt.plot(dia_t["y0"], dia_t["temperature"], color="r")
+    plt.xlim(0, 1)
+    plt.xticks(np.arange(0, 1.04, 0.04), minor=True)
+    plt.yticks(
+        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2),
+        minor=True,
+    )
+    plt.yticks(
+        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 10),
+        minor=False,
+    )
+    plt.grid(which="minor", color="gray", linestyle="--", linewidth=0.5)
+    plt.grid(which="major", color="black", linestyle="--", linewidth=1.0)
+    plt.legend(["L phase ", "V phase"], bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.xlabel("x1")
     plt.ylabel("T (K)")
 
