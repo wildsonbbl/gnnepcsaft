@@ -482,6 +482,18 @@ def phase_diagram_feos(
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
         state: A list with `[Temperature (K)]`
+
+
+    Returns:
+        output (Dict):
+          - temperature: K
+          - pressure: Pa
+          - densities: mol / m³
+          - mass densities: kg / m³
+          - molar enthalpies: kJ / mol
+          - molar entropies: kJ / mol / K
+          - specific enthalpies: kJ / kg
+          - specific entropies: kJ / kg / K
     """
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
@@ -568,6 +580,19 @@ def mix_lle_diagram_feos(
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+
+    Returns:
+        output (Dict):
+          - temperature: K
+          - pressure: Pa
+          - densities: mol / m³
+          - mass densities: kg / m³
+          - molar enthalpies: kJ / mol
+          - molar entropies: kJ / mol / K
+          - specific enthalpies: kJ / kg
+          - specific entropies: kJ / kg / K
+          - xi: phase 1 liquid molefraction of component i
+          - yi: pahse 2 liquid molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -602,6 +627,19 @@ def mix_lle_feos(
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+
+    Returns:
+        output (Dict):
+          - temperature: K
+          - pressure: Pa
+          - densities: mol / m³
+          - mass densities: kg / m³
+          - molar enthalpies: kJ / mol
+          - molar entropies: kJ / mol / K
+          - specific enthalpies: kJ / kg
+          - specific entropies: kJ / kg / K
+          - xi: phase 1 liquid molefraction of component i
+          - yi: pahse 2 liquid molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -637,6 +675,19 @@ def mix_vle_diagram_feos(
          for each component of the mixture
         state:
          A list with `[Pressure (Pa)]`
+
+    Returns:
+        output (Dict):
+          - temperature: K
+          - pressure: Pa
+          - densities: mol / m³
+          - mass densities: kg / m³
+          - molar enthalpies: kJ / mol
+          - molar entropies: kJ / mol / K
+          - specific enthalpies: kJ / kg
+          - specific entropies: kJ / kg / K
+          - xi: liquid molefraction of component i
+          - yi: vapor molefraction of component i
     """
     p = state[0]  # Pressure, Pa
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
