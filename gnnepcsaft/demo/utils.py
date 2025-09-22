@@ -12,6 +12,8 @@ import seaborn as sns
 import torch
 import xgboost as xgb
 from joblib import Parallel, delayed
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from rdkit import Chem
 from sklearn.ensemble import RandomForestRegressor
 from torch.export.dynamic_shapes import Dim
@@ -220,54 +222,67 @@ def plot_binary_lle_phase_diagram(
 
 def plot_binary_vle_phase_diagram(
     params: List[List[float]], k_12: float, state: List[float]
-) -> None:
-    """
-    Plot the binary VLE phase diagram for a given set of PCSAFT parameters and state.
+) -> Tuple[Figure, List[Axes]]:
+    """Plot binary VLE diagrams T–x–y and y-x.
 
+    Creates two side-by-side subplots:
+      1. Temperature vs composition
+      2. Vapor vs Liquid composition
 
     Args:
-        params: List of PCSAFT parameters
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
-         for the two components.
-        k_12: Binary interaction parameter.
-        state:
-         List containing initial state
-         `[P (Pa)]` for the plot.
+        params: List of PCSAFT parameters for the two components
+            ``[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]``.
+        k_12: Binary interaction parameter (``k_ij``) between the two components.
+        state: state pressure `[P (Pa)]`.
 
+    Returns:
+        fig: Matplotlib ``Figure`` instance.
+        axs: Numpy array of two ``Axes`` objects (index 0: T vs x/y, index 1: y vs x).
     """
 
-    kij_matrix = [
-        [0, k_12],
-        [k_12, 0],
-    ]
-    dia_t = mix_vle_diagram_feos(params, state, kij_matrix)
-
-    plt.plot(dia_t["x0"], dia_t["temperature"], color="b")
-    plt.plot(dia_t["y0"], dia_t["temperature"], color="r")
-    plt.xlim(0, 1)
-    plt.xticks(np.arange(0, 1.04, 0.04), minor=True)
-    plt.yticks(
-        np.arange(
-            min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2, dtype=np.int64
-        ),
-        minor=True,
+    dia_t = mix_vle_diagram_feos(
+        params,
+        state,
+        kij_matrix=[
+            [0, k_12],
+            [k_12, 0],
+        ],
     )
-    plt.yticks(
-        np.arange(
-            min(dia_t["temperature"]),
-            max(dia_t["temperature"]) + 10,
-            10,
-            dtype=np.int64,
-        ),
-        minor=False,
-    )
-    plt.grid(which="minor", color="gray", linestyle="--", linewidth=0.5)
-    plt.grid(which="major", color="black", linestyle="--", linewidth=1.0)
-    plt.legend(["L phase ", "V phase"], bbox_to_anchor=(1.05, 1), loc="upper left")
-    plt.xlabel("x1")
-    plt.ylabel("T (K)")
 
-    plt.show()
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
+    axs: List[Axes]
+
+    # --- Subplot 1: T vs x / y ---
+    ax_t = axs[0]
+    ax_t.plot(dia_t["x0"], dia_t["temperature"], color="b", label="L (x)")
+    ax_t.plot(dia_t["y0"], dia_t["temperature"], color="r", label="V (y)")
+    ax_t.set_xlim(0, 1)
+    ax_t.set_xlabel(r"$x_1$")
+    ax_t.set_ylabel("T (K)")
+    ax_t.set_title("T–x–y")
+
+    t_min, t_max = min(dia_t["temperature"]), max(dia_t["temperature"])
+    ax_t.set_yticks(np.arange(t_min, t_max + 10, 10, dtype=np.int64))
+
+    ax_t.grid(which="major", linestyle="--", alpha=0.5)
+    ax_t.legend(loc="best")
+
+    # --- Subplot 2: y vs x ---
+    ax_rho = axs[1]
+    ax_rho.plot(dia_t["x0"], dia_t["y0"], color="b")
+    ax_rho.set_xlim(0, 1)
+    ax_rho.set_xlabel(r"$x_1$")
+    ax_rho.set_ylabel(r"$y_1$")
+    ax_rho.set_title("y vs x")
+    ax_rho.grid(which="major", linestyle="--", alpha=0.5)
+    ax_rho.legend(loc="best")
+
+    # Ajustes gerais
+    for ax in axs:
+        ax.set_xticks(np.linspace(0, 1, 11))
+
+    fig.tight_layout()
+    return fig, axs
 
 
 def plot_ternary_gibbs_surface(
