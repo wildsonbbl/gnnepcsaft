@@ -168,7 +168,7 @@ def plot_binary_gibbs_energy(
 
 def plot_binary_lle_phase_diagram(
     params: List[List[float]], k_12: float, state: List[float]
-) -> None:
+) -> Tuple[Figure, List[Axes]]:
     """
     Plot the binary LLE phase diagram for a given set of PCSAFT parameters and state.
 
@@ -184,40 +184,46 @@ def plot_binary_lle_phase_diagram(
 
     """
 
-    kij_matrix = [
-        [0, k_12],
-        [k_12, 0],
-    ]
-    dia_t = mix_lle_diagram_feos(params, state, kij_matrix)
+    dia_t = mix_lle_diagram_feos(
+        params,
+        state,
+        kij_matrix=[
+            [0, k_12],
+            [k_12, 0],
+        ],
+    )
 
-    plt.plot(dia_t["x0"], dia_t["temperature"], color="b")
-    plt.plot(dia_t["y0"], dia_t["temperature"], color="r")
-    plt.xlim(0, 1)
-    plt.xticks(np.arange(0, 1.04, 0.04), minor=True)
-    plt.yticks(
-        np.arange(
-            min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2, dtype=np.int64
-        ),
-        minor=True,
-    )
-    plt.yticks(
-        np.arange(
-            min(dia_t["temperature"]),
-            max(dia_t["temperature"]) + 10,
-            10,
-            dtype=np.int64,
-        ),
-        minor=False,
-    )
-    plt.grid(which="minor", color="gray", linestyle="--", linewidth=0.5)
-    plt.grid(which="major", color="black", linestyle="--", linewidth=1.0)
-    plt.legend(
-        ["LLE phase 1", "LLE phase 2"], bbox_to_anchor=(1.05, 1), loc="upper left"
-    )
-    plt.xlabel("x1")
-    plt.ylabel("T (K)")
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
+    axs: List[Axes]
 
-    plt.show()
+    # --- Subplot 1: T vs x / y ---
+    ax_t = axs[0]
+    ax_t.plot(dia_t["x0"], dia_t["temperature"], color="b", label="Phase 1")
+    ax_t.plot(dia_t["y0"], dia_t["temperature"], color="r", label="Phase 2")
+    ax_t.set_xlabel(r"$x_1$")
+    ax_t.set_ylabel("T (K)")
+    ax_t.set_title("T–x–x")
+
+    t_min, t_max = min(dia_t["temperature"]), max(dia_t["temperature"])
+    ax_t.set_yticks(np.arange(t_min, t_max + 10, 10, dtype=np.int64))
+    ax_t.set_yticks(np.arange(t_min, t_max + 10, 2, dtype=np.int64), minor=True)
+    ax_t.legend(loc="best")
+
+    # --- Subplot 2: y vs x ---
+    ax_rho = axs[1]
+    ax_rho.plot(dia_t["x0"], dia_t["y0"], color="b")
+    ax_rho.set_xlabel(r"$x^{\alpha}_1$")
+    ax_rho.set_ylabel(r"$x^{\beta}_1$")
+    ax_rho.set_title(r"$x^{\alpha}$ vs $x^{\beta}$")
+
+    for ax in axs:
+        ax.set_xlim(0, 1)
+        ax.grid(which="major", color="black", linestyle="--", alpha=1.0)
+        ax.grid(which="minor", color="gray", linestyle="--", alpha=0.5)
+        ax.set_xticks(np.linspace(0, 1, 11))
+
+    fig.tight_layout()
+    return fig, axs
 
 
 def plot_binary_vle_phase_diagram(
@@ -256,29 +262,27 @@ def plot_binary_vle_phase_diagram(
     ax_t = axs[0]
     ax_t.plot(dia_t["x0"], dia_t["temperature"], color="b", label="L (x)")
     ax_t.plot(dia_t["y0"], dia_t["temperature"], color="r", label="V (y)")
-    ax_t.set_xlim(0, 1)
     ax_t.set_xlabel(r"$x_1$")
     ax_t.set_ylabel("T (K)")
     ax_t.set_title("T–x–y")
 
     t_min, t_max = min(dia_t["temperature"]), max(dia_t["temperature"])
     ax_t.set_yticks(np.arange(t_min, t_max + 10, 10, dtype=np.int64))
-
-    ax_t.grid(which="major", linestyle="--", alpha=0.5)
+    ax_t.set_yticks(np.arange(t_min, t_max + 10, 2, dtype=np.int64), minor=True)
     ax_t.legend(loc="best")
 
     # --- Subplot 2: y vs x ---
     ax_rho = axs[1]
     ax_rho.plot(dia_t["x0"], dia_t["y0"], color="b")
-    ax_rho.set_xlim(0, 1)
     ax_rho.set_xlabel(r"$x_1$")
     ax_rho.set_ylabel(r"$y_1$")
     ax_rho.set_title("y vs x")
-    ax_rho.grid(which="major", linestyle="--", alpha=0.5)
-    ax_rho.legend(loc="best")
 
     # Ajustes gerais
     for ax in axs:
+        ax.set_xlim(0, 1)
+        ax.grid(which="major", color="black", linestyle="--", alpha=1.0)
+        ax.grid(which="minor", color="gray", linestyle="--", alpha=0.5)
         ax.set_xticks(np.linspace(0, 1, 11))
 
     fig.tight_layout()
