@@ -193,11 +193,18 @@ def plot_binary_lle_phase_diagram(
     plt.xlim(0, 1)
     plt.xticks(np.arange(0, 1.04, 0.04), minor=True)
     plt.yticks(
-        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2),
+        np.arange(
+            min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2, dtype=np.int64
+        ),
         minor=True,
     )
     plt.yticks(
-        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 10),
+        np.arange(
+            min(dia_t["temperature"]),
+            max(dia_t["temperature"]) + 10,
+            10,
+            dtype=np.int64,
+        ),
         minor=False,
     )
     plt.grid(which="minor", color="gray", linestyle="--", linewidth=0.5)
@@ -240,11 +247,18 @@ def plot_binary_vle_phase_diagram(
     plt.xlim(0, 1)
     plt.xticks(np.arange(0, 1.04, 0.04), minor=True)
     plt.yticks(
-        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2),
+        np.arange(
+            min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 2, dtype=np.int64
+        ),
         minor=True,
     )
     plt.yticks(
-        np.arange(min(dia_t["temperature"]), max(dia_t["temperature"]) + 10, 10),
+        np.arange(
+            min(dia_t["temperature"]),
+            max(dia_t["temperature"]) + 10,
+            10,
+            dtype=np.int64,
+        ),
         minor=False,
     )
     plt.grid(which="minor", color="gray", linestyle="--", linewidth=0.5)
