@@ -126,10 +126,10 @@ def plot_binary_gibbs_energy(
     params: List[List[float]], k_12: float, state: List[float]
 ) -> None:
     """
-    Plot the binary Gibbs energy for a given set of ePCSAFT parameters and state.
+    Plot the binary Gibbs energy for a given set of PCSAFT parameters and state.
 
     Args:
-        params: List of ePC-SAFT parameters
+        params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the two components.
         k_12: Binary interaction parameter.
@@ -168,11 +168,11 @@ def plot_binary_lle_phase_diagram(
     params: List[List[float]], k_12: float, state: List[float]
 ) -> None:
     """
-    Plot the binary LLE phase diagram for a given set of ePCSAFT parameters and state.
+    Plot the binary LLE phase diagram for a given set of PCSAFT parameters and state.
 
 
     Args:
-        params: List of ePC-SAFT parameters
+        params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the two components.
         k_12: Binary interaction parameter.
@@ -260,10 +260,10 @@ def plot_ternary_gibbs_surface(
     params: List[List[float]], kij_matrix: List[List[float]], state: List[float]
 ) -> go.Figure:
     """
-    Plot the ternary Gibbs energy surface for a given set of ePCSAFT parameters and state.
+    Plot the ternary Gibbs energy surface for a given set of PCSAFT parameters and state.
 
     Args:
-        params: List of ePC-SAFT parameters
+        params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the three components.
         kij_matrix: 3x3 matrix of binary interaction parameters.
@@ -313,10 +313,10 @@ def plot_ternary_lle_diagram(
     params: List[List[float]], kij_matrix: List[List[float]], state: List[float]
 ) -> go.Figure:
     """
-    Plot the ternary LLE diagram for a given set of ePCSAFT parameters and state.
+    Plot the ternary LLE diagram for a given set of PCSAFT parameters and state.
 
     Args:
-        params: List of ePC-SAFT parameters
+        params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the three components.
         kij_matrix: 3x3 matrix of binary interaction parameters.
@@ -421,7 +421,7 @@ def _predict_params_from_inchi(
     models: List[Union[GNNePCSAFT, HabitchNN]],
     model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
 ) -> List[List[float]]:
-    """Predict ePC-SAFT parameters from InChI."""
+    """Predict PCSAFT parameters from InChI."""
     with torch.no_grad():
         gh = from_InChI(inchi)
         graphs = gh.to(DEVICE)
@@ -446,7 +446,7 @@ def _predict_params_from_inchi(
 def _predict_params_from_smiles(
     smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]]
 ) -> List[np.ndarray]:
-    """Predict ePC-SAFT parameters from SMILES."""
+    """Predict PCSAFT parameters from SMILES."""
     list_array_params = []
 
     for model in models:
@@ -568,7 +568,7 @@ def _get_model_params(
 def _predict_rho_vp(
     inchi: str, list_params: List[List[float]], rho: np.ndarray, vp: np.ndarray
 ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-    """Predict density and vapor pressure with ePC-SAFT."""
+    """Predict density and vapor pressure with PCSAFT."""
     pred_den_list, pred_vp_list = [], []
     print(f"#### {inchi} ####")
 
