@@ -1,4 +1,4 @@
-"Module to calculate properties with ePC-SAFT using FEOS."
+"Module to calculate properties with PCSAFT using FEOS."
 
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -23,7 +23,7 @@ from feos.pcsaft import (  # type: ignore # pylint: disable = E0401
 
 def pc_saft(parameters: List[float]) -> EquationOfState.pcsaft:
     """
-    Returns a ePC-SAFT equation of state.
+    Returns a PCSAFT equation of state.
 
     Args:
         parameters: A list with
@@ -39,7 +39,7 @@ def pc_saft_mixture(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> EquationOfState.pcsaft:
     """
-    Returns a ePC-SAFT equation of state.
+    Returns a PCSAFT equation of state.
 
     Args:
         mixture_parameters: A list of
@@ -100,7 +100,7 @@ def mix_gibbs_energy(
     kij_matrix: Optional[List[List[float]]] = None,
 ):
     """
-    Calculates mixture `Molar Gibbs Energy/RT` with ePC-SAFT.
+    Calculates mixture `Molar Gibbs Energy/RT` with PCSAFT.
 
     Args:
         parameters: A list of
@@ -123,7 +123,7 @@ def mix_ln_fugacity_coefficient_pure(
     kij_matrix: Optional[List[List[float]]] = None,
 ):
     """
-    Calculates mixture `ln(fugacity coefficient)` with ePC-SAFT for each pure component.
+    Calculates mixture `ln(fugacity coefficient)` with PCSAFT for each pure component.
 
     Args:
         parameters: A list of
@@ -157,7 +157,7 @@ def mix_ln_activity_coefficient(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> List[float]:
     """
-    Calculates mixture `ln(activity coefficient)` with ePC-SAFT for each component.
+    Calculates mixture `ln(activity coefficient)` with PCSAFT for each component.
 
     Args:
         parameters: A list of
@@ -191,7 +191,7 @@ def mix_e_gibbs_energy(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> float:
     """
-    Calculates mixture `Molar Excess Gibbs Energy/RT` with ePC-SAFT.
+    Calculates mixture `Molar Excess Gibbs Energy/RT` with PCSAFT.
 
     Args:
         parameters: A list of
@@ -213,7 +213,7 @@ def mix_ln_fugacity_coefficient(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> List[float]:
     """
-    Calculates mixture `ln(fugacity coefficient)` with ePC-SAFT for each component.
+    Calculates mixture `ln(fugacity coefficient)` with PCSAFT for each component.
 
     Args:
         parameters: A list of
@@ -246,7 +246,7 @@ def mix_r_gibbs_energy(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> float:
     """
-    Calculates mixture `Molar Residual Gibbs Energy/RT` with ePC-SAFT.
+    Calculates mixture `Molar Residual Gibbs Energy/RT` with PCSAFT.
 
     Args:
         parameters: A list of
@@ -266,7 +266,7 @@ def mix_den_feos(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> float:
     """
-    Calculates mixture liquid density (mol/m³) with ePC-SAFT.
+    Calculates mixture liquid density (mol/m³) with PCSAFT.
 
     Args:
         parameters: A list of
@@ -298,7 +298,7 @@ def mix_den_feos(
 
 def pure_den_feos(parameters: List[float], state: List[float]) -> float:
     """
-    Calculates pure component liquid density (mol/m³) with ePC-SAFT.
+    Calculates pure component liquid density (mol/m³) with PCSAFT.
 
     Args:
         parameters: A list with
@@ -328,7 +328,7 @@ def mix_vp_feos(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> Tuple[float, float]:
     """
-    Calculates mixture `(Bubble point (Pa), Dew point (Pa))` with ePC-SAFT.
+    Calculates mixture `(Bubble point (Pa), Dew point (Pa))` with PCSAFT.
 
     Args:
         parameters: A list of
@@ -366,7 +366,7 @@ def mix_vp_feos(
 
 def pure_vp_feos(parameters: List[float], state: List[float]) -> float:
     """
-    Calculates pure component vapor pressure (Pa) with ePC-SAFT.
+    Calculates pure component vapor pressure (Pa) with PCSAFT.
 
     Args:
         parameters: A list with
@@ -386,7 +386,7 @@ def pure_vp_feos(parameters: List[float], state: List[float]) -> float:
 
 def pure_h_lv_feos(parameters: List[float], state: List[float]) -> float:
     """
-    Calculates pure component enthalpy of vaporization (kJ/mol) with ePC-SAFT.
+    Calculates pure component enthalpy of vaporization (kJ/mol) with PCSAFT.
 
     Args:
         parameters: A list with
@@ -412,7 +412,7 @@ def pure_h_lv_feos(parameters: List[float], state: List[float]) -> float:
 
 def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
     """
-    Calcules pure component entropy of vaporization (J/mol*K) with ePC-SAFT.
+    Calcules pure component entropy of vaporization (J/mol*K) with PCSAFT.
 
     Args:
         parameters: A list with
@@ -433,7 +433,7 @@ def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
 
 def critical_points_feos(parameters: List[float]) -> List[float]:
     """
-    Calculates critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]` with ePC-SAFT.
+    Calculates critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]` with PCSAFT.
 
     Args:
         parameters: A list with
@@ -450,7 +450,7 @@ def critical_points_feos(parameters: List[float]) -> List[float]:
 
 def pure_viscosity_feos(parameters: List[float], state: List[float]) -> float:
     """
-    Calcules pure component viscosity (kPa*s) with ePC-SAFT.
+    Calcules pure component viscosity (kPa*s) with PCSAFT.
 
     Args:
         parameters: A list with
@@ -476,7 +476,7 @@ def phase_diagram_feos(
 ) -> Dict[str, List[float]]:
     """
     Calculates phase diagram from
-    state temperature up to the critical temperature with ePC-SAFT.
+    state temperature up to the critical temperature with PCSAFT.
 
     Args:
         parameters: A list with
@@ -497,7 +497,7 @@ def mix_tp_flash_feos(
 ) -> PhaseEquilibrium:
     """
     Calculates mixture phase equilibrium at
-    state temperature and pressure with ePC-SAFT.
+    state temperature and pressure with PCSAFT.
 
     Args:
         parameters: A list of
@@ -529,7 +529,7 @@ def henry_constant_feos(
 ) -> np.ndarray:
     """
     Calculates Henry's constant of every solute at
-    state temperature and pressure with ePC-SAFT.
+    state temperature and pressure with PCSAFT.
 
     Args:
         parameters: A list of
@@ -560,7 +560,7 @@ def mix_lle_diagram_feos(
 ) -> Dict[str, List[float]]:
     """
     Calculates mixture LLE phase diagram at
-    state constant pressure and variable temperature with ePC-SAFT.
+    state constant pressure and variable temperature with PCSAFT.
 
     Args:
         parameters: A list of
@@ -594,7 +594,7 @@ def mix_lle_feos(
     kij_matrix: Optional[List[List[float]]] = None,
 ) -> Dict[str, List[float]]:
     """
-    Calculates mixture LLE at state pressure and temperature with ePC-SAFT.
+    Calculates mixture LLE at state pressure and temperature with PCSAFT.
 
     Args:
         parameters: A list of
@@ -629,7 +629,7 @@ def mix_vle_diagram_feos(
 ) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLE phase diagram at
-    state constant pressure and variable temperature with ePC-SAFT.
+    state constant pressure and variable temperature with PCSAFT.
 
     Args:
         parameters: A list of
@@ -658,7 +658,7 @@ def mix_vlle_diagram_feos(
 ) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLLE phase diagram at
-    state constant pressure and variable temperature with ePC-SAFT.
+    state constant pressure and variable temperature with PCSAFT.
 
     Args:
         parameters: A list of
@@ -688,8 +688,8 @@ def pure_surface_tension_feos(
     parameters: List[float], state: List[float]
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Calculates pure component `([Surface Tension (mN/m)], [Temperature (K)])` with ePC-SAFT
-    from state temperature up to the critical temperature with ePC-SAFT.
+    Calculates pure component `([Surface Tension (mN/m)], [Temperature (K)])` with PCSAFT
+    from state temperature up to the critical temperature with PCSAFT.
 
     Args:
         parameters: A list with
