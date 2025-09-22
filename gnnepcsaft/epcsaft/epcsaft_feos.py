@@ -488,12 +488,12 @@ def phase_diagram_feos(
         output (Dict):
           - temperature: K
           - pressure: Pa
-          - densities: mol / m³
-          - mass densities: kg / m³
-          - molar enthalpies: kJ / mol
-          - molar entropies: kJ / mol / K
-          - specific enthalpies: kJ / kg
-          - specific entropies: kJ / kg / K
+          - density [liquid/vapor]: mol / m³
+          - mass density [liquid/vapor]: kg / m³
+          - molar enthalpy [liquid/vapor]: kJ / mol
+          - molar entropy [liquid/vapor]: kJ / mol / K
+          - specific enthalpy [liquid/vapor]: kJ / kg
+          - specific entropy [liquid/vapor]: kJ / kg / K
     """
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
@@ -583,16 +583,17 @@ def mix_lle_diagram_feos(
 
     Returns:
         output (Dict):
+          - For LLE, vapor identifies the liquid phase 2.
           - temperature: K
           - pressure: Pa
-          - densities: mol / m³
-          - mass densities: kg / m³
-          - molar enthalpies: kJ / mol
-          - molar entropies: kJ / mol / K
-          - specific enthalpies: kJ / kg
-          - specific entropies: kJ / kg / K
+          - density [liquid/vapor]: mol / m³
+          - mass density [liquid/vapor]: kg / m³
+          - molar enthalpy [liquid/vapor]: kJ / mol
+          - molar entropy [liquid/vapor]: kJ / mol / K
+          - specific enthalpy [liquid/vapor]: kJ / kg
+          - specific entropy [liquid/vapor]: kJ / kg / K
           - xi: phase 1 liquid molefraction of component i
-          - yi: pahse 2 liquid molefraction of component i
+          - yi: phase 2 liquid molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -630,16 +631,17 @@ def mix_lle_feos(
 
     Returns:
         output (Dict):
+          - For LLE, vapor identifies the liquid phase 2.
           - temperature: K
           - pressure: Pa
-          - densities: mol / m³
-          - mass densities: kg / m³
-          - molar enthalpies: kJ / mol
-          - molar entropies: kJ / mol / K
-          - specific enthalpies: kJ / kg
-          - specific entropies: kJ / kg / K
+          - density [liquid/vapor]: mol / m³
+          - mass density [liquid/vapor]: kg / m³
+          - molar enthalpy [liquid/vapor]: kJ / mol
+          - molar entropy [liquid/vapor]: kJ / mol / K
+          - specific enthalpy [liquid/vapor]: kJ / kg
+          - specific entropy [liquid/vapor]: kJ / kg / K
           - xi: phase 1 liquid molefraction of component i
-          - yi: pahse 2 liquid molefraction of component i
+          - yi: phase 2 liquid molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -680,12 +682,12 @@ def mix_vle_diagram_feos(
         output (Dict):
           - temperature: K
           - pressure: Pa
-          - densities: mol / m³
-          - mass densities: kg / m³
-          - molar enthalpies: kJ / mol
-          - molar entropies: kJ / mol / K
-          - specific enthalpies: kJ / kg
-          - specific entropies: kJ / kg / K
+          - density [liquid/vapor]: mol / m³
+          - mass density [liquid/vapor]: kg / m³
+          - molar enthalpy [liquid/vapor]: kJ / mol
+          - molar entropy [liquid/vapor]: kJ / mol / K
+          - specific enthalpy [liquid/vapor]: kJ / kg
+          - specific entropy [liquid/vapor]: kJ / kg / K
           - xi: liquid molefraction of component i
           - yi: vapor molefraction of component i
     """
