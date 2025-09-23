@@ -737,6 +737,37 @@ def mix_vlle_diagram_feos(
     return dia_t.to_dict(Contributions.Residual)
 
 
+def mix_isobaric_heat_capacity_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+):
+    """
+    Calculates residual molar isobaric heat capacity with PCSAFT
+
+    Args:
+        parameters: A list of
+          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+          for each component of the mixture
+        state:
+          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:])  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+
+    statenpt = State(
+        eos,
+        temperature=t * si.KELVIN,
+        pressure=p * si.PASCAL,
+        molefracs=x,
+    )
+
+    return statenpt.molar_isobaric_heat_capacity(Contributions.Residual)
+
+
 def pure_surface_tension_feos(
     parameters: List[float], state: List[float]
 ) -> Tuple[np.ndarray, np.ndarray]:
