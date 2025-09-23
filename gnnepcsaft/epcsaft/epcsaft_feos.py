@@ -490,10 +490,10 @@ def phase_diagram_feos(
           - pressure: Pa
           - density [liquid/vapor]: mol / m³
           - mass density [liquid/vapor]: kg / m³
-          - molar enthalpy [liquid/vapor]: kJ / mol
-          - molar entropy [liquid/vapor]: kJ / mol / K
-          - specific enthalpy [liquid/vapor]: kJ / kg
-          - specific entropy [liquid/vapor]: kJ / kg / K
+          - residual molar enthalpy [liquid/vapor]: kJ / mol
+          - residual molar entropy [liquid/vapor]: kJ / mol / K
+          - residual specific enthalpy [liquid/vapor]: kJ / kg
+          - residual specific entropy [liquid/vapor]: kJ / kg / K
     """
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
@@ -517,6 +517,7 @@ def mix_tp_flash_feos(
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -549,6 +550,7 @@ def henry_constant_feos(
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -580,6 +582,7 @@ def mix_lle_diagram_feos(
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
 
     Returns:
         output (Dict):
@@ -588,10 +591,10 @@ def mix_lle_diagram_feos(
           - pressure: Pa
           - density [liquid/vapor]: mol / m³
           - mass density [liquid/vapor]: kg / m³
-          - molar enthalpy [liquid/vapor]: kJ / mol
-          - molar entropy [liquid/vapor]: kJ / mol / K
-          - specific enthalpy [liquid/vapor]: kJ / kg
-          - specific entropy [liquid/vapor]: kJ / kg / K
+          - residual molar enthalpy [liquid/vapor]: kJ / mol
+          - residual molar entropy [liquid/vapor]: kJ / mol / K
+          - residual specific enthalpy [liquid/vapor]: kJ / kg
+          - residual specific entropy [liquid/vapor]: kJ / kg / K
           - xi: phase 1 liquid molefraction of component i
           - yi: phase 2 liquid molefraction of component i
     """
@@ -628,6 +631,7 @@ def mix_lle_feos(
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
 
     Returns:
         output (Dict):
@@ -636,10 +640,10 @@ def mix_lle_feos(
           - pressure: Pa
           - density [liquid/vapor]: mol / m³
           - mass density [liquid/vapor]: kg / m³
-          - molar enthalpy [liquid/vapor]: kJ / mol
-          - molar entropy [liquid/vapor]: kJ / mol / K
-          - specific enthalpy [liquid/vapor]: kJ / kg
-          - specific entropy [liquid/vapor]: kJ / kg / K
+          - residual molar enthalpy [liquid/vapor]: kJ / mol
+          - residual molar entropy [liquid/vapor]: kJ / mol / K
+          - residual specific enthalpy [liquid/vapor]: kJ / kg
+          - residual specific entropy [liquid/vapor]: kJ / kg / K
           - xi: phase 1 liquid molefraction of component i
           - yi: phase 2 liquid molefraction of component i
     """
@@ -677,6 +681,7 @@ def mix_vle_diagram_feos(
          for each component of the mixture
         state:
          A list with `[Pressure (Pa)]`
+        kij_matrix: A matrix of binary interaction parameters
 
     Returns:
         output (Dict):
@@ -684,10 +689,10 @@ def mix_vle_diagram_feos(
           - pressure: Pa
           - density [liquid/vapor]: mol / m³
           - mass density [liquid/vapor]: kg / m³
-          - molar enthalpy [liquid/vapor]: kJ / mol
-          - molar entropy [liquid/vapor]: kJ / mol / K
-          - specific enthalpy [liquid/vapor]: kJ / kg
-          - specific entropy [liquid/vapor]: kJ / kg / K
+          - residual molar enthalpy [liquid/vapor]: kJ / mol
+          - residual molar entropy [liquid/vapor]: kJ / mol / K
+          - residual specific enthalpy [liquid/vapor]: kJ / kg
+          - residual specific entropy [liquid/vapor]: kJ / kg / K
           - xi: liquid molefraction of component i
           - yi: vapor molefraction of component i
     """
@@ -719,6 +724,7 @@ def mix_vlle_diagram_feos(
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1]`
+        kij_matrix: A matrix of binary interaction parameters
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
