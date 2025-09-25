@@ -38,7 +38,7 @@ def training(workdir: str, config: dict):
     )
 
     xgb_param = {
-        "booster": "gblinear",
+        "booster": "gbtree",
         "objective": "reg:squaredlogerror",
         "eval_metric": ["mape", "rmsle"],
         "device": "cuda",

@@ -90,6 +90,7 @@ class GNNePCSAFTL(L.LightningModule):
         zeros = torch.zeros_like(ape)
         loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
+
         self.log(
             "train_huber",
             loss,
@@ -321,7 +322,7 @@ class HabitchNNL(L.LightningModule):
 
         self.config = config
 
-        self.model = HabitchNN(3085)
+        self.model = HabitchNN(2**14 + 3 + 10)
 
     # pylint: disable=W0221
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -351,10 +352,10 @@ class HabitchNNL(L.LightningModule):
             "optimizer": opt,
             "lr_scheduler": {
                 "scheduler": CosineAnnealingWarmRestarts(
-                    opt, self.config["warmup_steps"]
+                    opt, self.config["warmup_steps"], T_mult=2, eta_min=1e-6
                 ),
-                "interval": "step",
-                "frequency": 1,
+                "interval": "epoch",
+                "frequency": 10,
             },
         }
 
@@ -376,6 +377,7 @@ class HabitchNNL(L.LightningModule):
         zeros = torch.zeros_like(ape)
         loss = F.huber_loss(ape, zeros, delta=0.01)  # huber with ape
         loss_mape = mape(pred, target)
+
         self.log(
             "train_huber",
             loss,

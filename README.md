@@ -1,10 +1,10 @@
 # GNNePCSAFT Project
 
-The project focuses on using Graph Neural Networks ([GNN](https://en.wikipedia.org/wiki/Graph_neural_network)) to estimate the pure-component parameters of the Equation of State [ePC-SAFT](https://en.wikipedia.org/wiki/PC-SAFT).
+The project focuses on using Graph Neural Networks ([GNN](https://en.wikipedia.org/wiki/Graph_neural_network)) to estimate the pure-component parameters of the Equation of State [PC-SAFT](https://en.wikipedia.org/wiki/PC-SAFT).
 
-This work is motivated by the need to use a robust Equation of State, ePC-SAFT, without the need for experimental data. Equations of State are important for calculating thermodynamic properties and are prerequisites in process simulators.
+This work is motivated by the need to use a robust Equation of State, PC-SAFT, without the need for experimental data. Equations of State are important for calculating thermodynamic properties and are prerequisites in process simulators.
 
-Currently, the model takes into account the hard-chain, dispersive, and associative terms of ePC-SAFT. Future work on polar and ionic terms is being studied.
+Currently, the model takes into account the hard-chain, dispersive, and associative terms of PC-SAFT. Future work on polar and ionic terms is being studied.
 
 Code is being developed mainly in Pytorch ([PyG](https://pytorch-geometric.readthedocs.io/en/latest/index.html#)).
 

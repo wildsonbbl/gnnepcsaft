@@ -22,11 +22,11 @@ def get_config():
 
     config.accelerator = "auto"
     config.batch_size = 512
-    config.num_train_steps = 800_000
+    config.num_train_steps = 3_700_000
     config.log_every_steps = 1000
     config.eval_every_steps = 2500
     config.dataset = "esper"
-    config.checkpoint = "wildson/gnn-pc-saft/model-04dheqbz:v1"  # wandb artifact path
+    config.checkpoint = "wildson/gnn-pc-saft/model-vxdhhvp9:v0"  # wandb artifact path
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
     config.model_name = "gatv2_msigmae_1.1"
@@ -40,8 +40,9 @@ def get_config():
     config.dropout = 0.25
     config.add_self_loops = True
     config.num_para = 3
+    ## PNA
+    config.deg = []
     ## GAT, GATv2, TransformerConv
     config.heads = 8  # hidden_dim % heads == 0
-    config.deg = []
 
     return config

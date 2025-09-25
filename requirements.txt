@@ -27,3 +27,4 @@ xgboost
 onnx
 onnxscript
 onnxruntime
+plotly

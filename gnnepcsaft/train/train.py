@@ -299,9 +299,6 @@ def main(argv):
         run_config = train.RunConfig(
             name="gnnpcsaft",
             storage_path=None,
-            progress_reporter=None,
-            log_to_file=False,
-            stop=None,
             callbacks=(None),
         )
         trainer = TorchTrainer(
