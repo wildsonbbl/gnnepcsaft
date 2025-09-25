@@ -475,7 +475,7 @@ def phase_diagram_feos(
     parameters: List[float], state: List[float]
 ) -> Dict[str, List[float]]:
     """
-    Calculates phase diagram from
+    Calculates pure component phase diagram from
     state temperature up to the critical temperature with PCSAFT.
 
     Args:
@@ -541,8 +541,9 @@ def henry_constant_feos(
     density_initialization: Optional[str] = None,
 ) -> np.ndarray:
     """
-    Calculates Henry's constant of every solute at
+    Calculates Henry's constant (Pa) of every solute at
     state temperature and pressure with PCSAFT.
+    Solute at x_i = 0.0 and solvents at x_i > 0.0.
 
     Args:
         parameters: A list of
@@ -551,6 +552,7 @@ def henry_constant_feos(
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        density_initialization: Initialization method for density ("liquid", "vapor", None)
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -564,7 +566,7 @@ def henry_constant_feos(
         density_initialization=density_initialization,
     )
 
-    return statenpt.henrys_law_constant(eos, t * si.KELVIN, x)
+    return statenpt.henrys_law_constant(eos, t * si.KELVIN, x) / si.PASCAL
 
 
 def mix_lle_diagram_feos(
@@ -747,9 +749,9 @@ def mix_isobaric_heat_capacity_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
-):
+) -> float:
     """
-    Calculates residual molar isobaric heat capacity with PCSAFT
+    Calculates mixture residual molar isobaric heat capacity (J / (mol*K)) with PCSAFT
 
     Args:
         parameters: A list of
@@ -771,7 +773,9 @@ def mix_isobaric_heat_capacity_feos(
         molefracs=x,
     )
 
-    return statenpt.molar_isobaric_heat_capacity(Contributions.Residual)
+    return statenpt.molar_isobaric_heat_capacity(Contributions.Residual) / (
+        si.JOULE / si.MOL / si.KELVIN
+    )
 
 
 def pure_surface_tension_feos(
