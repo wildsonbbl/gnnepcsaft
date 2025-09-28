@@ -1,4 +1,4 @@
-"""ePC-SAFT implementation with jax
+"""PC-SAFT implementation with jax
 ---------------
 Code reference: `https://github.com/zmeri/PC-SAFT`
 """

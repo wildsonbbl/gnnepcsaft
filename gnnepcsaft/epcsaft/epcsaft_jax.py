@@ -1,5 +1,5 @@
 """
-ePC-SAFT implementation with jax
+PC-SAFT implementation with jax
 ---------------
 Code reference: `https://github.com/zmeri/PC-SAFT`
 """
@@ -237,7 +237,7 @@ def xa_find(xa_guess, delta_ij, den, x):
 
 
 def ares_polar(x, t, den, params):
-    "Polar term for ePC-SAFT."
+    "Polar term for PC-SAFT."
 
     # Dipole term (Gross and Vrabec term) --------------------------------------
     # Gross, Joachim, e Jadran Vrabec. “An Equation-of-State Contribution for
@@ -357,7 +357,7 @@ def ares_polar(x, t, den, params):
 
 # pylint: disable=invalid-name
 def ares_assoc(x, t, den, params):
-    "Association term for ePC-SAFT."
+    "Association term for PC-SAFT."
 
     # Association term -------------------------------------------------------
     # 2B association type

@@ -1,4 +1,4 @@
 """
-Module for the epcsaft implementation for the GNN-ePC-SAFT project.
+Module for the pcsaft implementations for the GNN-ePC-SAFT project.
 
 """

@@ -1,4 +1,4 @@
-"Module to calculate properties with ePC-SAFT using TEQP."
+"Module to calculate properties with PC-SAFT using TEQP."
 
 import numpy as np
 import PCSAFTsuperanc
@@ -8,7 +8,7 @@ N_A = PCSAFTsuperanc.N_A * (1e-10) ** 3  # adjusted to angstron unit
 
 
 def pure_den_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calcules pure component density with ePC-SAFT."""
+    """Calcules pure component density with PC-SAFT."""
 
     t = state[0]  # Temperature, K
 
@@ -37,7 +37,7 @@ def pure_den_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
 
 
 def pure_vp_teqp(parameters: np.ndarray, state: np.ndarray) -> np.ndarray:
-    """Calculates pure component vapor pressure with ePC-SAFT."""
+    """Calculates pure component vapor pressure with PC-SAFT."""
 
     t = state[0]  # Temperature, K
     x = np.array([1.0])  # mole fraction
