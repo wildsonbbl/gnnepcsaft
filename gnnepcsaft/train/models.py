@@ -21,7 +21,7 @@ from .utils import rho_batch, vp_batch
 
 
 class GNNePCSAFTL(L.LightningModule):
-    """Graph neural network to predict ePCSAFT parameters with pytorch lightning."""
+    """Graph neural network to predict PCSAFT parameters with pytorch lightning."""
 
     def __init__(
         self,
@@ -157,7 +157,7 @@ class GNNePCSAFTL(L.LightningModule):
 
 
 class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
-    """Graph neural network to predict ePCSAFT parameters"""
+    """Graph neural network to predict PCSAFT parameters"""
 
     def __init__(self, config: dict):
         super().__init__()

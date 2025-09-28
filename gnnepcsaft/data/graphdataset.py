@@ -91,7 +91,7 @@ class ThermoMLDataset(InMemoryDataset):
 
 class Ramirez(InMemoryDataset):
     """
-    Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
+    Molecular Graph dataset creator/manipulator with `PC-SAFT` parameters from
     `Ramírez-Vélez et al. (2022, doi: 10.1002/aic.17722)`.
 
     PARAMETERS
@@ -154,7 +154,7 @@ class Ramirez(InMemoryDataset):
 
 class Esper(InMemoryDataset):
     """
-    Molecular Graph dataset creator/manipulator with `ePC-SAFT` parameters from
+    Molecular Graph dataset creator/manipulator with `PC-SAFT` parameters from
     `Esper et al. (2023, doi: 10.1021/acs.iecr.3c02255)`.
 
     PARAMETERS

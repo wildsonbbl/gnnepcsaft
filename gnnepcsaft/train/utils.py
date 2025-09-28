@@ -61,7 +61,7 @@ def calc_deg(dataset: str, workdir: str) -> List:
 
 
 def rhovp_data(parameters: List, rho: np.ndarray, vp: np.ndarray):
-    """Calculates density and vapor pressure with ePC-SAFT"""
+    """Calculates density and vapor pressure with PC-SAFT"""
 
     den_array = rho_single((parameters, rho))
     vp_array = vp_single((parameters, vp))
@@ -236,7 +236,7 @@ class CustomStopper(tune.Stopper):
 
 
 def rho_single(args: tuple[List, np.ndarray]) -> np.ndarray:
-    """Calculates density with ePC-SAFT for a single pararameter"""
+    """Calculates density with PC-SAFT for a single pararameter"""
     parameters, states = args
     rho_for_all_states = []
 
@@ -253,7 +253,7 @@ def rho_batch(
     parameters_batch: List[List[Any]], states_batch: List[np.ndarray]
 ) -> List[np.ndarray]:
     """
-    Calculates density with ePC-SAFT
+    Calculates density with PC-SAFT
     for a batch of parameters
     using nested multiprocessing
     """
@@ -269,7 +269,7 @@ def rho_batch(
 
 
 def vp_single(args: tuple[List, np.ndarray]) -> np.ndarray:
-    """Calculates vapor pressure with ePC-SAFT for a single parameter"""
+    """Calculates vapor pressure with PC-SAFT for a single parameter"""
     parameters, states = args
     vp_for_all_states = []
     for state in states:
@@ -285,7 +285,7 @@ def vp_batch(
     parameters_batch: List[List[Any]], states_batch: List[np.ndarray]
 ) -> List[np.ndarray]:
     """
-    Calculates vapor pressure with ePC-SAFT
+    Calculates vapor pressure with PC-SAFT
     for a batch of parameters
     using nested multiprocessing
     """
