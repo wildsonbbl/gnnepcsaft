@@ -125,7 +125,10 @@ def plotparams(
 
 
 def plot_binary_gibbs_energy(
-    params: List[List[float]], k_12: float, state: List[float]
+    params: List[List[float]],
+    state: List[float],
+    k_12: Optional[float] = None,
+    epsilon_a1b2: Optional[float] = None,
 ) -> None:
     """
     Plot the binary Gibbs energy for a given set of PCSAFT parameters and state.
@@ -134,21 +137,37 @@ def plot_binary_gibbs_energy(
         params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the two components.
-        k_12: Binary interaction parameter.
         state: List containing `[T_min (K), T_max (K), P (Pa)]` for the plot.
+        k_12: Binary interaction parameter.
+        epsilon_a1b2: Cross-association energy parameter (in K).
+
     """
     x = np.linspace(1e-5, 0.999, 100)
     t = np.linspace(state[0], state[1], 20).round(2)
     p = state[2]
 
-    kij_matrix = [
-        [0, k_12],
-        [k_12, 0],
-    ]
-
     def gibbs_at(tloc, xi):
         yi = 1 - xi
-        return mix_gibbs_energy(params, [tloc, p, xi, yi], kij_matrix)
+        return mix_gibbs_energy(
+            params,
+            [tloc, p, xi, yi],
+            kij_matrix=(
+                [
+                    [0.0, k_12],
+                    [k_12, 0.0],
+                ]
+                if k_12 is not None
+                else None
+            ),
+            epsilon_ab=(
+                [
+                    [0.0, epsilon_a1b2],
+                    [epsilon_a1b2, 0.0],
+                ]
+                if epsilon_a1b2 is not None
+                else None
+            ),
+        )
 
     for tloc in t:
         g = np.asarray(
@@ -167,7 +186,10 @@ def plot_binary_gibbs_energy(
 
 
 def plot_binary_lle_phase_diagram(
-    params: List[List[float]], k_12: float, state: List[float]
+    params: List[List[float]],
+    state: List[float],
+    k_12: Optional[float] = None,
+    epsilon_a1b2: Optional[float] = None,
 ) -> Tuple[Figure, List[Axes]]:
     """
     Plot the binary LLE phase diagram for a given set of PCSAFT parameters and state.
@@ -177,20 +199,34 @@ def plot_binary_lle_phase_diagram(
         params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the two components.
-        k_12: Binary interaction parameter.
         state:
          List containing initial state
          `[T (K), P (Pa), mole_fractions_1, mole_fractions_2]` for the plot.
+        k_12: Binary interaction parameter.
+        epsilon_a1b2: Cross-association energy parameter (in K).
+
 
     """
 
     dia_t = mix_lle_diagram_feos(
         params,
         state,
-        kij_matrix=[
-            [0, k_12],
-            [k_12, 0],
-        ],
+        kij_matrix=(
+            [
+                [0.0, k_12],
+                [k_12, 0.0],
+            ]
+            if k_12 is not None
+            else None
+        ),
+        epsilon_ab=(
+            [
+                [0.0, epsilon_a1b2],
+                [epsilon_a1b2, 0.0],
+            ]
+            if epsilon_a1b2 is not None
+            else None
+        ),
     )
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
@@ -227,7 +263,10 @@ def plot_binary_lle_phase_diagram(
 
 
 def plot_binary_vle_phase_diagram(
-    params: List[List[float]], k_12: float, state: List[float]
+    params: List[List[float]],
+    state: List[float],
+    k_12: Optional[float] = None,
+    epsilon_a1b2: Optional[float] = None,
 ) -> Tuple[Figure, List[Axes]]:
     """Plot binary VLE diagrams T–x–y and y-x.
 
@@ -238,8 +277,10 @@ def plot_binary_vle_phase_diagram(
     Args:
         params: List of PCSAFT parameters for the two components
             ``[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]``.
-        k_12: Binary interaction parameter (``k_ij``) between the two components.
         state: state pressure `[P (Pa)]`.
+        k_12: Binary interaction parameter (``k_ij``) between the two components.
+        epsilon_a1b2: Cross-association energy parameter (in K).
+
 
     Returns:
         fig: Matplotlib ``Figure`` instance.
@@ -249,10 +290,22 @@ def plot_binary_vle_phase_diagram(
     dia_t = mix_vle_diagram_feos(
         params,
         state,
-        kij_matrix=[
-            [0, k_12],
-            [k_12, 0],
-        ],
+        kij_matrix=(
+            [
+                [0, k_12],
+                [k_12, 0],
+            ]
+            if k_12 is not None
+            else None
+        ),
+        epsilon_ab=(
+            [
+                [0.0, epsilon_a1b2],
+                [epsilon_a1b2, 0.0],
+            ]
+            if epsilon_a1b2 is not None
+            else None
+        ),
     )
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
@@ -290,7 +343,10 @@ def plot_binary_vle_phase_diagram(
 
 
 def plot_ternary_gibbs_surface(
-    params: List[List[float]], kij_matrix: List[List[float]], state: List[float]
+    params: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> go.Figure:
     """
     Plot the ternary Gibbs energy surface for a given set of PCSAFT parameters and state.
@@ -299,12 +355,12 @@ def plot_ternary_gibbs_surface(
         params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the three components.
-        kij_matrix: 3x3 matrix of binary interaction parameters.
         state: List containing `[T (K), P (Pa)]` for the plot.
+        kij_matrix: 3x3 matrix of binary interaction parameters.
+        epsilon_ab: 3x3 matrix of cross-association energy parameters (in K).
+
 
     """
-    t = state[0]
-    p = state[1]
 
     # Malha de composições
     xi = np.linspace(1e-5, 0.999, 200, dtype=np.float64)
@@ -322,8 +378,9 @@ def plot_ternary_gibbs_surface(
     for i, j in valid_idx:
         z[i, j] = mix_gibbs_energy(
             params,
-            [t, p, x1[i, j].item(), x2[i, j].item(), x3[i, j].item()],
-            kij_matrix,
+            [state[0], state[1], x1[i, j].item(), x2[i, j].item(), x3[i, j].item()],
+            kij_matrix=kij_matrix,
+            epsilon_ab=epsilon_ab,
         )
 
     # Plot da superfície
@@ -343,7 +400,10 @@ def plot_ternary_gibbs_surface(
 
 
 def plot_ternary_lle_diagram(
-    params: List[List[float]], kij_matrix: List[List[float]], state: List[float]
+    params: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> go.Figure:
     """
     Plot the ternary LLE diagram for a given set of PCSAFT parameters and state.
@@ -352,11 +412,12 @@ def plot_ternary_lle_diagram(
         params: List of PCSAFT parameters
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
          for the three components.
-        kij_matrix: 3x3 matrix of binary interaction parameters.
         state: List containing `[T (K), P (Pa)]` for the plot.
+        kij_matrix: 3x3 matrix of binary interaction parameters.
+        epsilon_ab: 3x3 matrix of cross-association energy parameters (in K).
+
 
     """
-    t, p = state  # Temperatura (K) e pressão (Pa)
 
     def _grid(n_pts: int = 50):
         xi = np.linspace(1e-5, 0.999, n_pts, dtype=np.float64)
@@ -371,8 +432,15 @@ def plot_ternary_lle_diagram(
             try:
                 lle = mix_lle_feos(
                     params,
-                    [t, p, x1_m[i, j].item(), x2_m[i, j].item(), x3_m[i, j].item()],
-                    kij_matrix,
+                    [
+                        state[0],
+                        state[1],
+                        x1_m[i, j].item(),
+                        x2_m[i, j].item(),
+                        x3_m[i, j].item(),
+                    ],
+                    kij_matrix=kij_matrix,
+                    epsilon_ab=epsilon_ab,
                 )
             except (RuntimeError, ValueError):
                 continue
@@ -391,7 +459,9 @@ def plot_ternary_lle_diagram(
     if tl.size == 0:
         # Nada convergiu; evita IndexError e informa usuário.
         fig = go.Figure()
-        fig.update_layout(title=f"Nenhuma fase encontrada em T={t} K, P={p/1e5} bar")
+        fig.update_layout(
+            title=f"Nenhuma fase encontrada em T={state[0]} K, P={state[1]/1e5} bar"
+        )
 
         return fig
 
@@ -441,7 +511,7 @@ def plot_ternary_lle_diagram(
                 "ticks": "outside",
             },
         },
-        title=f"LLE Diagram at T={t} K and P={p/1e5} bar",
+        title=f"LLE Diagram at T={state[0]} K and P={state[1]/1e5} bar",
         width=800,
         height=800,
     )
