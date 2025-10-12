@@ -129,7 +129,7 @@ def plot_binary_gibbs_energy(
     state: List[float],
     k_12: Optional[float] = None,
     epsilon_a1b2: Optional[float] = None,
-) -> None:
+) -> Figure:
     """
     Plot the binary Gibbs energy for a given set of PCSAFT parameters and state.
 
@@ -169,6 +169,7 @@ def plot_binary_gibbs_energy(
             ),
         )
 
+    fig = plt.figure(figsize=(8, 6))
     for tloc in t:
         g = np.asarray(
             Parallel(n_jobs=-1, backend="loky")(delayed(gibbs_at)(tloc, xi) for xi in x)
@@ -182,7 +183,7 @@ def plot_binary_gibbs_energy(
     plt.legend(t, title="T (K)", bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.xlabel("x1")
     plt.ylabel(r"$g_{mix}$")
-    plt.show()
+    return fig
 
 
 def plot_binary_lle_phase_diagram(
