@@ -7,10 +7,9 @@ from typing import Dict, List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
-from gnnepcsaft_mcp_server.utils import batch_predict_epcsaft_parameters
 from matplotlib.axes import Axes
 
-from ..data.rdkit_util import mw, smilestoinchi
+from ..data.rdkit_util import smilestoinchi
 from .epcsaft_feos import mix_tp_flash_feos
 
 
@@ -18,7 +17,7 @@ from .epcsaft_feos import mix_tp_flash_feos
 def co2_binary_px(
     smiles: List[str],
     data: pl.DataFrame,
-    inchi_to_mu: Dict[str, float],
+    inchi_to_params: Dict[str, List[float]],
     k_12: Optional[float] = None,
     epsilon_a1b2: Optional[float] = None,
     feed_x1: float = 0.5,
@@ -28,13 +27,14 @@ def co2_binary_px(
     Args:
         smiles (List[str]): List of two SMILES strings.
         data (pl.DataFrame): Polars DataFrame containing ThermoML data.
-        inchi_to_mu (Dict[str, float]): Dictionary mapping InChI strings to dipole moments.
+        inchi_to_params (Dict[str, List[float]]): Dictionary mapping
+         InChI strings to PC-SAFT parameters.
         k_12 (Optional[float]): Binary interaction parameter between CO2 and solvent.
         epsilon_a1b2 (Optional[float]): Association energy parameter between CO2 and solvent.
         feed_x1 (float): Feed mole fraction of CO2 in the liquid phase.
     """
 
-    params = _retrieve_pcsaft_params(smiles, inchi_to_mu)
+    params = [inchi_to_params[smilestoinchi(smi)] for smi in smiles]
 
     kij_matrix = (
         [
@@ -120,24 +120,10 @@ def co2_binary_px(
     return fig, axs
 
 
-def _retrieve_pcsaft_params(
-    smiles: List[str], inchi_to_mu: Dict[str, float]
-) -> List[List[float]]:
-    params = batch_predict_epcsaft_parameters(smiles)
-    for i, smi in enumerate(smiles):
-        params[i].append(mw(smilestoinchi(smi)))
-        if params[i][-1] > 0 and params[i][-2] > 0:
-            continue
-        params[i][5] = inchi_to_mu.get(smilestoinchi(smi), 0.0)
-        params[i][4] /= 2
-        print(f"{smi}: mu = {params[i][5]:.4f} D")
-    return params
-
-
 def co2_ternary_px(
     smiles: List[str],
     data: pl.DataFrame,
-    inchi_to_mu: Dict[str, float],
+    inchi_to_params: Dict[str, List[float]],
     kij_matrix: Optional[List[List[float]]] = None,
     epsilon_ab: Optional[List[List[float]]] = None,
 ):
@@ -147,13 +133,14 @@ def co2_ternary_px(
     Args:
         smiles (List[str]): List of three SMILES strings.
         data (pl.DataFrame): Polars DataFrame containing ThermoML VLE data.
-        inchi_to_mu (Dict[str, float]): Dictionary mapping InChI strings to dipole moments.
+        inchi_to_params (Dict[str, List[float]]): Dictionary mapping
+         InChI strings to PC-SAFT parameters.
         kij_matrix (Optional[List[List[float]]]): Binary interaction parameter matrix.
         epsilon_ab (Optional[List[List[float]]]): Association energy parameter matrix.
 
     """
 
-    params = _retrieve_pcsaft_params(smiles, inchi_to_mu)
+    params = [inchi_to_params[smilestoinchi(smi)] for smi in smiles]
 
     vle = data.filter(
         pl.col("inchi1").is_in([smilestoinchi(smi) for smi in smiles]),
