@@ -28,3 +28,4 @@ onnx
 onnxscript
 onnxruntime
 plotly
+gnnepcsaft-mcp-server
