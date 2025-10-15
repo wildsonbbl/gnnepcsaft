@@ -11,7 +11,7 @@ from tqdm import tqdm
 from .epcsaft_feos import mix_tp_flash_feos
 
 
-def optimize_kij(
+def optimize_kij(  # pylint: disable=too-many-locals
     binary_vle_tml: pl.DataFrame, inchi_to_params: Dict[str, List[float]]
 ) -> pl.DataFrame:
     """Optimize binary interaction parameters (kij) for mixtures using VLE data."""
