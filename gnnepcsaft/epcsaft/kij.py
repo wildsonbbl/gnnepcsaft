@@ -16,7 +16,7 @@ def optimize_kij(
 ) -> pl.DataFrame:
     """Optimize binary interaction parameters (kij) for mixtures using VLE data."""
 
-    k_12_data = {"inchi1": [], "inchi2": [], "k_12": [], "loss": []}
+    k_12_data = {"inchi1": [], "inchi2": [], "k_12": [], "loss": [], "loss_nonan": []}
     unique_inchis = binary_vle_tml.select("inchi1", "inchi2").unique()
     for row in tqdm(unique_inchis.iter_rows(named=True), total=unique_inchis.shape[0]):
         vle = binary_vle_tml.filter(
@@ -60,9 +60,31 @@ def optimize_kij(
                     for T, P, feed_x1 in zip(temperature, pressure, x1)
                 )
             )
-            loss = np.log((pred_x1 + 1e-6) / (x1 + 1e-6))
+            loss = np.log((pred_x1 + 1e-6) / (x1 + 1e-6)) ** 2
             loss[np.isnan(loss)] = 1.0
             return loss.mean()
+
+        def _loss_fn_nonan(
+            k_12: float,
+            params: List[List[float]],
+            x1: np.ndarray,
+            temperature: np.ndarray,
+            pressure: np.ndarray,
+            _pred_x1: Callable[..., float],
+        ) -> float:
+            pred_x1 = np.asarray(
+                Parallel(n_jobs=-1)(
+                    delayed(_pred_x1)(T, P, k_12, params, feed_x1)
+                    for T, P, feed_x1 in zip(temperature, pressure, x1)
+                )
+            )
+            loss = np.log((pred_x1 + 1e-6) / (x1 + 1e-6))
+            loss = loss[~np.isnan(loss)]
+
+            if loss.size == 0:
+                return 1.0
+
+            return np.abs(loss).mean()
 
         res = least_squares(
             fun=_loss_fn,
@@ -125,9 +147,12 @@ def optimize_kij(
                 k_12 = res.x.item()
                 loss = abs(res.fun.item())
 
+        loss_nonan = _loss_fn_nonan(k_12, params, x1, temperature, pressure, _pred_x1)
+
         k_12_data["inchi1"].append(row["inchi1"])
         k_12_data["inchi2"].append(row["inchi2"])
         k_12_data["k_12"].append(k_12)
         k_12_data["loss"].append(loss)
+        k_12_data["loss_nonan"].append(loss_nonan)
 
     return pl.DataFrame(k_12_data)
