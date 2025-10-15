@@ -183,7 +183,9 @@ def co2_ternary_px(
 
     temperatures = (
         vle.filter(
-            pl.col(x1_name).is_not_null(),
+            pl.col(x1_name) > 1e-10,
+            pl.col(x2_name) > 1e-10,
+            pl.col(x3_name) > 1e-10,
         )
         .select("T_K")
         .sort("T_K")
@@ -203,6 +205,9 @@ def co2_ternary_px(
             vle.filter(
                 pl.col(x1_name).is_not_null(),
                 pl.col("T_K") == t,
+                pl.col(x1_name) > 1e-10,
+                pl.col(x2_name) > 1e-10,
+                pl.col(x3_name) > 1e-10,
             )
             .sort("P_kPa")
             .iter_rows(named=True)
