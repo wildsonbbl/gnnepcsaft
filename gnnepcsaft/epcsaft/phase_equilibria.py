@@ -10,7 +10,7 @@ import polars as pl
 from matplotlib.axes import Axes
 
 from ..data.rdkit_util import smilestoinchi
-from .epcsaft_feos import mix_tp_flash_feos
+from .epcsaft_feos import mix_tp_flash_feos, pure_vp_feos
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
@@ -57,7 +57,7 @@ def co2_binary_px(
     vle = data.filter(
         pl.col("inchi1").is_in([smilestoinchi(smi) for smi in smiles]),
         pl.col("inchi2").is_in([smilestoinchi(smi) for smi in smiles]),
-        pl.col("P_kPa") < 2000.0,
+        pl.col("mole_fraction_c1p2").is_not_null(),
     )
 
     x1_name = (
@@ -66,16 +66,7 @@ def co2_binary_px(
         else "mole_fraction_c2p2"
     )
 
-    temperatures = (
-        vle.filter(
-            pl.col(x1_name).is_not_null(),
-        )
-        .select("T_K")
-        .sort("T_K")
-        .unique("T_K")
-        .to_series()
-        .to_list()
-    )
+    temperatures = vle.select("T_K").sort("T_K").unique("T_K").to_series().to_list()
     if len(temperatures) == 0:
         raise ValueError("No data available for the given SMILES.")
     fig, axs = plt.subplots(len(temperatures), 1, figsize=(6, 4 * len(temperatures)))
@@ -86,9 +77,18 @@ def co2_binary_px(
         exp_x = []
         pred_x = []
         pressures = []
+        vp = (
+            (
+                pure_vp_feos(
+                    parameters=inchi_to_params["InChI=1S/CO2/c2-1-3"], state=[t]
+                )
+                / 1e3
+            )
+            if t < 304.2
+            else 7377.3
+        )
         for row in (
             vle.filter(
-                pl.col(x1_name).is_not_null(),
                 pl.col("T_K") == t,
             )
             .sort("P_kPa")
@@ -112,6 +112,7 @@ def co2_binary_px(
             pressures.append(row["P_kPa"])
         ax.plot(pressures, exp_x, "x", color="black", label="Exp")
         ax.plot(pressures, pred_x, "o-", color="r", label="Pred")
+        ax.axvline(vp, color="gray", linestyle="--", label="CO2 Vapor Pressure")
         ax.set_xlabel("Pressure (kPa)")
         ax.set_ylabel("Mole Fraction CO2 in Liquid Phase")
         ax.set_title(f"T = {t} K")
