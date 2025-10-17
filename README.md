@@ -1,5 +1,7 @@
 # GNNePCSAFT Project
 
+[![DOI](https://zenodo.org/badge/609414994.svg)](https://doi.org/10.5281/zenodo.17371237)
+
 The project focuses on using Graph Neural Networks ([GNN](https://en.wikipedia.org/wiki/Graph_neural_network)) to estimate the pure-component parameters of the Equation of State [PC-SAFT](https://en.wikipedia.org/wiki/PC-SAFT).
 
 This work is motivated by the need to use a robust Equation of State, PC-SAFT, without the need for experimental data. Equations of State are important for calculating thermodynamic properties and are prerequisites in process simulators.
