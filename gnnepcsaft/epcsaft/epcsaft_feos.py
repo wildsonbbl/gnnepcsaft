@@ -14,7 +14,10 @@ from feos.eos import (  # type: ignore # pylint: disable = E0401
     State,
 )
 from feos.pcsaft import (  # type: ignore # pylint: disable = E0401
+    BinaryRecord,
     Identifier,
+    IdentifierOption,
+    PcSaftBinaryRecord,
     PcSaftParameters,
     PcSaftRecord,
     PureRecord,
@@ -37,6 +40,7 @@ def pc_saft(parameters: List[float]) -> EquationOfState.pcsaft:
 def pc_saft_mixture(
     mixture_parameters: List[List[float]],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> EquationOfState.pcsaft:
     """
     Returns a PCSAFT equation of state.
@@ -46,15 +50,43 @@ def pc_saft_mixture(
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
          for each component of the mixture
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
     records = get_records(mixture_parameters)
 
-    if kij_matrix:
-        binary_records = np.asarray(kij_matrix, dtype=np.float64)
+    def _create_binary_record(
+        i: int, j: int, kij: Optional[float] = None, eps_ab: Optional[float] = None
+    ) -> BinaryRecord:
+        """Helper function to create a binary record."""
+        kwargs = {}
+        if kij is not None:
+            kwargs["k_ij"] = kij
+        if eps_ab is not None:
+            kwargs["epsilon_k_ab"] = eps_ab
+
+        return BinaryRecord(
+            id1=Identifier(smiles=f"SMILES_{i}", inchi=f"InChI_{i}"),
+            id2=Identifier(smiles=f"SMILES_{j}", inchi=f"InChI_{j}"),
+            model_record=PcSaftBinaryRecord(**kwargs),
+        )
+
+    binary_records = None
+    if kij_matrix or epsilon_ab:
+        binary_records = [
+            _create_binary_record(
+                i,
+                j,
+                kij=kij_matrix[i][j] if kij_matrix else None,
+                eps_ab=epsilon_ab[i][j] if epsilon_ab else None,
+            )
+            for i in range(len(records))
+            for j in range(len(records))
+            if i != j
+        ]
     else:
-        binary_records = np.zeros((len(records), len(records)), dtype=np.float64)
+        binary_records = None
     pcsaftparameters = PcSaftParameters.from_records(
-        records, binary_records=binary_records
+        records, binary_records=binary_records, identifier_option=IdentifierOption.Inchi
     )
     eos = EquationOfState.pcsaft(pcsaftparameters)
     return eos
@@ -98,6 +130,7 @@ def mix_gibbs_energy(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ):
     """
     Calculates mixture `Molar Gibbs Energy/RT` with PCSAFT.
@@ -109,10 +142,11 @@ def mix_gibbs_energy(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    excess_g = mix_e_gibbs_energy(parameters, state, kij_matrix)
+    excess_g = mix_e_gibbs_energy(parameters, state, kij_matrix, epsilon_ab)
 
     return excess_g + np.sum(x * np.log(x))
 
@@ -121,6 +155,7 @@ def mix_ln_fugacity_coefficient_pure(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ):
     """
     Calculates mixture `ln(fugacity coefficient)` with PCSAFT for each pure component.
@@ -132,13 +167,14 @@ def mix_ln_fugacity_coefficient_pure(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
 
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    eos = pc_saft_mixture(parameters, kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
 
     statenpt = State(
         eos,
@@ -155,6 +191,7 @@ def mix_ln_activity_coefficient(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> List[float]:
     """
     Calculates mixture `ln(activity coefficient)` with PCSAFT for each component.
@@ -166,13 +203,14 @@ def mix_ln_activity_coefficient(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
 
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    eos = pc_saft_mixture(parameters, kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
 
     statenpt = State(
         eos,
@@ -189,6 +227,7 @@ def mix_e_gibbs_energy(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> float:
     """
     Calculates mixture `Molar Excess Gibbs Energy/RT` with PCSAFT.
@@ -200,17 +239,21 @@ def mix_e_gibbs_energy(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
 
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    return np.sum(mix_ln_activity_coefficient(parameters, state, kij_matrix) * x)
+    return np.sum(
+        mix_ln_activity_coefficient(parameters, state, kij_matrix, epsilon_ab) * x
+    )
 
 
 def mix_ln_fugacity_coefficient(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> List[float]:
     """
     Calculates mixture `ln(fugacity coefficient)` with PCSAFT for each component.
@@ -222,12 +265,13 @@ def mix_ln_fugacity_coefficient(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    eos = pc_saft_mixture(parameters, kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
 
     statenpt = State(
         eos,
@@ -244,6 +288,7 @@ def mix_r_gibbs_energy(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> float:
     """
     Calculates mixture `Molar Residual Gibbs Energy/RT` with PCSAFT.
@@ -255,15 +300,19 @@ def mix_r_gibbs_energy(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
-    return np.sum(mix_ln_fugacity_coefficient(parameters, state, kij_matrix) * x)
+    return np.sum(
+        mix_ln_fugacity_coefficient(parameters, state, kij_matrix, epsilon_ab) * x
+    )
 
 
 def mix_den_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> float:
     """
     Calculates mixture liquid density (mol/m³) with PCSAFT.
@@ -275,13 +324,14 @@ def mix_den_feos(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
 
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    eos = pc_saft_mixture(parameters, kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
 
     statenpt = State(
         eos,
@@ -326,6 +376,7 @@ def mix_vp_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> Tuple[float, float]:
     """
     Calculates mixture `(Bubble point (Pa), Dew point (Pa))` with PCSAFT.
@@ -337,12 +388,13 @@ def mix_vp_feos(
         state: A list with
          `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
 
     t = state[0]  # Temperature, K
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
 
     vle_bubble_point = PhaseEquilibrium.bubble_point(
         eos, temperature_or_pressure=t * si.KELVIN, liquid_molefracs=x
@@ -506,6 +558,7 @@ def mix_tp_flash_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> PhaseEquilibrium:
     """
     Calculates mixture phase equilibrium at
@@ -518,11 +571,12 @@ def mix_tp_flash_feos(
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
     x = np.asarray(state[2:])  # mole fractions
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     tp_flash = PhaseEquilibrium.tp_flash(
         eos,
         temperature=t * si.KELVIN,
@@ -538,6 +592,7 @@ def henry_constant_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
     density_initialization: Optional[str] = None,
 ) -> np.ndarray:
     """
@@ -552,12 +607,13 @@ def henry_constant_feos(
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
         density_initialization: Initialization method for density ("liquid", "vapor", None)
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
     x = np.asarray(state[2:])  # mole fractions
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     statenpt = State(
         eos,
         temperature=t * si.KELVIN,
@@ -573,6 +629,7 @@ def mix_lle_diagram_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> Dict[str, List[float]]:
     """
     Calculates mixture LLE phase diagram at
@@ -585,6 +642,7 @@ def mix_lle_diagram_feos(
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
         output (Dict):
@@ -603,7 +661,7 @@ def mix_lle_diagram_feos(
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
     x = np.asarray(state[2:])  # mole fractions
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.lle(
         eos,
         temperature_or_pressure=p * si.PASCAL,
@@ -623,6 +681,7 @@ def mix_lle_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> Dict[str, List[float]]:
     """
     Calculates mixture LLE at state pressure and temperature with PCSAFT.
@@ -634,6 +693,7 @@ def mix_lle_feos(
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
         output (Dict):
@@ -652,7 +712,7 @@ def mix_lle_feos(
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
     x = np.asarray(state[2:])  # mole fractions
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.lle(
         eos,
         temperature_or_pressure=p * si.PASCAL,
@@ -672,6 +732,7 @@ def mix_vle_diagram_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLE phase diagram at
@@ -684,6 +745,7 @@ def mix_vle_diagram_feos(
         state:
          A list with `[Pressure (Pa)]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
         output (Dict):
@@ -699,7 +761,7 @@ def mix_vle_diagram_feos(
           - yi: vapor molefraction of component i
     """
     p = state[0]  # Pressure, Pa
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.binary_vle(
         eos,
         temperature_or_pressure=p * si.PASCAL,
@@ -715,6 +777,7 @@ def mix_vlle_diagram_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLLE phase diagram at
@@ -727,11 +790,12 @@ def mix_vlle_diagram_feos(
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
     x = np.asarray(state[2])  # mole fractions
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.binary_vlle(
         eos,
         temperature_or_pressure=p * si.PASCAL,
@@ -749,6 +813,7 @@ def mix_isobaric_heat_capacity_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
 ) -> float:
     """
     Calculates mixture residual molar isobaric heat capacity (J / (mol*K)) with PCSAFT
@@ -760,11 +825,12 @@ def mix_isobaric_heat_capacity_feos(
         state:
           A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
     x = np.asarray(state[2:])  # mole fractions
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix)
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
 
     statenpt = State(
         eos,
