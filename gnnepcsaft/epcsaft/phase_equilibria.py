@@ -15,7 +15,7 @@ from .epcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
 def co2_binary_px(
-    smiles: List[str],
+    inchis: List[str],
     data: pl.DataFrame,
     inchi_to_params: Dict[str, List[float]],
     k_12: Optional[float] = None,
@@ -24,7 +24,7 @@ def co2_binary_px(
     """Plot CO2 solubility in solvent from ThermoML data and GNNePCSAFT predictions.
 
     Args:
-        smiles (List[str]): List of two SMILES strings.
+        inchis (List[str]): List of two InChI strings.
         data (pl.DataFrame): Polars DataFrame containing ThermoML data.
         inchi_to_params (Dict[str, List[float]]): Dictionary mapping
          InChI strings to PC-SAFT parameters.
@@ -33,7 +33,7 @@ def co2_binary_px(
         feed_x1 (float): Feed mole fraction of CO2 in the liquid phase.
     """
 
-    params = [inchi_to_params[smilestoinchi(smi)] for smi in smiles]
+    params = [inchi_to_params[inchi] for inchi in inchis]
 
     kij_matrix = (
         [
@@ -54,20 +54,18 @@ def co2_binary_px(
     )
 
     vle = data.filter(
-        pl.col("inchi1").is_in([smilestoinchi(smi) for smi in smiles]),
-        pl.col("inchi2").is_in([smilestoinchi(smi) for smi in smiles]),
+        pl.col("inchi1").is_in(inchis),
+        pl.col("inchi2").is_in(inchis),
         pl.col("mole_fraction_c1p2").is_not_null(),
     )
 
     x1_name = (
-        "mole_fraction_c1p2"
-        if vle["inchi1"][0] == smilestoinchi(smiles[0])
-        else "mole_fraction_c2p2"
+        "mole_fraction_c1p2" if vle["inchi1"][0] == inchis[0] else "mole_fraction_c2p2"
     )
 
     temperatures = vle.select("T_K").sort("T_K").unique("T_K").to_series().to_list()
     if len(temperatures) == 0:
-        raise ValueError("No data available for the given SMILES.")
+        raise ValueError("No data available for the given InChIs.")
     fig, axs = plt.subplots(len(temperatures), 1, figsize=(6, 4 * len(temperatures)))
     if isinstance(axs, Axes):
         axs = [axs]
@@ -210,6 +208,7 @@ def co2_ternary_px(
     if isinstance(axs, Axes):
         axs = [axs]
     axs: List[Axes]
+    feed_x1s = np.linspace(1e-5, 0.99, 10)
     for ax, t in zip(axs, temperatures):
         exp_x = []
         pred_x = []
@@ -225,28 +224,45 @@ def co2_ternary_px(
             .sort("P_kPa")
             .iter_rows(named=True)
         ):
-            try:
-                pred_xi = (
-                    mix_tp_flash_feos(
-                        params,
-                        [
+            pred_x1 = np.nan
+            for feed_x1 in feed_x1s:
+                try:
+                    if not is_stable_feos(
+                        parameters=params,
+                        state=[
                             t,
                             row["P_kPa"] * 1e3,
-                            2.0,
+                            feed_x1,
                             row[x2_name],
                             row[x3_name],
                         ],
-                        kij_matrix,
-                        epsilon_ab,
-                    )
-                    .liquid.molefracs[0]
-                    .item()
-                )
-            except RuntimeError:
-                print(row[x3_name], row[x2_name], t, row["P_kPa"])
-                pred_xi = np.nan
+                        kij_matrix=kij_matrix,
+                        epsilon_ab=epsilon_ab,
+                        density_initialization=None,
+                    ):
+                        flash = mix_tp_flash_feos(
+                            params,
+                            [
+                                t,
+                                row["P_kPa"] * 1e3,
+                                feed_x1,
+                                row[x2_name],
+                                row[x3_name],
+                            ],
+                            kij_matrix=kij_matrix,
+                            epsilon_ab=epsilon_ab,
+                        )
+
+                        pred_x1 = (
+                            flash.liquid.molefracs[0].item()
+                            if flash.liquid.density > flash.vapor.density
+                            else flash.vapor.molefracs[0].item()
+                        )
+                        break
+                except RuntimeError:
+                    continue
             exp_x.append(row[x1_name])
-            pred_x.append(pred_xi)
+            pred_x.append(pred_x1)
             pressures.append(row["P_kPa"])
         ax.plot(pressures, exp_x, "x", color="black", label="Exp")
         ax.plot(pressures, pred_x, "o-", color="r", label="Pred")
