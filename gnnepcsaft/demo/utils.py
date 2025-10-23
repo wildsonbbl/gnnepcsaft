@@ -103,25 +103,38 @@ def plotdata(
 
     pred_den_list, pred_vp_list = _predict_rho_vp(inchi, list_params, gh.rho, gh.vp)
 
-    _plot_vapor_pressure(inchi, molecule_name, models, gh.vp, pred_vp_list)
-    _plot_density(inchi, molecule_name, models, gh.rho, pred_den_list)
+    _plot_vapor_pressure(molecule_name, gh.vp, pred_vp_list)
+    _plot_density(molecule_name, gh.rho, pred_den_list)
     _save_molecule_image(inchi, molecule_name)
 
 
 def plotparams(
-    smiles: List[str],
+    smiles: List[List[str]],
     models: List[Union[GNNePCSAFT, HabitchNN]],
-    xlabel: str = "CnHn+2",
-) -> None:
+    list_xlabel: List[str],
+) -> Tuple[Figure, List[Axes]]:
     """Plot parameter behavior vs chain length."""
     _ensure_images_directory()
 
-    list_array_params = _predict_params_from_smiles(smiles, models)
-    x = np.arange(2, len(smiles) + 2)
+    list_array_params = [
+        _predict_params_from_smiles(list_smiles, models) for list_smiles in smiles
+    ]
+    x = np.arange(2, len(smiles[0]) + 2)
 
-    _plot_parameter_m(x, list_array_params, xlabel, len(models))
-    _plot_parameter_sigma(x, list_array_params, xlabel, len(models))
-    _plot_parameter_epsilon(x, list_array_params, xlabel, len(models))
+    fig, axs = plt.subplots(len(smiles), 3, figsize=(6 * 3, 6 * len(smiles)))
+    for i in range(len(smiles)):
+        plt.sca(axs[i, 0])
+        _plot_parameter_m(x, list_array_params[i], list_xlabel[i])
+
+        plt.sca(axs[i, 1])
+        _plot_parameter_sigma(x, list_array_params[i], list_xlabel[i])
+
+        plt.sca(axs[i, 2])
+        _plot_parameter_epsilon(x, list_array_params[i], list_xlabel[i])
+    fig.tight_layout()
+    _save_plot("parameters.png")
+
+    return fig, axs
 
 
 def plot_binary_gibbs_energy(
@@ -688,9 +701,7 @@ def _predict_rho_vp(
 
 # Plotting helper functions
 def _plot_density(
-    inchi: str,
     molecule_name: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
     rho: np.ndarray,
     pred_den_list: List[np.ndarray],
 ) -> None:
@@ -703,6 +714,7 @@ def _plot_density(
 
     if rho_filtered.shape[0] == 0:
         return
+    _ = plt.figure()
 
     idx = np.argsort(rho_filtered[:, 0], 0)
     x = rho_filtered[idx, 0]
@@ -715,20 +727,19 @@ def _plot_density(
         y_pred = pred_den_filtered[idx]
         _line_plot(x, y_pred, MARKERS[i])
 
-    _customize_plot(inchi, "linear", "Density (mol / m³)", len(models))
+    _customize_plot("linear", "Density (mol / m³)")
     _save_plot(f"den_{molecule_name}.png")
 
 
 def _plot_vapor_pressure(
-    inchi: str,
     molecule_name: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
     vp: np.ndarray,
     pred_vp_list: List[np.ndarray],
 ) -> None:
     """Plot vapor pressure data."""
     if np.all(vp == np.zeros_like(vp)):
         return
+    _ = plt.figure()
 
     idx = np.argsort(vp[:, 0], 0)
     x = vp[idx, 0]
@@ -740,36 +751,37 @@ def _plot_vapor_pressure(
         y_pred = pred_vp[idx] / 100000
         _line_plot(x, y_pred, MARKERS[i])
 
-    _customize_plot(inchi, "log", "Vapor pressure (bar)", len(models))
+    _customize_plot("log", "Vapor pressure (bar)")
     _save_plot(f"vp_{molecule_name}.png")
 
 
 def _plot_parameter_m(
-    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str, n_models: int
+    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str
 ) -> None:
     """Plot parameter m vs chain length."""
     for i, array_params in enumerate(list_array_params):
         y = array_params[:, 0]
         _scatter_plot(x, y, MARKERS_2[i], None)
 
-    _customize_plot_params(xlabel=xlabel, ylabel=r"$m$", n=n_models)
-    _save_plot(f"m_{xlabel}.png")
+    _customize_plot_params(
+        xlabel=xlabel,
+        ylabel=r"$m$",
+    )
 
 
 def _plot_parameter_sigma(
-    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str, n_models: int
+    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str
 ) -> None:
     """Plot parameter sigma vs chain length."""
     for i, array_params in enumerate(list_array_params):
         y = array_params[:, 0] * array_params[:, 1] ** 3
         _scatter_plot(x, y, MARKERS_2[i], None)
 
-    _customize_plot_params(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$", n=n_models)
-    _save_plot(f"sigma_{xlabel}.png")
+    _customize_plot_params(xlabel=xlabel, ylabel=r"$m \cdot \sigma³ (Å³)$")
 
 
 def _plot_parameter_epsilon(
-    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str, n_models: int
+    x: np.ndarray, list_array_params: List[np.ndarray], xlabel: str
 ) -> None:
     """Plot parameter epsilon vs chain length."""
     for i, array_params in enumerate(list_array_params):
@@ -777,9 +789,9 @@ def _plot_parameter_epsilon(
         _scatter_plot(x, y, MARKERS_2[i], None)
 
     _customize_plot_params(
-        xlabel=xlabel, ylabel=r"$m \cdot \mu k_b^{-1} (K)$", n=n_models
+        xlabel=xlabel,
+        ylabel=r"$m \cdot \mu k_b^{-1} (K)$",
     )
-    _save_plot(f"e_{xlabel}.png")
 
 
 # Basic plotting utilities
@@ -807,29 +819,18 @@ def plot_linear_fit(x: np.ndarray, y: np.ndarray, marker: str) -> None:
     )
 
 
-def _customize_plot(
-    inchi: str, scale: str = "linear", ylabel: str = "", n: int = 2
-) -> None:
+def _customize_plot(scale: str = "linear", ylabel: str = "") -> None:
     """Customize plot appearance for main plots."""
     plt.xlabel("T (K)")
     plt.ylabel(ylabel)
     plt.title("")
-
-    legend = ["ThermoML Archive"]
-    legend.extend([f"Model {i}" for i in range(1, n + 1)])
-
-    if inchi in es_para:
-        legend.append("Esper et al. (2023)")
-    legend.append("GC PCSAFT")
-
-    plt.legend(legend, loc=(1.01, 0.75))
     plt.grid(False)
     plt.yscale(scale)
     sns.despine(trim=True)
 
 
 def _customize_plot_params(
-    scale: str = "linear", xlabel: str = "", ylabel: str = "", n: int = 2
+    scale: str = "linear", xlabel: str = "", ylabel: str = ""
 ) -> None:
     """Customize plot appearance for parameter plots."""
     plt.xlabel(xlabel)
@@ -837,12 +838,7 @@ def _customize_plot_params(
     plt.title("")
     plt.grid(False)
     plt.yscale(scale)
-
-    legend = [f"Model {i}" for i in range(1, n + 1)]
-    legend.append("Esper et al. (2023)")
-
-    plt.legend(legend, loc=(1.01, 0.75))
-    sns.despine(trim=True)
+    sns.despine(trim=False)
 
 
 # Utility functions
@@ -855,8 +851,7 @@ def _ensure_images_directory() -> None:
 def _save_plot(filename: str) -> None:
     """Save current plot figure."""
     img_path = osp.join("images", filename)
-    plt.savefig(img_path, dpi=300, format="png", bbox_inches="tight", transparent=True)
-    plt.show()
+    plt.savefig(img_path, dpi=600, format="png", bbox_inches="tight", transparent=False)
 
 
 def _save_molecule_image(inchi: str, molecule_name: str) -> None:
