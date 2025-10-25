@@ -112,7 +112,7 @@ def plotparams(
     smiles: List[List[str]],
     models: List[Union[GNNePCSAFT, HabitchNN]],
     list_xlabel: List[str],
-) -> Tuple[Figure, List[Axes]]:
+) -> Tuple[Figure, np.ndarray]:
     """Plot parameter behavior vs chain length."""
     _ensure_images_directory()
 
@@ -121,16 +121,18 @@ def plotparams(
     ]
     x = np.arange(2, len(smiles[0]) + 2)
 
-    fig, axs = plt.subplots(len(smiles), 3, figsize=(6 * 3, 6 * len(smiles)))
+    fig, axs = plt.subplots(len(smiles), 3, figsize=(6.85, 6.85 * len(smiles) / 3))
+    if axs.ndim == 1:
+        axs = np.array([axs])
     for i in range(len(smiles)):
         plt.sca(axs[i, 0])
-        _plot_parameter_m(x, list_array_params[i], list_xlabel[i])
+        _plot_parameter_m(x, list_array_params[i], "")
 
         plt.sca(axs[i, 1])
         _plot_parameter_sigma(x, list_array_params[i], list_xlabel[i])
 
         plt.sca(axs[i, 2])
-        _plot_parameter_epsilon(x, list_array_params[i], list_xlabel[i])
+        _plot_parameter_epsilon(x, list_array_params[i], "")
     fig.tight_layout()
     _save_plot("parameters.png")
 
@@ -714,7 +716,10 @@ def _plot_density(
 
     if rho_filtered.shape[0] == 0:
         return
-    _ = plt.figure()
+    _ = plt.figure(
+        figsize=(3.3, 3.3),
+        dpi=600,
+    )
 
     idx = np.argsort(rho_filtered[:, 0], 0)
     x = rho_filtered[idx, 0]
@@ -739,7 +744,10 @@ def _plot_vapor_pressure(
     """Plot vapor pressure data."""
     if np.all(vp == np.zeros_like(vp)):
         return
-    _ = plt.figure()
+    _ = plt.figure(
+        figsize=(3.3, 3.3),
+        dpi=600,
+    )
 
     idx = np.argsort(vp[:, 0], 0)
     x = vp[idx, 0]
