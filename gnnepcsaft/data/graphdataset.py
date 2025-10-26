@@ -14,7 +14,7 @@ class ThermoMLDataset(InMemoryDataset):
 
     PARAMETERS
     ----------
-    root (str, optional) – Root directory where the dataset should be saved. (optional: None).
+    root (str) – Directory where raw/pure.parquet file is located.
 
     transform (callable, optional) – A function/transform that takes in an Data object and
     returns a transformed version. The data object will be transformed
@@ -96,7 +96,7 @@ class Ramirez(InMemoryDataset):
 
     PARAMETERS
     ----------
-    root (str, optional) – Root directory where the dataset should be saved. (optional: None).
+    root (str) – Directory where raw/data.parquet file is located.
 
     transform (callable, optional) – A function/transform that takes in an Data object and
     returns a transformed version. The data object will be transformed
@@ -159,7 +159,7 @@ class Esper(InMemoryDataset):
 
     PARAMETERS
     ----------
-    root (str, optional) – Root directory where the dataset should be saved. (optional: None).
+    root (str) – Directory where raw/SI_pcp-saft_parameters.csv file is located.
 
     transform (callable, optional) – A function/transform that takes in an Data object and
     returns a transformed version. The data object will be transformed
