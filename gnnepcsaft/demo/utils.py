@@ -4,6 +4,7 @@ import os
 import os.path as osp
 from typing import List, Optional, Tuple, Union
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
@@ -32,6 +33,19 @@ from ..epcsaft.utils import (
 )
 from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
+
+LABEL_FS = 11
+TICKS_FS = 10
+TITLE_FS = 11
+mpl.rcParams.update(
+    {
+        "font.size": 11,
+        "axes.titlesize": TITLE_FS,
+        "axes.labelsize": LABEL_FS,
+        "xtick.labelsize": TICKS_FS,
+        "ytick.labelsize": TICKS_FS,
+    }
+)
 
 # Configuration and global settings
 sns.set_theme(style="ticks")
