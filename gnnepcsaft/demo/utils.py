@@ -135,7 +135,7 @@ def plotparams(
     ]
     x = np.arange(2, len(smiles[0]) + 2)
 
-    fig, axs = plt.subplots(len(smiles), 3, figsize=(6.85, 6.85 * len(smiles) / 3))
+    fig, axs = plt.subplots(len(smiles), 3, figsize=(4.68, 6.0 * len(smiles) / 3))
     if axs.ndim == 1:
         axs = np.array([axs])
     for i in range(len(smiles)):
@@ -826,7 +826,7 @@ def _scatter_plot(
     x: np.ndarray, y: np.ndarray, marker: str = "x", color: Optional[str] = "black"
 ) -> None:
     """Create scatter plot."""
-    plt.scatter(x, y, marker=marker, s=40, c=color, zorder=10)
+    plt.scatter(x, y, marker=marker, s=20, c=color, zorder=10)
 
 
 def plot_linear_fit(x: np.ndarray, y: np.ndarray, marker: str) -> None:
