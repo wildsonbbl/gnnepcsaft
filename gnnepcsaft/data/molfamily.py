@@ -1,5 +1,6 @@
 """Module for calculating molecule complexity and family group."""
 
+from time import sleep
 from urllib.parse import quote
 from urllib.request import HTTPError, urlopen
 
@@ -48,7 +49,7 @@ def complexity(ids: str) -> float:
         print("not ok:", ids)
         ans = float("inf")
 
-    # sleep(0.1)
+    sleep(0.1)
     return ans
 
 
@@ -100,7 +101,7 @@ def get_family_groups(inchi: str) -> list[str]:
         fr_Ar_OH,
         fr_benzene,
     ]
-    frs_str2 = ["hydroxyl", "hydroxyl", "benzene"]
+    frs_str2 = ["alcohol", "alcohol", "benzene"]
 
     frags = [fr(mol) for fr in frs_1]
     frs_str_match = []
