@@ -30,10 +30,10 @@ def pc_saft(parameters: List[float]) -> EquationOfState.pcsaft:
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
 
     """
-    parameters.append(1.0)
+
     return pc_saft_mixture([parameters])
 
 
@@ -352,7 +352,7 @@ def pure_den_feos(parameters: List[float], state: List[float]) -> float:
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K), Pressure (Pa)]`
     """
 
@@ -422,7 +422,7 @@ def pure_vp_feos(parameters: List[float], state: List[float]) -> float:
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K)]`
     """
 
@@ -442,7 +442,7 @@ def pure_h_lv_feos(parameters: List[float], state: List[float]) -> float:
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K)]`
     """
 
@@ -468,7 +468,7 @@ def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K)]`
     """
     t = state[0]  # Temperature, K
@@ -489,7 +489,7 @@ def critical_points_feos(parameters: List[float]) -> List[float]:
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
     """
     eos = pc_saft(parameters)
     critical_point = State.critical_point(eos)
@@ -506,7 +506,7 @@ def pure_viscosity_feos(parameters: List[float], state: List[float]) -> float:
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K), Pressure (Pa)]`
     """
     t = state[0]  # Temperature, K
@@ -532,7 +532,7 @@ def phase_diagram_feos(
 
     Args:
         parameters: A list with
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K)]`
 
 
@@ -566,7 +566,7 @@ def is_stable_feos(
 
     Args:
         parameters: A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
@@ -600,7 +600,7 @@ def mix_tp_flash_feos(
 
     Args:
         parameters: A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
@@ -636,7 +636,7 @@ def henry_constant_feos(
 
     Args:
         parameters: A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
@@ -671,7 +671,7 @@ def mix_lle_diagram_feos(
 
     Args:
         parameters: A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
@@ -722,7 +722,7 @@ def mix_lle_feos(
 
     Args:
         parameters: A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
@@ -774,7 +774,7 @@ def mix_vle_diagram_feos(
 
     Args:
         parameters: A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
          A list with `[Pressure (Pa)]`
@@ -819,7 +819,7 @@ def mix_vlle_diagram_feos(
 
     Args:
         parameters: A list of
-         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1]`
@@ -854,7 +854,7 @@ def mix_isobaric_heat_capacity_feos(
 
     Args:
         parameters: A list of
-          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb]`
+          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
           for each component of the mixture
         state:
           A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
