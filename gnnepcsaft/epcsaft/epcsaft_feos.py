@@ -109,7 +109,7 @@ def get_records(mixture_parameters: List[List[float]]) -> list[PureRecord]:
                     smiles=f"SMILES_{idx}",
                     inchi=f"InChI_{idx}",
                 ),
-                molarweight=mol_parameters[-1],  # g/mol
+                molarweight=mol_parameters[8],  # g/mol
                 model_record=PcSaftRecord(
                     m=mol_parameters[0],  # units
                     sigma=mol_parameters[1],  # Å
