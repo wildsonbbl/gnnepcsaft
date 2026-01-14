@@ -29,7 +29,6 @@ from ..epcsaft.utils import (
     mix_lle_diagram_feos,
     mix_lle_feos,
     mix_vle_diagram_feos,
-    parameters_gc_pcsaft,
 )
 from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
@@ -102,8 +101,7 @@ es_para = _load_esper_data()
 def plotdata(
     inchi: str,
     molecule_name: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
-    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]] = None,
+    list_params: List[List[float]],
 ) -> None:
     """Plot ThermoML Archive experimental data and compare with model predictions."""
 
@@ -113,7 +111,6 @@ def plotdata(
         return
 
     gh = tml_para[inchi]
-    list_params = _predict_params_from_inchi(inchi, models, model_msigmae)
 
     pred_den_list, pred_vp_list = _predict_rho_vp(inchi, list_params, gh.rho, gh.vp)
 
