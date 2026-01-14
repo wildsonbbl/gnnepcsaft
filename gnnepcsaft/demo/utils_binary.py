@@ -1,16 +1,19 @@
 """Module for binary utilities."""
 
 import os.path as osp
-from typing import List
+from typing import List, Optional, Tuple
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import seaborn as sns
+import torch
 
+from ..data.graph import from_InChI
 from ..epcsaft.utils import mix_den_feos
-from .utils import _customize_plot, _line_plot, _scatter_plot
+from ..train.models import GNNePCSAFT
+from .utils import _customize_plot, _get_model_params, _line_plot, _scatter_plot
 
 LABEL_FS = 11
 TICKS_FS = 10
@@ -108,3 +111,60 @@ def mape_rho(
             )
             mape.append(abs((rho_pred - rho_tml) / rho_tml) * 100)
         print(f"MAPE: {np.mean(mape):.2f}%")
+
+
+def binary_test(
+    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT] = None
+) -> List[Tuple[Tuple[str, str], List[Tuple[float, float]]]]:
+    """Test model performance on binary data."""
+    binary_data = pl.read_parquet(
+        osp.join(real_path, "../data/thermoml/raw/binary.parquet")
+    )
+
+    inchi_pairs = [
+        (row["inchi1"], row["inchi2"])
+        for row in binary_data.filter(pl.col("tp") == 1)
+        .unique(("inchi1", "inchi2"))
+        .to_dicts()
+    ]
+
+    with torch.no_grad():
+        all_predictions = []
+        for inchi1, inchi2 in inchi_pairs:
+            mix_params = _get_mixture_params(model, model_msigmae, [inchi1, inchi2])
+
+            rho_data = (
+                binary_data.filter(
+                    (pl.col("inchi1") == inchi1)
+                    & (pl.col("inchi2") == inchi2)
+                    & (pl.col("tp") == 1)
+                )
+                .select("m", "TK", "PPa", "mlc1", "mlc2")
+                .to_numpy()
+            )
+
+            rho_predictions = []
+            for state in rho_data:
+                predicted_rho = mix_den_feos(mix_params, state[1:])
+                reference_rho = (
+                    state[0]
+                    * 1000
+                    / (mix_params[0][-1] * state[3] + mix_params[1][-1] * state[4])
+                ).item()
+                rho_predictions.append((predicted_rho, reference_rho))
+
+            all_predictions.append(((inchi1, inchi2), rho_predictions))
+
+    return all_predictions
+
+
+def _get_mixture_params(
+    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT], inchis: List[str]
+) -> List[List[float]]:
+    """Organize parameters for mixture calculations."""
+    mix_params = []
+    for inchi in inchis:
+        gh = from_InChI(inchi)
+        params = _get_model_params(model, model_msigmae, gh).tolist()
+        mix_params.append(params)
+    return mix_params
