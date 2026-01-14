@@ -546,31 +546,19 @@ def plot_ternary_lle_diagram(
 
 
 # Parameter prediction functions
-def _predict_params_from_inchi(
+def predict_params_from_inchi(
     inchi: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
-    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
-) -> List[List[float]]:
+    model_assoc: Union[GNNePCSAFT, HabitchNN],
+    model_msigmae: Union[GNNePCSAFT, HabitchNN],
+) -> List[float]:
     """Predict PCSAFT parameters from InChI."""
     with torch.no_grad():
         gh = from_InChI(inchi)
-        graphs = gh.to(DEVICE)
-        list_params = []
+        graph = gh.to(DEVICE)
 
-        for model in models:
-            model.eval()
-            params = _get_model_params(model, model_msigmae, graphs)
-            list_params.append(params.tolist())
+        params = _get_model_params(model_assoc, model_msigmae, graph)
 
-        if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).squeeze().tolist())
-
-        try:
-            list_params.append(list(parameters_gc_pcsaft(gh.smiles)))
-        except Exception:  # pylint: disable=W0703
-            pass
-
-    return list_params
+    return params.tolist()
 
 
 def _predict_params_from_smiles(
@@ -690,10 +678,11 @@ def _get_model_params(
                 msigmae,
                 10 ** (msigmae_or_log10assoc * np.array([-1.0, 1.0])),
                 munanb,
+                graphs.mw[0].numpy(),
             )
         )
 
-    return np.hstack((msigmae_or_log10assoc, assoc, munanb))
+    return np.hstack((msigmae_or_log10assoc, assoc, munanb, graphs.mw[0].numpy()))
 
 
 # Prediction and calculation functions
@@ -974,6 +963,5 @@ def _get_mixture_params(
     for inchi in inchis:
         gh = from_InChI(inchi)
         params = _get_model_params(model, model_msigmae, gh).tolist()
-        params.extend([gh.smiles, gh.InChI, gh.mw.item()])
         mix_params.append(params)
     return mix_params
