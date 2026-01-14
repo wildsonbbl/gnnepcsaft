@@ -53,7 +53,7 @@ config = get_config()
 DEVICE = "cpu"
 
 # Plot markers and styling
-MARKERS = ("o", "v", "^", "<", ">", "*", "s", "p", "P", "D")
+MARKERS = ("o", "v", "s", "<", ">", "*", "^", "p", "P", "D")
 MARKERS_2 = ("o", "v", "x", "^", "<", ">", "*", "s", "p", "P", "D")
 
 # Data loading and preprocessing
@@ -135,7 +135,7 @@ def plotparams(
     ]
     x = np.arange(2, len(smiles[0]) + 2)
 
-    fig, axs = plt.subplots(len(smiles), 3, figsize=(4.68, 6.0 * len(smiles) / 3))
+    fig, axs = plt.subplots(len(smiles), 3, figsize=(4.68, 5.0 * len(smiles) / 3))
     if axs.ndim == 1:
         axs = np.array([axs])
     for i in range(len(smiles)):
@@ -817,16 +817,23 @@ def _plot_parameter_epsilon(
 
 
 # Basic plotting utilities
-def _line_plot(x: np.ndarray, y: np.ndarray, marker: str = "x") -> None:
+def _line_plot(
+    x: Union[np.ndarray, List[float]],
+    y: Union[np.ndarray, List[float]],
+    marker: str = "x",
+) -> None:
     """Create line plot."""
-    plt.plot(x, y, marker=marker, linewidth=0.5)
+    plt.plot(x, y, marker=marker, linewidth=0.5, markersize=3)
 
 
 def _scatter_plot(
-    x: np.ndarray, y: np.ndarray, marker: str = "x", color: Optional[str] = "black"
+    x: Union[np.ndarray, List[float]],
+    y: Union[np.ndarray, List[float]],
+    marker: str = "x",
+    color: Optional[str] = "black",
 ) -> None:
     """Create scatter plot."""
-    plt.scatter(x, y, marker=marker, s=20, c=color, zorder=10)
+    plt.scatter(x, y, marker=marker, c=color, zorder=10, s=9)
 
 
 def plot_linear_fit(x: np.ndarray, y: np.ndarray, marker: str) -> None:
