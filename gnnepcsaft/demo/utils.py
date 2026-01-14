@@ -576,7 +576,9 @@ def _predict_params_from_inchi(
 def _predict_params_from_smiles(
     smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]]
 ) -> List[np.ndarray]:
-    """Predict PCSAFT parameters from SMILES."""
+    """Make a n models x m SMILES x 3 list of parameters for homologous series plot.
+    Add Esper et al. (2023) reference parameters as last model if available.
+    """
     list_array_params = []
 
     for model in models:
@@ -593,7 +595,7 @@ def _predict_params_from_smiles(
 def _predict_params_for_single_model(
     model: Union[GNNePCSAFT, HabitchNN], smiles: List[str]
 ) -> np.ndarray:
-    """Predict parameters for a single model."""
+    """Make a m SMILES x 3 array of parameters."""
     list_params = []
 
     with torch.no_grad():
