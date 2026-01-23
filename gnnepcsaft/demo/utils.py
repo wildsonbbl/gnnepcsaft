@@ -613,15 +613,19 @@ def _get_esper_reference_params(smiles: List[str]) -> np.ndarray:
 
 def _extract_features(graphs: Data) -> np.ndarray:
     """Extract features from graph data for ML models."""
-    return torch.hstack(
-        (
-            graphs.ecfp,
-            graphs.mw,
-            graphs.atom_count,
-            graphs.ring_count,
-            graphs.rbond_count,
+    return (
+        torch.hstack(
+            (
+                graphs.ecfp,
+                graphs.mw,
+                graphs.atom_count,
+                graphs.ring_count,
+                graphs.rbond_count,
+            )
         )
-    ).numpy()
+        .cpu()
+        .numpy()
+    )
 
 
 def _predict_with_model(

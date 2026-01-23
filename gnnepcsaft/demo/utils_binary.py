@@ -114,7 +114,7 @@ def mape_rho(
 
 
 def binary_test(
-    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT] = None
+    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT] = None, device="cuda"
 ) -> List[Tuple[Tuple[str, str], List[Tuple[float, float]]]]:
     """Test model performance on binary data."""
     binary_data = pl.read_parquet(
@@ -131,7 +131,9 @@ def binary_test(
     with torch.no_grad():
         all_predictions = []
         for inchi1, inchi2 in inchi_pairs:
-            mix_params = _get_mixture_params(model, model_msigmae, [inchi1, inchi2])
+            mix_params = _get_mixture_params(
+                model, model_msigmae, [inchi1, inchi2], device
+            )
 
             rho_data = (
                 binary_data.filter(
@@ -159,12 +161,15 @@ def binary_test(
 
 
 def _get_mixture_params(
-    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT], inchis: List[str]
+    model: GNNePCSAFT,
+    model_msigmae: Optional[GNNePCSAFT],
+    inchis: List[str],
+    device="cuda",
 ) -> List[List[float]]:
     """Organize parameters for mixture calculations."""
     mix_params = []
     for inchi in inchis:
-        gh = from_InChI(inchi)
+        gh = from_InChI(inchi).to(device)
         params = _get_model_params(model, model_msigmae, gh).tolist()
         mix_params.append(params)
     return mix_params
