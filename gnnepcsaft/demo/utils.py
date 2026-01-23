@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple, Union
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import onnxruntime as ort
 import plotly.graph_objects as go
 import seaborn as sns
 import torch
@@ -47,7 +48,6 @@ mpl.rcParams.update(
 # Configuration and global settings
 sns.set_theme(style="ticks")
 config = get_config()
-DEVICE = "cpu"
 
 # Plot markers and styling
 MARKERS = ("o", "v", "s", "<", ">", "*", "^", "p", "P", "D")
@@ -121,12 +121,14 @@ def plotparams(
     smiles: List[List[str]],
     models: List[Union[GNNePCSAFT, HabitchNN]],
     list_xlabel: List[str],
+    device: str = "cuda",
 ) -> Tuple[Figure, np.ndarray]:
     """Plot parameter behavior vs chain length."""
     _ensure_images_directory()
 
     list_array_params = [
-        _predict_params_from_smiles(list_smiles, models) for list_smiles in smiles
+        _predict_params_from_smiles(list_smiles, models, device=device)
+        for list_smiles in smiles
     ]
     x = np.arange(2, len(smiles[0]) + 2)
 
@@ -548,11 +550,12 @@ def predict_params_from_inchi(
     inchi: str,
     model_assoc: Union[GNNePCSAFT, HabitchNN],
     model_msigmae: Union[GNNePCSAFT, HabitchNN],
+    device: str = "cuda",
 ) -> List[float]:
     """Predict PCSAFT parameters from InChI."""
     with torch.no_grad():
         gh = from_InChI(inchi)
-        graph = gh.to(DEVICE)
+        graph = gh.to(device)
 
         params = _get_model_params(model_assoc, model_msigmae, graph)
 
@@ -560,7 +563,7 @@ def predict_params_from_inchi(
 
 
 def _predict_params_from_smiles(
-    smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]]
+    smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]], device="cuda"
 ) -> List[np.ndarray]:
     """Make a n models x m SMILES x 3 list of parameters for homologous series plot.
     Add Esper et al. (2023) reference parameters as last model if available.
@@ -569,7 +572,7 @@ def _predict_params_from_smiles(
 
     for model in models:
         model.eval()
-        model_params = _predict_params_for_single_model(model, smiles)
+        model_params = _predict_params_for_single_model(model, smiles, device=device)
         list_array_params.append(model_params)
 
     esper_params = _get_esper_reference_params(smiles)
@@ -579,16 +582,16 @@ def _predict_params_from_smiles(
 
 
 def _predict_params_for_single_model(
-    model: Union[GNNePCSAFT, HabitchNN], smiles: List[str]
+    model: Union[GNNePCSAFT, HabitchNN], smiles: List[str], device="cpu"
 ) -> np.ndarray:
     """Make a m SMILES x 3 array of parameters."""
     list_params = []
 
     with torch.no_grad():
         for smile in smiles:
-            graphs = from_smiles(smile).to(DEVICE)
+            graphs = from_smiles(smile).to(device)
             parameters = model.pred_with_bounds(graphs)
-            params = parameters.squeeze().to(torch.float64).numpy()
+            params = parameters.squeeze().to(torch.float64).cpu().numpy()
             list_params.append(params)
 
     return np.asarray(list_params)
@@ -627,9 +630,10 @@ def _predict_with_model(
 ) -> np.ndarray:
     """Predict parameters using a single model."""
     if isinstance(model, (GNNePCSAFT, HabitchNN)):
-        return (
-            model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach().numpy()
-        )
+        with torch.no_grad():
+            return (
+                model.pred_with_bounds(graphs).squeeze().to(torch.float64).cpu().numpy()
+            )
 
     features = _extract_features(graphs)
 
@@ -676,11 +680,11 @@ def _get_model_params(
                 msigmae,
                 10 ** (msigmae_or_log10assoc * np.array([-1.0, 1.0])),
                 munanb,
-                graphs.mw[0].numpy(),
+                graphs.mw[0].cpu().numpy(),
             )
         )
 
-    return np.hstack((msigmae_or_log10assoc, assoc, munanb, graphs.mw[0].numpy()))
+    return np.hstack((msigmae_or_log10assoc, assoc, munanb, graphs.mw[0].cpu().numpy()))
 
 
 # Prediction and calculation functions
@@ -826,7 +830,7 @@ def plot_linear_fit(x: np.ndarray, y: np.ndarray, marker: str) -> None:
     """Plot linear fit."""
     plt.plot(
         x,
-        np.poly1d(np.polyfit(x, y, 1))(x),
+        np.poly1d(np.polyfit(x, y, 1, full=False))(x),
         color="red",
         marker=marker,
         linewidth=0.5,
@@ -879,7 +883,6 @@ def _save_molecule_image(inchi: str, molecule_name: str) -> None:
     img.save(img_path, dpi=(300, 300), format="png", bitmap_format="png")
 
 
-# Model export and binary testing functions
 def save_exported_program(
     model: torch.nn.Module, example_input: tuple, path: str
 ) -> torch.export.ExportedProgram:
@@ -906,3 +909,60 @@ def save_exported_program(
         verify=True,
     )
     return exported_program
+
+
+def test_onnx(
+    loader: ThermoMLDataset,
+    msigmae_path: str,
+    assoc_path: str,
+    pna_msigmae: GNNePCSAFT,
+    pna_assoc: GNNePCSAFT,
+):
+    """test saved onnx"""
+
+    msigmae_onnx = ort.InferenceSession(msigmae_path)
+    assoc_onnx = ort.InferenceSession(assoc_path)
+    pna_assoc.eval()
+    pna_msigmae.eval()
+
+    with torch.no_grad():
+        for graph in loader:
+            x, edge_index, edge_attr = (
+                graph["x"],
+                graph["edge_index"],
+                graph["edge_attr"],
+            )
+
+            onnx_assoc = assoc_onnx.run(
+                None,
+                {
+                    "x": x.cpu().numpy(),
+                    "edge_index": edge_index.cpu().numpy(),
+                    "edge_attr": edge_attr.cpu().numpy(),
+                    "batch": None,
+                },
+            )
+
+            assoc = pna_assoc(x, edge_index, edge_attr, None).cpu().numpy()
+
+            if not np.allclose(onnx_assoc, assoc):  # type: ignore
+                print(
+                    f"missmatch onnx: {onnx_assoc}, pna: {assoc}, InChI: {graph.InChI}"
+                )
+
+            onnx_msigmae = msigmae_onnx.run(
+                None,
+                {
+                    "x": x.cpu().numpy(),
+                    "edge_index": edge_index.cpu().numpy(),
+                    "edge_attr": edge_attr.cpu().numpy(),
+                    "batch": None,
+                },
+            )
+
+            msigmae = pna_msigmae(x, edge_index, edge_attr, None).cpu().numpy()
+
+            if not np.allclose(onnx_msigmae, msigmae):  # type: ignore
+                print(
+                    f"missmatch onnx: {onnx_msigmae}, pna: {msigmae}, InChI: {graph.InChI}"
+                )
