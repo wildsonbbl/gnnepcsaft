@@ -8,7 +8,7 @@ Currently, the model takes into account the hard-chain, dispersive, and associat
 
 Code is being developed mainly in Pytorch ([PyG](https://pytorch-geometric.readthedocs.io/en/latest/index.html#)).
 
-You can find a model deployed in a Desktop App at [SourceForge](https://sourceforge.net/projects/gnnpcsaft/).
+You can find a model deployed in a Desktop App at [SourceForge](https://sourceforge.net/projects/gnnpcsaftapp/).
 
 A CLI to use a model can be found at [GNNPCSAFT CLI](https://github.com/wildsonbbl/gnnepcsaftcli) and installed with [pipx](https://github.com/pypa/pipx):
 
