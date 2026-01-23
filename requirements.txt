@@ -30,3 +30,4 @@ onnxruntime
 plotly
 nbformat
 ipywidgets
+matplotlib-venn
