@@ -10,7 +10,7 @@ import polars as pl
 from matplotlib.axes import Axes
 
 from ..data.rdkit_util import smilestoinchi
-from .epcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
+from .pcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
@@ -21,7 +21,7 @@ def co2_binary_px(
     k_12: Optional[float] = None,
     epsilon_a1b2: Optional[float] = None,
 ):
-    """Plot CO2 solubility in solvent from ThermoML data and GNNePCSAFT predictions.
+    """Plot CO2 solubility in solvent from ThermoML data and GNNPCSAFT predictions.
 
     Args:
         inchis (List[str]): List of two InChI strings.
@@ -139,7 +139,7 @@ def co2_ternary_px(
     epsilon_ab: Optional[List[List[float]]] = None,
 ):
     """
-    Plot CO2 solubility in solvent mixtures from ThermoML data and GNNePCSAFT predictions.
+    Plot CO2 solubility in solvent mixtures from ThermoML data and GNNPCSAFT predictions.
 
     Args:
         smiles (List[str]): List of three SMILES strings.

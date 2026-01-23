@@ -4,7 +4,6 @@ test*
 *Zone.Identifier
 wandb
 .vscode
-pcsaft
 .devcontainer
 .dockerignore
 ray*

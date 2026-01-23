@@ -22,8 +22,12 @@ from ..configs.default import get_config
 from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..data.rdkit_util import smilestoinchi
-from ..epcsaft.epcsaft_feos import mix_gibbs_energy
-from ..epcsaft.utils import mix_lle_diagram_feos, mix_lle_feos, mix_vle_diagram_feos
+from ..pcsaft.pcsaft_feos import (
+    mix_gibbs_energy,
+    mix_lle_diagram_feos,
+    mix_lle_feos,
+    mix_vle_diagram_feos,
+)
 from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
 

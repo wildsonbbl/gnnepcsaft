@@ -8,7 +8,7 @@ from joblib import Parallel, delayed
 from scipy.optimize import least_squares
 from tqdm import tqdm
 
-from .epcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
+from .pcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments,too-many-locals

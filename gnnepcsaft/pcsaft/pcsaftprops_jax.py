@@ -9,7 +9,7 @@ Code reference: `https://github.com/zmeri/PC-SAFT`
 import jax
 import jax.numpy as np
 
-from .epcsaft_jax import pcsaft_ares
+from .pcsaft_jax import pcsaft_ares
 
 # pylint: disable=C0103,E1102
 dares_drho = jax.jit(jax.jacfwd(pcsaft_ares, 5))

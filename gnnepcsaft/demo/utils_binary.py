@@ -11,7 +11,7 @@ import seaborn as sns
 import torch
 
 from ..data.graph import from_InChI
-from ..epcsaft.utils import mix_den_feos
+from ..pcsaft.pcsaft_feos import mix_den_feos
 from ..train.models import GNNePCSAFT
 from .utils import _customize_plot, _get_model_params, _line_plot, _scatter_plot
 
