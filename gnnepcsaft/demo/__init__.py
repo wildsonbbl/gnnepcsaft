@@ -1,4 +1,4 @@
 """
-Module for GNN-ePC-SAFT project demonstration.
+Module for GNNPCSAFT project demonstration.
 
 """

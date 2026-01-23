@@ -8,7 +8,7 @@ from joblib import Parallel, delayed
 from scipy.optimize import least_squares
 from tqdm import tqdm
 
-from .epcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
+from .pcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments,too-many-locals
@@ -80,7 +80,7 @@ def optimize_kij(
             return np.nan
 
         def _loss_fn(
-            k_12: float,
+            k_12: np.ndarray,
             params: List[List[float]],
             x1: np.ndarray,
             temperature: np.ndarray,
@@ -89,7 +89,7 @@ def optimize_kij(
         ) -> float:
             pred_x1 = np.asarray(
                 Parallel(n_jobs=-1)(
-                    delayed(_pred_x1)(T, P, k_12, params)
+                    delayed(_pred_x1)(T, P, k_12.item(), params)
                     for T, P in zip(temperature, pressure)
                 )
             )

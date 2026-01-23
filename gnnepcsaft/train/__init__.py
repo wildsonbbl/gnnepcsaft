@@ -1,4 +1,4 @@
 """
-Module for the train part of the GNN-ePC-SAFT project.
+Module for the train part of the GNNPCSAFT project.
 
 """

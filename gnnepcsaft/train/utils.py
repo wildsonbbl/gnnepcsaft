@@ -23,7 +23,7 @@ from xgboost import Booster
 
 from ..data.graph import assoc_number
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
-from ..epcsaft.utils import pure_den_feos, pure_vp_feos
+from ..pcsaft.pcsaft_feos import pure_den_feos, pure_vp_feos
 
 # PCSAFT parameters bounds
 params_lower_bound = np.array([1.0, 1.9, 50.0, 1e-4, 200.0, 0, 0, 0])

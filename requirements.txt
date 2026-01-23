@@ -28,3 +28,6 @@ onnx
 onnxscript
 onnxruntime
 plotly
+nbformat
+ipywidgets
+matplotlib-venn

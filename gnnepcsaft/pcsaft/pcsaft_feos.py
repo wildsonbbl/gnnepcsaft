@@ -109,7 +109,7 @@ def get_records(mixture_parameters: List[List[float]]) -> list[PureRecord]:
                     smiles=f"SMILES_{idx}",
                     inchi=f"InChI_{idx}",
                 ),
-                molarweight=mol_parameters[-1],  # g/mol
+                molarweight=mol_parameters[8],  # g/mol
                 model_record=PcSaftRecord(
                     m=mol_parameters[0],  # units
                     sigma=mol_parameters[1],  # Å
@@ -576,7 +576,7 @@ def is_stable_feos(
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     statenpt = State(
         eos,
@@ -609,7 +609,7 @@ def mix_tp_flash_feos(
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     tp_flash = PhaseEquilibrium.tp_flash(
         eos,
@@ -646,7 +646,7 @@ def henry_constant_feos(
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     statenpt = State(
         eos,
@@ -694,7 +694,7 @@ def mix_lle_diagram_feos(
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.lle(
         eos,
@@ -745,7 +745,7 @@ def mix_lle_feos(
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.lle(
         eos,
@@ -828,7 +828,7 @@ def mix_vlle_diagram_feos(
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.binary_vlle(
         eos,
@@ -843,7 +843,7 @@ def mix_vlle_diagram_feos(
     return dia_t.to_dict(Contributions.Residual)
 
 
-def mix_isobaric_heat_capacity_feos(
+def mix_r_isobaric_heat_capacity_feos(
     parameters: List[List[float]],
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
@@ -863,7 +863,7 @@ def mix_isobaric_heat_capacity_feos(
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:])  # mole fractions
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
 
     statenpt = State(

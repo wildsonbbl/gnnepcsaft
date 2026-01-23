@@ -7,8 +7,8 @@ from typing import List, Optional, Tuple, Union
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import onnxruntime as ort
 import plotly.graph_objects as go
-import polars as pl
 import seaborn as sns
 import torch
 import xgboost as xgb
@@ -23,13 +23,11 @@ from ..configs.default import get_config
 from ..data.graph import Data, assoc_number, from_InChI, from_smiles
 from ..data.graphdataset import Esper, Ramirez, ThermoMLDataset
 from ..data.rdkit_util import smilestoinchi
-from ..epcsaft.epcsaft_feos import mix_gibbs_energy
-from ..epcsaft.utils import (
-    mix_den_feos,
+from ..pcsaft.pcsaft_feos import (
+    mix_gibbs_energy,
     mix_lle_diagram_feos,
     mix_lle_feos,
     mix_vle_diagram_feos,
-    parameters_gc_pcsaft,
 )
 from ..train.models import GNNePCSAFT, HabitchNN
 from ..train.utils import rhovp_data
@@ -50,10 +48,9 @@ mpl.rcParams.update(
 # Configuration and global settings
 sns.set_theme(style="ticks")
 config = get_config()
-DEVICE = "cpu"
 
 # Plot markers and styling
-MARKERS = ("o", "v", "^", "<", ">", "*", "s", "p", "P", "D")
+MARKERS = ("o", "v", "s", "<", ">", "*", "^", "p", "P", "D")
 MARKERS_2 = ("o", "v", "x", "^", "<", ">", "*", "s", "p", "P", "D")
 
 # Data loading and preprocessing
@@ -102,8 +99,7 @@ es_para = _load_esper_data()
 def plotdata(
     inchi: str,
     molecule_name: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
-    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]] = None,
+    list_params: List[List[float]],
 ) -> None:
     """Plot ThermoML Archive experimental data and compare with model predictions."""
 
@@ -113,7 +109,6 @@ def plotdata(
         return
 
     gh = tml_para[inchi]
-    list_params = _predict_params_from_inchi(inchi, models, model_msigmae)
 
     pred_den_list, pred_vp_list = _predict_rho_vp(inchi, list_params, gh.rho, gh.vp)
 
@@ -126,16 +121,18 @@ def plotparams(
     smiles: List[List[str]],
     models: List[Union[GNNePCSAFT, HabitchNN]],
     list_xlabel: List[str],
+    device: str = "cuda",
 ) -> Tuple[Figure, np.ndarray]:
     """Plot parameter behavior vs chain length."""
     _ensure_images_directory()
 
     list_array_params = [
-        _predict_params_from_smiles(list_smiles, models) for list_smiles in smiles
+        _predict_params_from_smiles(list_smiles, models, device=device)
+        for list_smiles in smiles
     ]
     x = np.arange(2, len(smiles[0]) + 2)
 
-    fig, axs = plt.subplots(len(smiles), 3, figsize=(4.68, 6.0 * len(smiles) / 3))
+    fig, axs = plt.subplots(len(smiles), 3, figsize=(4.68, 5.0 * len(smiles) / 3))
     if axs.ndim == 1:
         axs = np.array([axs])
     for i in range(len(smiles)):
@@ -549,42 +546,33 @@ def plot_ternary_lle_diagram(
 
 
 # Parameter prediction functions
-def _predict_params_from_inchi(
+def predict_params_from_inchi(
     inchi: str,
-    models: List[Union[GNNePCSAFT, HabitchNN]],
-    model_msigmae: Optional[Union[GNNePCSAFT, HabitchNN]],
-) -> List[List[float]]:
+    model_assoc: Union[GNNePCSAFT, HabitchNN],
+    model_msigmae: Union[GNNePCSAFT, HabitchNN],
+    device: str = "cuda",
+) -> List[float]:
     """Predict PCSAFT parameters from InChI."""
     with torch.no_grad():
         gh = from_InChI(inchi)
-        graphs = gh.to(DEVICE)
-        list_params = []
+        graph = gh.to(device)
 
-        for model in models:
-            model.eval()
-            params = _get_model_params(model, model_msigmae, graphs)
-            list_params.append(params.tolist())
+        params = _get_model_params(model_assoc, model_msigmae, graph)
 
-        if inchi in es_para:
-            list_params.append(np.hstack(es_para[inchi]).squeeze().tolist())
-
-        try:
-            list_params.append(list(parameters_gc_pcsaft(gh.smiles)))
-        except Exception:  # pylint: disable=W0703
-            pass
-
-    return list_params
+    return params.tolist()
 
 
 def _predict_params_from_smiles(
-    smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]]
+    smiles: List[str], models: List[Union[GNNePCSAFT, HabitchNN]], device="cuda"
 ) -> List[np.ndarray]:
-    """Predict PCSAFT parameters from SMILES."""
+    """Make a n models x m SMILES x 3 list of parameters for homologous series plot.
+    Add Esper et al. (2023) reference parameters as last model if available.
+    """
     list_array_params = []
 
     for model in models:
         model.eval()
-        model_params = _predict_params_for_single_model(model, smiles)
+        model_params = _predict_params_for_single_model(model, smiles, device=device)
         list_array_params.append(model_params)
 
     esper_params = _get_esper_reference_params(smiles)
@@ -594,16 +582,16 @@ def _predict_params_from_smiles(
 
 
 def _predict_params_for_single_model(
-    model: Union[GNNePCSAFT, HabitchNN], smiles: List[str]
+    model: Union[GNNePCSAFT, HabitchNN], smiles: List[str], device="cpu"
 ) -> np.ndarray:
-    """Predict parameters for a single model."""
+    """Make a m SMILES x 3 array of parameters."""
     list_params = []
 
     with torch.no_grad():
         for smile in smiles:
-            graphs = from_smiles(smile).to(DEVICE)
+            graphs = from_smiles(smile).to(device)
             parameters = model.pred_with_bounds(graphs)
-            params = parameters.squeeze().to(torch.float64).numpy()
+            params = parameters.squeeze().to(torch.float64).cpu().numpy()
             list_params.append(params)
 
     return np.asarray(list_params)
@@ -625,15 +613,19 @@ def _get_esper_reference_params(smiles: List[str]) -> np.ndarray:
 
 def _extract_features(graphs: Data) -> np.ndarray:
     """Extract features from graph data for ML models."""
-    return torch.hstack(
-        (
-            graphs.ecfp,
-            graphs.mw,
-            graphs.atom_count,
-            graphs.ring_count,
-            graphs.rbond_count,
+    return (
+        torch.hstack(
+            (
+                graphs.ecfp,
+                graphs.mw,
+                graphs.atom_count,
+                graphs.ring_count,
+                graphs.rbond_count,
+            )
         )
-    ).numpy()
+        .cpu()
+        .numpy()
+    )
 
 
 def _predict_with_model(
@@ -642,9 +634,10 @@ def _predict_with_model(
 ) -> np.ndarray:
     """Predict parameters using a single model."""
     if isinstance(model, (GNNePCSAFT, HabitchNN)):
-        return (
-            model.pred_with_bounds(graphs).squeeze().to(torch.float64).detach().numpy()
-        )
+        with torch.no_grad():
+            return (
+                model.pred_with_bounds(graphs).squeeze().to(torch.float64).cpu().numpy()
+            )
 
     features = _extract_features(graphs)
 
@@ -691,10 +684,11 @@ def _get_model_params(
                 msigmae,
                 10 ** (msigmae_or_log10assoc * np.array([-1.0, 1.0])),
                 munanb,
+                graphs.mw[0].cpu().numpy(),
             )
         )
 
-    return np.hstack((msigmae_or_log10assoc, assoc, munanb))
+    return np.hstack((msigmae_or_log10assoc, assoc, munanb, graphs.mw[0].cpu().numpy()))
 
 
 # Prediction and calculation functions
@@ -817,23 +811,30 @@ def _plot_parameter_epsilon(
 
 
 # Basic plotting utilities
-def _line_plot(x: np.ndarray, y: np.ndarray, marker: str = "x") -> None:
+def _line_plot(
+    x: Union[np.ndarray, List[float]],
+    y: Union[np.ndarray, List[float]],
+    marker: str = "x",
+) -> None:
     """Create line plot."""
-    plt.plot(x, y, marker=marker, linewidth=0.5)
+    plt.plot(x, y, marker=marker, linewidth=0.5, markersize=3)
 
 
 def _scatter_plot(
-    x: np.ndarray, y: np.ndarray, marker: str = "x", color: Optional[str] = "black"
+    x: Union[np.ndarray, List[float]],
+    y: Union[np.ndarray, List[float]],
+    marker: str = "x",
+    color: Optional[str] = "black",
 ) -> None:
     """Create scatter plot."""
-    plt.scatter(x, y, marker=marker, s=20, c=color, zorder=10)
+    plt.scatter(x, y, marker=marker, c=color, zorder=10, s=9)
 
 
 def plot_linear_fit(x: np.ndarray, y: np.ndarray, marker: str) -> None:
     """Plot linear fit."""
     plt.plot(
         x,
-        np.poly1d(np.polyfit(x, y, 1))(x),
+        np.poly1d(np.polyfit(x, y, 1, full=False))(x),
         color="red",
         marker=marker,
         linewidth=0.5,
@@ -886,7 +887,6 @@ def _save_molecule_image(inchi: str, molecule_name: str) -> None:
     img.save(img_path, dpi=(300, 300), format="png", bitmap_format="png")
 
 
-# Model export and binary testing functions
 def save_exported_program(
     model: torch.nn.Module, example_input: tuple, path: str
 ) -> torch.export.ExportedProgram:
@@ -915,59 +915,58 @@ def save_exported_program(
     return exported_program
 
 
-def binary_test(
-    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT] = None
-) -> List[Tuple[Tuple[str, str], List[Tuple[float, float]]]]:
-    """Test model performance on binary data."""
-    binary_data = pl.read_parquet(
-        osp.join(real_path, "../data/thermoml/raw/binary.parquet")
-    )
+def test_onnx(
+    loader: ThermoMLDataset,
+    msigmae_path: str,
+    assoc_path: str,
+    pna_msigmae: GNNePCSAFT,
+    pna_assoc: GNNePCSAFT,
+):
+    """test saved onnx"""
 
-    inchi_pairs = [
-        (row["inchi1"], row["inchi2"])
-        for row in binary_data.filter(pl.col("tp") == 1)
-        .unique(("inchi1", "inchi2"))
-        .to_dicts()
-    ]
+    msigmae_onnx = ort.InferenceSession(msigmae_path)
+    assoc_onnx = ort.InferenceSession(assoc_path)
+    pna_assoc.eval()
+    pna_msigmae.eval()
 
     with torch.no_grad():
-        all_predictions = []
-        for inchi1, inchi2 in inchi_pairs:
-            mix_params = _get_mixture_params(model, model_msigmae, [inchi1, inchi2])
-
-            rho_data = (
-                binary_data.filter(
-                    (pl.col("inchi1") == inchi1)
-                    & (pl.col("inchi2") == inchi2)
-                    & (pl.col("tp") == 1)
-                )
-                .select("m", "TK", "PPa", "mlc1", "mlc2")
-                .to_numpy()
+        for graph in loader:
+            x, edge_index, edge_attr = (
+                graph["x"],
+                graph["edge_index"],
+                graph["edge_attr"],
             )
 
-            rho_predictions = []
-            for state in rho_data:
-                predicted_rho = mix_den_feos(mix_params, state[1:])
-                reference_rho = (
-                    state[0]
-                    * 1000
-                    / (mix_params[0][-1] * state[3] + mix_params[1][-1] * state[4])
-                ).item()
-                rho_predictions.append((predicted_rho, reference_rho))
+            onnx_assoc = assoc_onnx.run(
+                None,
+                {
+                    "x": x.cpu().numpy(),
+                    "edge_index": edge_index.cpu().numpy(),
+                    "edge_attr": edge_attr.cpu().numpy(),
+                    "batch": None,
+                },
+            )
 
-            all_predictions.append(((inchi1, inchi2), rho_predictions))
+            assoc = pna_assoc(x, edge_index, edge_attr, None).cpu().numpy()
 
-    return all_predictions
+            if not np.allclose(onnx_assoc, assoc):  # type: ignore
+                print(
+                    f"missmatch onnx: {onnx_assoc}, pna: {assoc}, InChI: {graph.InChI}"
+                )
 
+            onnx_msigmae = msigmae_onnx.run(
+                None,
+                {
+                    "x": x.cpu().numpy(),
+                    "edge_index": edge_index.cpu().numpy(),
+                    "edge_attr": edge_attr.cpu().numpy(),
+                    "batch": None,
+                },
+            )
 
-def _get_mixture_params(
-    model: GNNePCSAFT, model_msigmae: Optional[GNNePCSAFT], inchis: List[str]
-) -> List[List[float]]:
-    """Organize parameters for mixture calculations."""
-    mix_params = []
-    for inchi in inchis:
-        gh = from_InChI(inchi)
-        params = _get_model_params(model, model_msigmae, gh).tolist()
-        params.extend([gh.smiles, gh.InChI, gh.mw.item()])
-        mix_params.append(params)
-    return mix_params
+            msigmae = pna_msigmae(x, edge_index, edge_attr, None).cpu().numpy()
+
+            if not np.allclose(onnx_msigmae, msigmae):  # type: ignore
+                print(
+                    f"missmatch onnx: {onnx_msigmae}, pna: {msigmae}, InChI: {graph.InChI}"
+                )

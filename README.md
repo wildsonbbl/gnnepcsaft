@@ -1,4 +1,4 @@
-# GNNePCSAFT Project
+# GNNPCSAFT Project
 
 [![DOI](https://zenodo.org/badge/609414994.svg)](https://doi.org/10.5281/zenodo.17371237)
 
@@ -8,9 +8,9 @@ Currently, the model takes into account the hard-chain, dispersive, and associat
 
 Code is being developed mainly in Pytorch ([PyG](https://pytorch-geometric.readthedocs.io/en/latest/index.html#)).
 
-You can find a model deployed in a Desktop App at [SourceForge](https://sourceforge.net/projects/gnnepcsaft/).
+You can find a model deployed in a Desktop App at [SourceForge](https://sourceforge.net/projects/gnnpcsaft/).
 
-A CLI to use a model can be found at [GNNePCSAFT CLI](https://github.com/wildsonbbl/gnnepcsaftcli) and installed with [pipx](https://github.com/pypa/pipx):
+A CLI to use a model can be found at [GNNPCSAFT CLI](https://github.com/wildsonbbl/gnnepcsaftcli) and installed with [pipx](https://github.com/pypa/pipx):
 
 ```bash
 pipx install gnnepcsaftcli
@@ -21,7 +21,6 @@ Model checkpoints can be found at [Hugging Face](https://huggingface.co/wildsonb
 Use cases of this package are demonstrated in Jupyter Notebooks:
 
 - `compare.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/compare.ipynb)): comparison of the performance of trained models
-- `demo.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/demo.ipynb)): pt-br demonstration of models capabilities
 - `training.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/training.ipynb)): notebook for model training
 - `tuning.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/tuning.ipynb)): notebook for hyperparameter tuning
 

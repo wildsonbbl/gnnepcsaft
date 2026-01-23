@@ -1,5 +1,5 @@
 # pylint: disable=invalid-name
 """
-GNNePCSAFT.
+GNNPCSAFT.
 
 """
