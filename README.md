@@ -6,24 +6,18 @@ The project focuses on using Graph Neural Networks ([GNN](https://en.wikipedia.o
 
 Currently, the model takes into account the hard-chain, dispersive, and associative terms of PC-SAFT. Future work on polar and ionic terms is being studied.
 
-Code is being developed mainly in Pytorch ([PyG](https://pytorch-geometric.readthedocs.io/en/latest/index.html#)).
-
-You can find a model deployed in a Desktop App at [SourceForge](https://sourceforge.net/projects/gnnpcsaftapp/).
-
-A CLI to use a model can be found at [GNNPCSAFT CLI](https://github.com/wildsonbbl/gnnepcsaftcli) and installed with [pipx](https://github.com/pypa/pipx):
-
-```bash
-pipx install gnnepcsaftcli
-```
-
-Model checkpoints can be found at [Hugging Face](https://huggingface.co/wildsonbbl/gnnepcsaft).
-
 Use cases of this package are demonstrated in Jupyter Notebooks:
 
 - `compare.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/compare.ipynb)): comparison of the performance of trained models
 - `training.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/training.ipynb)): notebook for model training
 - `tuning.ipynb` ([Open in Colab](https://colab.research.google.com/github/wildsonbbl/gnnepcsaft/blob/main/tuning.ipynb)): notebook for hyperparameter tuning
 
----
+Model checkpoints can be found at [Hugging Face](https://huggingface.co/wildsonbbl/gnnepcsaft).
 
-Work in progress.
+Implementations with GNNPCSAFT:
+
+- [GNNPCSAFT CLI](https://github.com/wildsonbbl/gnnepcsaftcli)
+- [GNNPCSAFT APP](https://github.com/wildsonbbl/gnnpcsaftapp)
+- [GNNPCSAFT MCP](https://github.com/wildsonbbl/gnnepcsaft_mcp_server)
+- [GNNPCSAFT Webapp](https://github.com/wildsonbbl/gnnepcsaftwebapp)
+- [GNNPCSAFT Chat](https://github.com/wildsonbbl/gnnpcsaftchat)
