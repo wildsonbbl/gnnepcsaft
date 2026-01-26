@@ -807,6 +807,50 @@ def mix_vle_diagram_feos(
     return dia_t.to_dict(Contributions.Residual)
 
 
+def mix_vle_pxy_diagram_feos(
+    parameters: List[List[float]],
+    temperature: float,
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+) -> Dict[str, List[float]]:
+    """
+    Calculates binary mixture VLE phase diagram at
+    state constant temperature and variable pressure with PCSAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+         for each component of the mixture
+        temperature: Temperature (K)
+        kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        output (Dict):
+          - temperature: K
+          - pressure: Pa
+          - density [liquid/vapor]: mol / m³
+          - mass density [liquid/vapor]: kg / m³
+          - residual molar enthalpy [liquid/vapor]: kJ / mol
+          - residual molar entropy [liquid/vapor]: kJ / mol / K
+          - residual specific enthalpy [liquid/vapor]: kJ / kg
+          - residual specific entropy [liquid/vapor]: kJ / kg / K
+          - xi: liquid molefraction of component i
+          - yi: vapor molefraction of component i
+    """
+
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
+    dia_p = PhaseDiagram.binary_vle(
+        eos,
+        temperature_or_pressure=temperature * si.KELVIN,
+    )
+
+    if len(dia_p.states) == 0:
+        raise ValueError("No VLE found at the given conditions.")
+
+    return dia_p.to_dict(Contributions.Residual)
+
+
 def mix_vlle_diagram_feos(
     parameters: List[List[float]],
     state: List[float],
