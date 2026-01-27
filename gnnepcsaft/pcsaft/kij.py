@@ -94,6 +94,7 @@ def optimize_kij(
         "loss": [],
         "loss_nonan": [],
         "mape": [],
+        "n_nan": [],
     }
     unique_inchis = binary_vle_tml.select("inchi1", "inchi2").unique()
     feed_x1s = np.linspace(1e-5, 0.99, n)
@@ -171,6 +172,7 @@ def optimize_kij(
                     )
                 )
                 loss_vec = np.log((pred_x1 + 1e-6) / (x1 + 1e-6))
+                n_nan = np.isnan(loss_vec).sum()
                 loss_vec = loss_vec[~np.isnan(loss_vec)]
                 loss_nonan = np.abs(loss_vec).mean() if loss_vec.size > 0 else 1.0
                 mape_vec = (pred_x1 - x1) / x1
@@ -183,6 +185,7 @@ def optimize_kij(
                 k_12_data["loss"].append(loss)
                 k_12_data["loss_nonan"].append(loss_nonan)
                 k_12_data["mape"].append(mape_nonan)
+                k_12_data["n_nan"].append(n_nan)
 
             except RuntimeError as e:
                 print(e)
