@@ -83,7 +83,14 @@ def optimize_kij(
 ) -> pl.DataFrame:
     """Optimize binary interaction parameters (kij) for mixtures using VLE data."""
 
-    k_12_data = {"inchi1": [], "inchi2": [], "k_12": [], "loss": [], "loss_nonan": []}
+    k_12_data = {
+        "inchi1": [],
+        "inchi2": [],
+        "k_12": [],
+        "loss": [],
+        "loss_nonan": [],
+        "mape": [],
+    }
     unique_inchis = binary_vle_tml.select("inchi1", "inchi2").unique()
 
     # Create Parallel pool once and reuse it
@@ -160,12 +167,16 @@ def optimize_kij(
                 loss_vec = np.log((pred_x1 + 1e-6) / (x1 + 1e-6))
                 loss_vec = loss_vec[~np.isnan(loss_vec)]
                 loss_nonan = np.abs(loss_vec).mean() if loss_vec.size > 0 else 1.0
+                mape_vec = (pred_x1 - x1) / x1
+                mape_vec = mape_vec[~np.isnan(mape_vec)]
+                mape_nonan = np.abs(mape_vec).mean() if mape_vec.size > 0 else 1.0
 
                 k_12_data["inchi1"].append(row["inchi1"])
                 k_12_data["inchi2"].append(row["inchi2"])
                 k_12_data["k_12"].append(k_12)
                 k_12_data["loss"].append(loss)
                 k_12_data["loss_nonan"].append(loss_nonan)
+                k_12_data["mape"].append(mape_nonan)
 
             except RuntimeError as e:
                 print(e)
