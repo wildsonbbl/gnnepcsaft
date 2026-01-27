@@ -9,8 +9,12 @@ import numpy as np
 import polars as pl
 from matplotlib.axes import Axes
 
-from ..data.rdkit_util import smilestoinchi
-from .pcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
+from gnnepcsaft.data.rdkit_util import smilestoinchi
+from gnnepcsaft.pcsaft.pcsaft_feos import (
+    is_stable_feos,
+    mix_tp_flash_feos,
+    pure_vp_feos,
+)
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
@@ -21,6 +25,7 @@ def co2_binary_px(
     k_12: Optional[float] = None,
     epsilon_a1b2: Optional[float] = None,
     n_fractions: int = 50,
+    n_pressure: int = 50,
 ):
     """Plot CO2 solubility in solvent from ThermoML data and GNNPCSAFT predictions.
 
@@ -31,7 +36,8 @@ def co2_binary_px(
          InChI strings to PC-SAFT parameters.
         k_12 (Optional[float]): Binary interaction parameter between CO2 and solvent.
         epsilon_a1b2 (Optional[float]): Association energy parameter between CO2 and solvent.
-        n_fractions (int): number of fractions to check.
+        n_fractions (int): number of fractions to check for vle.
+        n_pressure (int): number of pressure to calculate.
     """
 
     params = [inchi_to_params[inchi] for inchi in inchis]
@@ -64,48 +70,64 @@ def co2_binary_px(
         "mole_fraction_c1p2" if vle["inchi1"][0] == inchis[0] else "mole_fraction_c2p2"
     )
 
-    temperatures = vle.select("T_K").sort("T_K").unique("T_K").to_series().to_list()
-    if len(temperatures) == 0:
+    isotherms = (
+        vle.sort("T_K")
+        .group_by("T_K")
+        .agg(
+            pl.col("P_kPa").min().alias("min_p_kpa"),
+            pl.col("P_kPa").max().alias("max_p_kpa"),
+            pl.col("P_kPa").count().alias("n"),
+        )
+        .filter(pl.col("n") > 1)
+    )
+    if len(isotherms) == 0:
         raise ValueError("No data available for the given InChIs.")
-    fig, axs = plt.subplots(len(temperatures), 1, figsize=(6, 4 * len(temperatures)))
+    fig, axs = plt.subplots(len(isotherms), 1, figsize=(6, 4 * len(isotherms)))
     if isinstance(axs, Axes):
         axs = [axs]
     axs: List[Axes]
     feed_x1s = np.linspace(1e-5, 0.99, n_fractions)
-    for ax, t in zip(axs, temperatures):
-        exp_x = []
+    for ax, isotherm in zip(axs, isotherms.iter_rows(named=True)):
+        temperature = isotherm["T_K"]
+        pressures_kpa = np.linspace(
+            isotherm["min_p_kpa"], isotherm["max_p_kpa"], n_pressure, dtype=np.float64
+        )
         pred_x = []
-        pressures = []
+
+        exp_vle = vle.filter(
+            pl.col("T_K") == temperature,
+        ).sort("P_kPa")
+        if len(exp_vle) < 2:
+            continue
+        exp_x = exp_vle[x1_name].to_list()
+        exp_p = exp_vle["P_kPa"].to_list()
+
         vp = (
             (
                 pure_vp_feos(
-                    parameters=inchi_to_params["InChI=1S/CO2/c2-1-3"], state=[t]
+                    parameters=inchi_to_params["InChI=1S/CO2/c2-1-3"],
+                    state=[temperature],
                 )
                 / 1e3
             )
-            if t < 304.2
+            if temperature < 304.2
             else 7377.3
         )
-        for row in (
-            vle.filter(
-                pl.col("T_K") == t,
-            )
-            .sort("P_kPa")
-            .iter_rows(named=True)
-        ):
+
+        for pressure in pressures_kpa:
             pred_x1 = np.nan
             for feed_x1 in feed_x1s:
                 try:
                     if not is_stable_feos(
                         parameters=params,
-                        state=[t, row["P_kPa"] * 1e3, feed_x1, 1 - feed_x1],
+                        state=[temperature, pressure * 1e3, feed_x1, 1 - feed_x1],
                         kij_matrix=kij_matrix,
                         epsilon_ab=epsilon_ab,
                         density_initialization=None,
                     ):
                         flash = mix_tp_flash_feos(
                             params,
-                            [t, row["P_kPa"] * 1e3, feed_x1, 1 - feed_x1],
+                            [temperature, pressure * 1e3, feed_x1, 1 - feed_x1],
                             kij_matrix=kij_matrix,
                             epsilon_ab=epsilon_ab,
                         )
@@ -118,15 +140,13 @@ def co2_binary_px(
                         break
                 except RuntimeError:
                     continue
-            exp_x.append(row[x1_name])
             pred_x.append(pred_x1)
-            pressures.append(row["P_kPa"])
-        ax.plot(pressures, exp_x, "x", color="black", label="Exp")
-        ax.plot(pressures, pred_x, "o-", color="r", label="Pred")
+        ax.plot(exp_p, exp_x, "x", color="black", label="Exp")
+        ax.plot(pressures_kpa, pred_x, "-", color="r", label="Pred")
         ax.axvline(vp, color="gray", linestyle="--", label="CO2 Vapor Pressure")
         ax.set_xlabel("Pressure (kPa)")
         ax.set_ylabel("Mole Fraction CO2 in Liquid Phase")
-        ax.set_title(f"T = {t} K")
+        ax.set_title(f"T = {temperature} K")
         ax.legend()
     fig.tight_layout()
     return fig, axs
