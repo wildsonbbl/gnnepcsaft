@@ -8,7 +8,11 @@ from joblib import Parallel, delayed
 from scipy.optimize import least_squares
 from tqdm import tqdm
 
-from .pcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
+from gnnepcsaft.pcsaft.pcsaft_feos import (
+    is_stable_feos,
+    mix_tp_flash_feos,
+    pure_vp_feos,
+)
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments,too-many-locals
 
@@ -73,7 +77,7 @@ def _loss_fn(
 
     # Handle NaNs (failed flash) by assigning a large penalty
     nan_mask = np.isnan(residuals)
-    residuals[nan_mask] = np.sqrt(10.0)
+    residuals[nan_mask] = 10.0
 
     return residuals
 
