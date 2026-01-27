@@ -20,6 +20,7 @@ def co2_binary_px(
     inchi_to_params: Dict[str, List[float]],
     k_12: Optional[float] = None,
     epsilon_a1b2: Optional[float] = None,
+    n_fractions: int = 50,
 ):
     """Plot CO2 solubility in solvent from ThermoML data and GNNPCSAFT predictions.
 
@@ -30,7 +31,7 @@ def co2_binary_px(
          InChI strings to PC-SAFT parameters.
         k_12 (Optional[float]): Binary interaction parameter between CO2 and solvent.
         epsilon_a1b2 (Optional[float]): Association energy parameter between CO2 and solvent.
-        feed_x1 (float): Feed mole fraction of CO2 in the liquid phase.
+        n_fractions (int): number of fractions to check.
     """
 
     params = [inchi_to_params[inchi] for inchi in inchis]
@@ -70,7 +71,7 @@ def co2_binary_px(
     if isinstance(axs, Axes):
         axs = [axs]
     axs: List[Axes]
-    feed_x1s = np.linspace(1e-5, 0.99, 10)
+    feed_x1s = np.linspace(1e-5, 0.99, n_fractions)
     for ax, t in zip(axs, temperatures):
         exp_x = []
         pred_x = []

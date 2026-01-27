@@ -14,13 +14,12 @@ from .pcsaft_feos import is_stable_feos, mix_tp_flash_feos, pure_vp_feos
 
 
 def _pred_x1_worker(
-    t: float, p: float, k_12: float, params: List[List[float]]
+    t: float, p: float, k_12: float, params: List[List[float]], feed_x1s: np.ndarray
 ) -> float:
     """
     Worker function for parallel x1 prediction.
     Must be at module level for pickle compatibility on Windows.
     """
-    feed_x1s = np.linspace(1e-5, 0.99, 10)
     for feed_x1 in feed_x1s:
         try:
             # Check stability.
@@ -53,6 +52,7 @@ def _loss_fn(
     temperature: np.ndarray,
     pressure: np.ndarray,
     parallel: Parallel,
+    feed_x1s: np.ndarray,
 ) -> np.ndarray:
     """
     Loss function for least_squares.
@@ -63,7 +63,7 @@ def _loss_fn(
     # Run predictions in parallel using the active pool
     pred_x1 = np.asarray(
         parallel(
-            delayed(_pred_x1_worker)(T, P, k_12, params)
+            delayed(_pred_x1_worker)(T, P, k_12, params, feed_x1s)
             for T, P in zip(temperature, pressure)
         )
     )
@@ -79,7 +79,7 @@ def _loss_fn(
 
 
 def optimize_kij(
-    binary_vle_tml: pl.DataFrame, inchi_to_params: Dict[str, List[float]]
+    binary_vle_tml: pl.DataFrame, inchi_to_params: Dict[str, List[float]], n: int = 50
 ) -> pl.DataFrame:
     """Optimize binary interaction parameters (kij) for mixtures using VLE data."""
 
@@ -92,6 +92,7 @@ def optimize_kij(
         "mape": [],
     }
     unique_inchis = binary_vle_tml.select("inchi1", "inchi2").unique()
+    feed_x1s = np.linspace(1e-5, 0.99, n)
 
     # Create Parallel pool once and reuse it
     with Parallel(n_jobs=-1) as parallel:
@@ -146,6 +147,7 @@ def optimize_kij(
                         "temperature": temperature,
                         "pressure": pressure,
                         "parallel": parallel,
+                        "feed_x1s": feed_x1s,
                     },
                     jac="2-point",
                     method="lm",
@@ -160,7 +162,7 @@ def optimize_kij(
                 # Calculate MAE without NaNs
                 pred_x1 = np.asarray(
                     parallel(
-                        delayed(_pred_x1_worker)(T, P, k_12, params)
+                        delayed(_pred_x1_worker)(T, P, k_12, params, feed_x1s)
                         for T, P in zip(temperature, pressure)
                     )
                 )
