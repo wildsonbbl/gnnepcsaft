@@ -159,38 +159,7 @@ def co2_ternary_px(
         pl.col("inchi3").is_in([smilestoinchi(smi) for smi in smiles]),
     )
 
-    def _get_mole_fraction_names(vle):
-        x1_name = (
-            "mole_fraction_c1p2"
-            if vle["inchi1"][0] == smilestoinchi(smiles[0])
-            else (
-                "mole_fraction_c2p2"
-                if vle["inchi2"][0] == smilestoinchi(smiles[0])
-                else "mole_fraction_c3p2"
-            )
-        )
-        x2_name = (
-            "mole_fraction_c1p2"
-            if vle["inchi1"][0] == smilestoinchi(smiles[1])
-            else (
-                "mole_fraction_c2p2"
-                if vle["inchi2"][0] == smilestoinchi(smiles[1])
-                else "mole_fraction_c3p2"
-            )
-        )
-        x3_name = (
-            "mole_fraction_c1p2"
-            if vle["inchi1"][0] == smilestoinchi(smiles[2])
-            else (
-                "mole_fraction_c2p2"
-                if vle["inchi2"][0] == smilestoinchi(smiles[2])
-                else "mole_fraction_c3p2"
-            )
-        )
-
-        return x1_name, x2_name, x3_name
-
-    x1_name, x2_name, x3_name = _get_mole_fraction_names(vle)
+    x1_name, x2_name, x3_name = _get_mole_fraction_names(vle, smiles)
 
     temperatures = (
         vle.filter(
@@ -224,43 +193,12 @@ def co2_ternary_px(
             .sort("P_kPa")
             .iter_rows(named=True)
         ):
-            pred_x1 = np.nan
-            for feed_x1 in feed_x1s:
-                try:
-                    if not is_stable_feos(
-                        parameters=params,
-                        state=[
-                            t,
-                            row["P_kPa"] * 1e3,
-                            feed_x1,
-                            row[x2_name],
-                            row[x3_name],
-                        ],
-                        kij_matrix=kij_matrix,
-                        epsilon_ab=epsilon_ab,
-                        density_initialization=None,
-                    ):
-                        flash = mix_tp_flash_feos(
-                            params,
-                            [
-                                t,
-                                row["P_kPa"] * 1e3,
-                                feed_x1,
-                                row[x2_name],
-                                row[x3_name],
-                            ],
-                            kij_matrix=kij_matrix,
-                            epsilon_ab=epsilon_ab,
-                        )
-
-                        pred_x1 = (
-                            flash.liquid.molefracs[0].item()
-                            if flash.liquid.density > flash.vapor.density
-                            else flash.vapor.molefracs[0].item()
-                        )
-                        break
-                except RuntimeError:
-                    continue
+            x2 = row[x2_name]
+            x3 = row[x3_name]
+            p_pa = row["P_kPa"] * 1e3
+            pred_x1 = _get_x1_ternary(
+                kij_matrix, epsilon_ab, params, feed_x1s, t, x2, x3, p_pa
+            )
             exp_x.append(row[x1_name])
             pred_x.append(pred_x1)
             pressures.append(row["P_kPa"])
@@ -272,3 +210,104 @@ def co2_ternary_px(
         ax.legend()
         fig.tight_layout()
     return fig, axs
+
+
+def _get_mole_fraction_names(vle, smiles):
+    x1_name = (
+        "mole_fraction_c1p2"
+        if vle["inchi1"][0] == smilestoinchi(smiles[0])
+        else (
+            "mole_fraction_c2p2"
+            if vle["inchi2"][0] == smilestoinchi(smiles[0])
+            else "mole_fraction_c3p2"
+        )
+    )
+    x2_name = (
+        "mole_fraction_c1p2"
+        if vle["inchi1"][0] == smilestoinchi(smiles[1])
+        else (
+            "mole_fraction_c2p2"
+            if vle["inchi2"][0] == smilestoinchi(smiles[1])
+            else "mole_fraction_c3p2"
+        )
+    )
+    x3_name = (
+        "mole_fraction_c1p2"
+        if vle["inchi1"][0] == smilestoinchi(smiles[2])
+        else (
+            "mole_fraction_c2p2"
+            if vle["inchi2"][0] == smilestoinchi(smiles[2])
+            else "mole_fraction_c3p2"
+        )
+    )
+
+    return x1_name, x2_name, x3_name
+
+
+def _get_x1_ternary(kij_matrix, epsilon_ab, params, feed_x1s, t, x2, x3, p_pa):
+    pred_x1 = np.nan
+    for feed_x1 in feed_x1s:
+        try:
+            if not is_stable_feos(
+                parameters=params,
+                state=[
+                    t,
+                    p_pa,
+                    feed_x1,
+                    x2,
+                    x3,
+                ],
+                kij_matrix=kij_matrix,
+                epsilon_ab=epsilon_ab,
+                density_initialization=None,
+            ):
+                flash = mix_tp_flash_feos(
+                    params,
+                    [
+                        t,
+                        p_pa,
+                        feed_x1,
+                        x2,
+                        x3,
+                    ],
+                    kij_matrix=kij_matrix,
+                    epsilon_ab=epsilon_ab,
+                )
+
+                pred_x1 = (
+                    flash.liquid.molefracs[0].item()
+                    if flash.liquid.density > flash.vapor.density
+                    else flash.vapor.molefracs[0].item()
+                )
+                break
+        except RuntimeError:
+            continue
+    return pred_x1
+
+
+def get_kij_matrix_ternary(kij_df, inchi1, inchi2, inchi3):
+    "get kij matrix ternary from kij_df"
+    k_12 = (
+        kij_df.filter(
+            (pl.col("inchi1").is_in([inchi1, inchi2])),
+            (pl.col("inchi2").is_in([inchi1, inchi2])),
+        )["k_12"].to_list()
+        or [0.0]
+    )[0]
+    k_13 = (
+        kij_df.filter(
+            (pl.col("inchi1").is_in([inchi1, inchi3])),
+            (pl.col("inchi2").is_in([inchi1, inchi3])),
+        )["k_12"].to_list()
+        or [0.0]
+    )[0]
+    k_23 = (
+        kij_df.filter(
+            (pl.col("inchi1").is_in([inchi2, inchi3])),
+            (pl.col("inchi2").is_in([inchi2, inchi3])),
+        )["k_12"].to_list()
+        or [0.0]
+    )[0]
+
+    kij_matrix = [[0.0, k_12, k_13], [k_12, 0.0, k_23], [k_13, k_23, 0.0]]
+    return kij_matrix
