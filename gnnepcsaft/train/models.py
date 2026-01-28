@@ -123,7 +123,7 @@ class GNNePCSAFTL(L.LightningModule):
             )
             para_msigmae = pred_para
         all_pred_para = (
-            torch.hstack([para_msigmae, para_assoc, graphs.munanb])
+            torch.hstack([para_msigmae, para_assoc, graphs.munanb, graphs.mw])
             .cpu()
             .to(torch.float64)
             .tolist()
