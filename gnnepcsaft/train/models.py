@@ -5,6 +5,7 @@ import math
 from typing import Any, Union
 
 import lightning as L
+import ml_collections
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -18,6 +19,8 @@ from torch_geometric.nn import BatchNorm
 from torchmetrics.functional import mean_absolute_percentage_error as mape
 
 from .utils import rho_batch, vp_batch
+
+torch.serialization.add_safe_globals([ml_collections.ConfigDict])
 
 
 class GNNePCSAFTL(L.LightningModule):
