@@ -111,6 +111,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
             else [train_val_dataloader, train_val_dataloader]
         ),
         ckpt_path=ckpt_path,
+        weights_only=False,
     )
 
     if config["job_type"] == "train":
