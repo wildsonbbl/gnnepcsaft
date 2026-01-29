@@ -93,19 +93,18 @@ class TransformParameters(BaseTransform):
 
 def build_test_dataset(
     workdir: str,
-    train_dataset: Union[Esper, Ramirez],
     transform: Union[None, BaseTransform] = None,
 ) -> tuple[ThermoMLDataset, ThermoMLDataset]:
     "Builds test dataset."
 
     para_data = {}
-    if isinstance(train_dataset, (Esper,)):
-        for graph in train_dataset:
-            para_data[graph.InChI] = (
-                graph.para,
-                graph.assoc,
-                graph.munanb,
-            )
+    dataset = Esper(root=osp.join(workdir, "data/esper2023"))
+    for graph in dataset:
+        para_data[graph.InChI] = (
+            graph.para,
+            graph.assoc,
+            graph.munanb,
+        )
     if transform:
         transform = T.Compose([TransformParameters(para_data), transform])
     else:
@@ -127,14 +126,16 @@ def build_test_dataset(
     return val_msigmae_dataset, train_val_dataset  # type: ignore
 
 
-def build_train_dataset(workdir, dataset, transform=None) -> Union[Esper, Ramirez]:
+def build_train_dataset(
+    workdir, dataset, transform=None, normalise=False
+) -> Union[Esper, Ramirez]:
     "Builds train dataset."
     if dataset == "ramirez":
         path = osp.join(workdir, "data/ramirez2022")
         return Ramirez(path, transform=transform)
     if dataset == "esper":
         path = osp.join(workdir, "data/esper2023")
-        return Esper(path, transform=transform)
+        return Esper(path, transform=transform, normalise=normalise)
     if dataset == "esper_assoc":
         path = osp.join(workdir, "data/esper2023")
         train_dataset = Esper(path, transform=transform)

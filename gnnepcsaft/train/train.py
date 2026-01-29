@@ -53,8 +53,10 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
     """
     torch.set_float32_matmul_precision("medium")
     # Dataset building
-    train_dataset = build_train_dataset(workdir, config["dataset"])
-    val_dataset, train_val_dataset = build_test_dataset(workdir, train_dataset)
+    train_dataset = build_train_dataset(
+        workdir, config["dataset"], normalise=config.get("normalise", False)
+    )
+    val_dataset, train_val_dataset = build_test_dataset(workdir)
 
     train_loader = DataLoader(
         train_dataset,

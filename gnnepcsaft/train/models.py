@@ -174,6 +174,9 @@ class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
             [25.0, 4.5, 550.0, -1 * math.log10(0.0001), math.log10(5000.0)]
         )
         self.num_para = config["num_para"]
+        self.msigmae_mean = torch.tensor([4.053381, 3.683434, 266.872302])
+        self.msigmae_std = torch.tensor([2.043016, 0.397644, 57.7073])
+        self.normalise = config.get("normalise", False)
 
         self.node_embed = AtomEncoder(config["hidden_dim"])
         self.edge_embed = BondEncoder(config["hidden_dim"])
@@ -246,6 +249,11 @@ class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
         ):
 
             params = self.forward(x, edge_index, edge_attr, batch)
+            if self.normalise and self.num_para == 3:
+                self.msigmae_mean.to(device=x.device)
+                self.msigmae_std.to(device=x.device)
+                params = params * self.msigmae_std + self.msigmae_mean
+
             upper_bounds = (
                 self.upper_bounds[:3] if self.num_para == 3 else self.upper_bounds[3:]
             ).to(device=x.device)
