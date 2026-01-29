@@ -16,7 +16,7 @@ def training(workdir: str, config: dict):
     """Training function"""
     # Load the data
     train_dataset = build_train_dataset(workdir, "esper")
-    test_dts = build_test_dataset(workdir)
+    test_dts = build_test_dataset(workdir, train_dataset)
     # Create the Dataloader
     train_loader = DataLoader(
         train_dataset, batch_size=len(train_dataset), shuffle=True

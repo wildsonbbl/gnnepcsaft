@@ -176,25 +176,11 @@ class Esper(InMemoryDataset):
     log (bool, optional) – Whether to print any console output while downloading
     and processing the dataset. (default: True).
 
-    normalise (bool, optional) - Whether to normalise parameters data for training (default: False).
-
     """
 
-    def __init__(  # pylint: disable=R0913,R0917
-        self,
-        root,
-        transform=None,
-        pre_transform=None,
-        pre_filter=None,
-        log=True,
-        normalise=False,
-    ):
-        super().__init__(root, transform, pre_transform, pre_filter, log)
+    def __init__(self, root, transform=None, pre_transform=None, pre_filter=None):
+        super().__init__(root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0], weights_only=False)
-
-        if normalise:
-            self.para = (self.para - self.para.mean(dim=0)) / self.para.std(dim=0)
-            self.assoc = (self.assoc - self.assoc.mean(dim=0)) / self.assoc.std(dim=0)
 
     @property
     def raw_file_names(self):
