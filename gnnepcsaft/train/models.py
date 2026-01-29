@@ -250,9 +250,9 @@ class GNNePCSAFT(torch.nn.Module):  # pylint: disable=R0902
 
             params = self.forward(x, edge_index, edge_attr, batch)
             if self.normalise and self.num_para == 3:
-                self.msigmae_mean.to(device=x.device)
-                self.msigmae_std.to(device=x.device)
-                params = params * self.msigmae_std + self.msigmae_mean
+                msigmae_mean = self.msigmae_mean.to(device=x.device)
+                msigmae_std = self.msigmae_std.to(device=x.device)
+                params = params * msigmae_std + msigmae_mean
 
             upper_bounds = (
                 self.upper_bounds[:3] if self.num_para == 3 else self.upper_bounds[3:]
