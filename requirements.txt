@@ -14,8 +14,8 @@ wandb>=0.24.0
 lightning
 ConfigSpace
 hpbandster
-ray[train]
-ray[tune]
+ray[train]==2.48.0
+ray[tune]==2.48.0
 teqp
 PCSAFTsuperanc
 feos==0.8.0
