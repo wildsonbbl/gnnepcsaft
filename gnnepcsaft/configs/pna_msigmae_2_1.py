@@ -9,7 +9,7 @@ def get_config():
     config.job_type = "train"
 
     # Optimizer.
-    config.optimizer = "adam"
+    config.optimizer = "sgd"
     config.learning_rate = 1e-3
     config.change_opt = True
     config.change_sch = False
@@ -22,9 +22,9 @@ def get_config():
 
     config.accelerator = "auto"
     config.batch_size = 512
-    config.num_train_steps = 500_000
-    config.log_every_steps = 500
-    config.eval_every_steps = 2500
+    config.num_train_steps = 5000
+    config.log_every_steps = 50
+    config.eval_every_steps = 250
     config.dataset = "esper"
     config.checkpoint = "wildson/gnn-pc-saft/model-1dk4fpzp:v0"  # wandb artifact path
     config.resume_id = ""  # wandb run id
