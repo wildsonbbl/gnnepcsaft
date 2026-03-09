@@ -5,23 +5,23 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import si_units as si
-from feos import dft  # type: ignore # pylint: disable = E0401
-from feos.eos import (  # type: ignore # pylint: disable = E0401
-    Contributions,
-    EquationOfState,
-    PhaseDiagram,
-    PhaseEquilibrium,
-    State,
+from feos import BinaryRecord  # pyright: ignore[reportAttributeAccessIssue]
+from feos import Contributions  # pyright: ignore[reportAttributeAccessIssue]
+from feos import EquationOfState  # pyright: ignore[reportAttributeAccessIssue]
+from feos import GcParameters  # pyright: ignore[reportAttributeAccessIssue]
+from feos import (
+    HelmholtzEnergyFunctional,  # pyright: ignore[reportAttributeAccessIssue]
 )
-from feos.pcsaft import (  # type: ignore # pylint: disable = E0401
-    BinaryRecord,
-    Identifier,
-    IdentifierOption,
-    PcSaftBinaryRecord,
-    PcSaftParameters,
-    PcSaftRecord,
-    PureRecord,
-)
+from feos import Identifier  # pyright: ignore[reportAttributeAccessIssue]
+from feos import IdentifierOption  # pyright: ignore[reportAttributeAccessIssue]
+from feos import Parameters  # pyright: ignore[reportAttributeAccessIssue]
+from feos import PhaseDiagram  # pyright: ignore[reportAttributeAccessIssue]
+from feos import PhaseEquilibrium  # pyright: ignore[reportAttributeAccessIssue]
+from feos import PureRecord  # pyright: ignore[reportAttributeAccessIssue]
+from feos import SegmentRecord  # pyright: ignore[reportAttributeAccessIssue]
+from feos import SmartsRecord  # pyright: ignore[reportAttributeAccessIssue]
+from feos import State  # pyright: ignore[reportAttributeAccessIssue]
+from feos import SurfaceTensionDiagram  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def pc_saft(parameters: List[float]) -> EquationOfState.pcsaft:
@@ -65,12 +65,11 @@ def pc_saft_mixture(
             kwargs["epsilon_k_ab"] = eps_ab
 
         return BinaryRecord(
-            id1=Identifier(smiles=f"SMILES_{i}", inchi=f"InChI_{i}"),
-            id2=Identifier(smiles=f"SMILES_{j}", inchi=f"InChI_{j}"),
-            model_record=PcSaftBinaryRecord(**kwargs),
+            id1=Identifier(name=f"comp_{i}"),
+            id2=Identifier(name=f"comp_{j}"),
+            **kwargs,
         )
 
-    binary_records = None
     if kij_matrix or epsilon_ab:
         binary_records = [
             _create_binary_record(
@@ -84,9 +83,9 @@ def pc_saft_mixture(
             if i != j
         ]
     else:
-        binary_records = None
-    pcsaftparameters = PcSaftParameters.from_records(
-        records, binary_records=binary_records, identifier_option=IdentifierOption.Inchi
+        binary_records = []
+    pcsaftparameters = Parameters.from_records(
+        records, binary_records=binary_records, identifier_option=IdentifierOption.Name
     )
     eos = EquationOfState.pcsaft(pcsaftparameters)
     return eos
@@ -105,21 +104,20 @@ def get_records(mixture_parameters: List[List[float]]) -> list[PureRecord]:
     for idx, mol_parameters in enumerate(mixture_parameters):
         records.append(
             PureRecord(
-                identifier=Identifier(
-                    smiles=f"SMILES_{idx}",
-                    inchi=f"InChI_{idx}",
-                ),
+                identifier=Identifier(name=f"comp_{idx}"),
                 molarweight=mol_parameters[8],  # g/mol
-                model_record=PcSaftRecord(
-                    m=mol_parameters[0],  # units
-                    sigma=mol_parameters[1],  # Å
-                    epsilon_k=mol_parameters[2],  # K
-                    kappa_ab=mol_parameters[3],
-                    epsilon_k_ab=mol_parameters[4],  # K
-                    mu=mol_parameters[5],  # Debye
-                    na=mol_parameters[6],
-                    nb=mol_parameters[7],
-                ),
+                m=mol_parameters[0],  # units
+                sigma=mol_parameters[1],  # Å
+                epsilon_k=mol_parameters[2],  # K
+                mu=mol_parameters[5],  # Debye
+                association_sites=[
+                    {
+                        "kappa_ab": mol_parameters[3],
+                        "epsilon_k_ab": mol_parameters[4],  # K
+                        "na": mol_parameters[6],
+                        "nb": mol_parameters[7],
+                    }
+                ],
             )
         )
 
@@ -937,10 +935,10 @@ def pure_surface_tension_feos(
     t = state[0]  # Temperature, K
     records = get_records([parameters])
 
-    pcsaftparameters = PcSaftParameters.from_records(records)
-    functional = dft.HelmholtzEnergyFunctional.pcsaft(pcsaftparameters)
-    phase_diagram = dft.PhaseDiagram.pure(functional, t * si.KELVIN, 100)
-    st_diagram = dft.SurfaceTensionDiagram(phase_diagram.states, n_grid=1024)
+    pcsaftparameters = Parameters.from_records(records)
+    functional = HelmholtzEnergyFunctional.pcsaft(pcsaftparameters)
+    phase_diagram = PhaseDiagram.pure(functional, t * si.KELVIN, 100)
+    st_diagram = SurfaceTensionDiagram(phase_diagram.states, n_grid=1024)
 
     st = st_diagram.surface_tension / (si.MILLI * si.NEWTON / si.METER)
     temp = st_diagram.liquid.temperature / si.KELVIN
@@ -954,29 +952,42 @@ def parameters_gc_pcsaft(smiles: str) -> List[float]:
     Args:
         smiles (str): SMILES of the compound
     """
-    pure_record = (
-        PcSaftParameters.from_json_smiles(
-            [smiles],
+
+    parameters = GcParameters.from_smiles(
+        [smiles],
+        SmartsRecord.from_json(
             str(
                 Path(__file__).resolve().parent.parent
                 / "data/gc_pcsaft/sauer2014_smarts.json"
-            ),
+            )
+        ),
+        SegmentRecord.from_json(
             str(
                 Path(__file__).resolve().parent.parent
                 / "data/gc_pcsaft/rehner2023_hetero.json"
-            ),
-        )
-        .pure_records[0]
-        .model_record
+            )
+        ),
     )
+    eos = EquationOfState.pcsaft(parameters)
+    gc_parameters = eos.parameters
+    assert isinstance(gc_parameters, Dict)
 
-    m = pure_record.m
-    sigma = pure_record.sigma
-    e = pure_record.epsilon_k
-    mu = pure_record.mu if pure_record.mu else 0
-    kab = pure_record.kappa_ab if pure_record.kappa_ab else 0
-    eab = pure_record.epsilon_k_ab if pure_record.epsilon_k_ab else 0
-    na = pure_record.na if pure_record.na else 0
-    nb = pure_record.nb if pure_record.nb else 0
+    m = gc_parameters.get("m")
+    sigma = gc_parameters.get("sigma")
+    e = gc_parameters.get("epsilon_k")
+    mu = gc_parameters.get("mu")
+    kab = gc_parameters.get("kappa_ab")
+    eab = gc_parameters.get("epsilon_k_ab")
+    na = gc_parameters.get("na")
+    nb = gc_parameters.get("nb")
 
-    return [m, sigma, e, kab, eab, mu, na, nb]
+    return [
+        m.item() if m else 0.0,
+        sigma.item() if sigma else 0.0,
+        e.item() if e else 0.0,
+        kab.item() if kab else 0.0,
+        eab.item() if eab else 0.0,
+        mu.item() if mu else 0.0,
+        na.item() if na else 0.0,
+        nb.item() if nb else 0.0,
+    ]
