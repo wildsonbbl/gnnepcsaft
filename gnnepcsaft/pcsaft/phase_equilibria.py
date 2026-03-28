@@ -846,15 +846,21 @@ def plot_tm(
             markerfacecolor="none",
         )
         if plot_tm0_tm1:
+            tm0_plot = np.where(
+                np.array(melting_points_0) == 0.0, np.nan, melting_points_0
+            )
+            tm1_plot = np.where(
+                np.array(melting_points_1) == 0.0, np.nan, melting_points_1
+            )
             ax0.plot(
                 mole_fractions_i,
-                melting_points_0,
+                tm0_plot,
                 label=r"$T_{m,1}$",
                 color="#9467bd",
             )
             ax0.plot(
                 mole_fractions_i,
-                melting_points_1,
+                tm1_plot,
                 label=r"$T_{m,2}$",
                 color="#8c564b",
             )
