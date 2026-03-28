@@ -2,12 +2,16 @@
 Module to handle phase equilibria calculations.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+import seaborn as sns
+import si_units as si
 from matplotlib.axes import Axes
+from scipy.optimize import root_scalar
 
 from gnnepcsaft.data.rdkit_util import smilestoinchi
 from gnnepcsaft.pcsaft.pcsaft_feos import (
@@ -15,6 +19,23 @@ from gnnepcsaft.pcsaft.pcsaft_feos import (
     mix_tp_flash_feos,
     pure_vp_feos,
 )
+
+from .pcsaft_feos import mix_ln_activity_coefficient
+
+LABEL_FS = 11
+TICKS_FS = 10
+TITLE_FS = 11
+mpl.rcParams.update(
+    {
+        "font.size": 11,
+        "axes.titlesize": TITLE_FS,
+        "axes.labelsize": LABEL_FS,
+        "xtick.labelsize": TICKS_FS,
+        "ytick.labelsize": TICKS_FS,
+    }
+)
+
+sns.set_theme(style="ticks")
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
@@ -332,3 +353,474 @@ def get_kij_matrix_ternary(kij_df, inchi1, inchi2, inchi3):
 
     kij_matrix = [[0.0, k_12, k_13], [k_12, 0.0, k_23], [k_13, k_23, 0.0]]
     return kij_matrix
+
+
+def mix_melting_point_ideal(
+    mole_fraction_i: np.ndarray, tm_i: np.ndarray, delta_h_sl: np.ndarray
+) -> np.ndarray:
+    """Calculates mixture melting point using ideal mixing rule and
+    pure component melting points and enthalpies of fusion.
+
+
+    Args:
+        mole_fraction_i (np.ndarray): Mole fraction of component i in the mixture.
+        tm_i (np.ndarray): Melting point of pure component i in Kelvin
+        delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+    """
+
+    temperature = 1 / (
+        -np.log(mole_fraction_i) / (delta_h_sl * si.KILO * si.JOULE / si.MOL) * si.RGAS
+        + 1 / (tm_i * si.KELVIN)
+    )
+
+    return temperature / si.KELVIN
+
+
+def fit_melting_point(
+    temperature: float,
+    pressure: float,
+    mole_fraction_i: np.ndarray,
+    parameters: List[List[float]],
+    k_ij: float,
+    tm_i: np.ndarray,
+    delta_h_sl: np.ndarray,
+    comp_idx: int,
+) -> np.ndarray:
+    """Calculates the difference between the left and right side of the
+    melting point equation for a given temperature, pressure,
+    mole fraction, and PC-SAFT parameters for a binary mixture.
+    Used for fitting melting point parameters.
+
+    Args:
+        temperature (float): Temperature in Kelvin.
+        pressure (float): Pressure in Pa.
+        mole_fraction_i (np.ndarray): Mole fraction of component i in the mixture.
+        parameters (List[List[float]]): PC-SAFT parameters for each component.
+        k_ij (float): Interaction parameter between components i and j.
+        tm_i (np.ndarray): Melting point of pure component i in Kelvin.
+        delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+        comp_idx (int): Index of the component for which to calculate the difference.
+    """
+
+    gamma_i = np.exp(
+        mix_ln_activity_coefficient(
+            parameters=parameters,
+            state=[temperature, pressure, *mole_fraction_i],
+            kij_matrix=[[0.0, k_ij], [k_ij, 0.0]],
+        )
+    )
+
+    left_side = np.log(mole_fraction_i * gamma_i)
+    right_side = (
+        (delta_h_sl * si.KILO * si.JOULE / si.MOL)
+        / si.RGAS
+        * (1 / (tm_i * si.KELVIN) - 1 / (temperature * si.KELVIN))
+    )
+
+    return left_side[comp_idx] - right_side[comp_idx]
+
+
+def fit_kij_with_tm(
+    kij: np.ndarray,
+    data: np.ndarray,
+    pressure: float,
+    parameters: List[List[float]],
+    tm_i: np.ndarray,
+    delta_h_sl: np.ndarray,
+    comp_idx: int,
+) -> np.ndarray:
+    """Calculates the difference between the left and right side of the
+    melting point equation for a given kij, pressure, PC-SAFT parameters,
+    pure component melting points, and enthalpies of fusion for a binary mixture.
+    Used for fitting the binary interaction parameter kij.
+
+
+    Args:
+        kij (float): Interaction parameter between components i and j.
+        data (np.ndarray): Array of shape (n, 2) containing
+          mole fractions of component 2 and melting temperature data.
+        pressure (float): Pressure in Pa.
+        parameters (List[List[float]]): PC-SAFT parameters for each component.
+        tm_i (np.ndarray): Melting point of pure component i in Kelvin.
+        delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+        comp_idx (int): Index of the component for which to calculate the difference.
+    """
+
+    x_all = data[:, 0][..., np.newaxis]
+    tm_all = data[:, 1][..., np.newaxis]
+    mole_fractions_i = np.hstack([1 - x_all, x_all])
+
+    gamma_i = np.array(
+        [
+            np.exp(
+                mix_ln_activity_coefficient(
+                    parameters=parameters,
+                    state=[tm, pressure, 1 - x_i, x_i],
+                    kij_matrix=[[0.0, kij.item()], [kij.item(), 0.0]],
+                )
+            )
+            for x_i, tm in data
+        ]
+    )
+
+    left_side = np.log(mole_fractions_i * gamma_i)
+    right_side = (
+        (delta_h_sl * si.KILO * si.JOULE / si.MOL)
+        / si.RGAS
+        * (1 / (tm_i * si.KELVIN) - 1 / (tm_all * si.KELVIN))
+    )
+
+    return left_side[:, comp_idx] - right_side[:, comp_idx]
+
+
+def gamma_from_exp_data(
+    tm_data: np.ndarray, tm_i: np.ndarray, delta_h_sl: np.ndarray, idx: int = -5
+) -> np.ndarray:
+    """Calculates activity coefficient from experimental data of
+    melting points and pure component melting points and enthalpies of fusion
+    for a binary mixture.
+
+    Args:
+        tm_data (np.ndarray): Array of shape (n, 2) containing
+          mole fractions of component 2 and melting temperature data.
+        tm_i (np.ndarray): Melting point of pure component i in Kelvin.
+        delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+        idx (int): Index of the data point where the activity coefficient
+         changes from component 1 to component 2. This is used to determine which
+         component's activity coefficient to calculate.
+
+    """
+
+    x_all = tm_data[:, 0][..., np.newaxis]
+    tm_all = tm_data[:, 1][..., np.newaxis]
+    mole_fractions_i = np.hstack([1 - x_all, x_all])
+
+    gammas = (
+        np.exp(
+            (delta_h_sl * si.KILO * si.JOULE / si.MOL)
+            / si.RGAS
+            * (1 / (tm_i * si.KELVIN) - 1 / (tm_all * si.KELVIN))
+        )
+        / mole_fractions_i
+    )
+
+    return np.concatenate([gammas[:idx, 0], gammas[idx:, 1]])
+
+
+def fit_kij_with_gamma(
+    kij: np.ndarray,
+    data: np.ndarray,
+    pressure: float,
+    parameters: List[List[float]],
+    comp_idx: int,
+) -> np.ndarray:
+    """
+    Calculates the difference between the activity coefficient calculated from
+    experimental data and the activity coefficient calculated from PC-SAFT
+    for a given kij, pressure, and PC-SAFT parameters for a binary mixture.
+    Used for fitting the binary interaction parameter kij.
+
+    Args:
+      kij (np.ndarray): Interaction parameter between components i and j.
+      data (np.ndarray): Array of shape (n, 3) containing
+        mole fractions of component 2, melting temperature, and experimental
+        activity coefficient data.
+      pressure (float): Pressure in Pa.
+      parameters (List[List[float]]): PC-SAFT parameters for each component.
+      comp_idx (int): Index of the component for which to calculate the difference.
+    """
+
+    exp_gamma_i = data[:, 2]
+
+    gamma_i = np.array(
+        [
+            np.exp(
+                mix_ln_activity_coefficient(
+                    parameters=parameters,
+                    state=[tm, pressure, 1 - x_i, x_i],
+                    kij_matrix=[[0.0, kij.item()], [kij.item(), 0.0]],
+                )
+            )
+            for x_i, tm, _ in data
+        ]
+    )
+
+    return exp_gamma_i - gamma_i[:, comp_idx]
+
+
+def mape_tm(
+    tm_data: np.ndarray,
+    parameters: List[List[float]],
+    k_ij: float,
+    pressure: float,
+    exp_tm_i: np.ndarray,
+    exp_delta_h_sl: np.ndarray,
+) -> np.floating:
+    """
+    Calculates the mean absolute percentage error (MAPE) between the experimental
+    melting points and the melting points calculated from PC-SAFT for a binary mixture.
+
+    Args:
+      tm_data (np.ndarray): Array of shape (n, 2) containing
+        mole fractions of component 2 and melting temperature data.
+      parameters (List[List[float]]): PC-SAFT parameters for each component.
+      k_ij (float): Interaction parameter between components i and j.
+      exp_tm_i (np.ndarray): Melting point of pure component i in Kelvin.
+      exp_delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+    """
+
+    mape = []
+    for x_i, tm_exp in tm_data:
+        tm_0, tm_1 = _get_tm(parameters, k_ij, x_i, pressure, exp_tm_i, exp_delta_h_sl)
+        tm = max(tm_0, tm_1)
+        if tm == 0.0:
+            continue
+        mape.append(np.abs((tm - tm_exp) / tm_exp))
+    return np.mean(mape)
+
+
+def _get_tm(
+    parameters: List[List[float]],
+    k_ij: float,
+    x_i: float,
+    pressure: float,
+    exp_tm_i: np.ndarray,
+    exp_delta_h_sl: np.ndarray,
+) -> Tuple[float, float]:
+    mole_fraction_i = np.array([1 - x_i, x_i], dtype=np.float64)
+    try:
+        res = root_scalar(
+            f=fit_melting_point,
+            bracket=exp_tm_i,
+            x0=exp_tm_i.min(),
+            args=(
+                pressure,
+                mole_fraction_i,
+                parameters,
+                k_ij,
+                exp_tm_i,
+                exp_delta_h_sl,
+                0,
+            ),
+            method="newton",
+            xtol=1e-8,
+        )
+        tm_0 = res.root
+        if not res.converged:
+            raise ValueError("not converged")
+
+    except (RuntimeError, ValueError) as e:
+        print(x_i, e)
+        tm_0 = 0.0
+
+    try:
+        res = root_scalar(
+            f=fit_melting_point,
+            bracket=exp_tm_i,
+            x0=(exp_tm_i).min(),
+            args=(
+                pressure,
+                mole_fraction_i,
+                parameters,
+                k_ij,
+                exp_tm_i,
+                exp_delta_h_sl,
+                1,
+            ),
+            method="newton",
+            xtol=1e-8,
+        )
+        tm_1 = res.root
+        if not res.converged:
+            raise ValueError("not converged")
+
+    except (RuntimeError, ValueError) as e:
+        print(x_i, e)
+        tm_1 = 0.0
+
+    return tm_0, tm_1
+
+
+def plot_tm(
+    all_k_ij: List[float],
+    all_parameters: List[List[List[float]]],
+    all_exp_tm_i: List[np.ndarray],
+    all_exp_delta_h_sl: List[np.ndarray],
+    all_tm_data: List[pl.DataFrame],
+    fig_name: str = "fig11.png",
+    mole_fraction_step: float = 0.01,
+    pressure: float = 101325.0,
+    plot_tm0_tm1: bool = False,
+):
+    """
+    Plots the melting temperatures and activity coefficients vs mole fractions
+    for a list of binary mixtures.This function generates a multi-panel figure
+    comparing PC-SAFT predictions with ideal mixing behavior and experimental
+    data for melting point depression and activity coefficients across
+    a range of mole fractions.
+
+    Args:
+      all_k_ij (List[float]):
+        List of binary interaction parameters (k_ij) for each mixture.
+      all_parameters (List[List[List[float]]]):
+        List of PC-SAFT parameters for each component in each mixture.
+      all_exp_tm_i (List[np.ndarray]):
+        List of arrays containing experimental melting
+        temperatures for pure components in each mixture.
+      all_exp_delta_h_sl (List[np.ndarray]):
+        List of arrays containing experimental enthalpy of
+        fusion for pure components in each mixture.
+      all_tm_data (List[pl.DataFrame]):
+        List of Polars DataFrames containing experimental
+        melting point data with columns 'x' (mole fraction)
+        and 'tm' (melting temperature) for each mixture.
+      fig_name (str, optional):
+        Output filename for the saved figure. Default is "fig11.png".
+      mole_fraction_step (float, optional):
+        Step size for mole fraction calculations, ranging from 0.001 to 1.0. Default is 0.01.
+      pressure (float): System pressure in Pascal. Default is 101325.0.
+      plot_tm0_tm1 (bool): Whether to plot tm_0 and tm_1. Default is `False`.
+
+    Saves the figure to "images/{fig_name}" and displays it.
+
+    Notes
+    -----
+    - Each row in the figure corresponds to one mixture.
+    - Left column (ax0): Melting temperature vs mole fraction,
+      comparing PC-SAFT, ideal mixing, and experimental data.
+    - Right column (ax1): Activity coefficients vs mole fraction
+      for both components, with experimental data.
+    - The function uses root-finding (Newton's method) to solve
+      for melting points and catches convergence failures.
+    - Activity coefficients are calculated from PC-SAFT mixing
+      rules at the computed melting point.
+    """
+
+    _, axs = plt.subplots(
+        len(all_parameters),
+        2,
+        figsize=(4.68, 2.22 * len(all_parameters)),
+        squeeze=False,
+    )
+
+    for idx in np.arange(len(all_parameters)):
+        k_ij = all_k_ij[idx]
+        parameters = all_parameters[idx]
+        exp_tm_i = all_exp_tm_i[idx]
+        exp_delta_h_sl = all_exp_delta_h_sl[idx]
+        tm_data = all_tm_data[idx]
+
+        melting_points = []
+        melting_points_ideal = []
+        melting_points_0 = []
+        melting_points_1 = []
+        mole_fractions_i = []
+        gammas = []
+        gammas_exp = gamma_from_exp_data(tm_data.to_numpy(), exp_tm_i, exp_delta_h_sl)
+
+        for x_i in np.arange(0.001, 1.0, mole_fraction_step, dtype=np.float64):
+            mole_fraction_i = np.array([1 - x_i, x_i], dtype=np.float64)
+
+            tm_0, tm_1 = _get_tm(
+                parameters, k_ij, x_i, pressure, exp_tm_i, exp_delta_h_sl
+            )
+            tm = max(tm_0, tm_1)
+            melting_points_0.append(tm_0)
+            melting_points_1.append(tm_1)
+            melting_points.append(tm)
+            mole_fractions_i.append(x_i)
+            melting_points_ideal.append(
+                mix_melting_point_ideal(mole_fraction_i, exp_tm_i, exp_delta_h_sl)
+            )
+            gamma = np.exp(
+                mix_ln_activity_coefficient(
+                    parameters=parameters,
+                    state=[tm, 101325.0, *mole_fraction_i],
+                    kij_matrix=[[0.0, k_ij], [k_ij, 0.0]],
+                )
+            )
+            gammas.append(gamma)
+
+        ax0 = axs[idx, 0]
+        ax0.plot(
+            mole_fractions_i,
+            melting_points,
+            label="PC-SAFT",
+            color="C0",
+            linestyle="-",
+        )
+        ax0.plot(
+            mole_fractions_i,
+            melting_points_ideal,
+            label="Ideal",
+            linestyle="--",
+            color="#d62728",
+        )
+        ax0.plot(
+            tm_data["x"],
+            tm_data["tm"],
+            label="Experimental",
+            linestyle="",
+            marker="o",
+            color="black",
+            markerfacecolor="none",
+        )
+        if plot_tm0_tm1:
+            ax0.plot(
+                mole_fractions_i,
+                melting_points_0,
+                label=r"$T_{m,1}$",
+                color="#9467bd",
+            )
+            ax0.plot(
+                mole_fractions_i,
+                melting_points_1,
+                label=r"$T_{m,2}$",
+                color="#8c564b",
+            )
+        ax0.set_xlabel(r"$x_1$")
+        ax0.set_ylabel(r"T / K")
+
+        ax1 = axs[idx, 1]
+        gammas_array = np.array(gammas)
+        ax1.plot(
+            mole_fractions_i,
+            gammas_array[:, 0],
+            color="C0",
+            label=r"$\gamma_1$",
+        )
+        ax1.plot(
+            mole_fractions_i,
+            gammas_array[:, 1],
+            color="C0",
+            label=r"$\gamma_2$",
+        )
+        ax1.plot(
+            tm_data["x"],
+            gammas_exp,
+            label="Experimental",
+            linestyle="",
+            marker="o",
+            color="black",
+            markerfacecolor="none",
+        )
+        ax1.set_xlabel(r"$x_1$")
+        ax1.set_ylabel(r"$\gamma_i$")
+        ax1.axhline(y=1.0, linestyle="--", color="r")
+
+        for ax in (ax0, ax1):
+            # Adiciona ticks para dentro em todos os lados
+            # ax.tick_params(direction="in", top=False, right=False)
+            ax.set_xlim([0, 1])
+            ax.grid(False)
+    sns.despine(trim=True)
+    plt.tight_layout()
+    plt.savefig(
+        "images/" + fig_name,
+        dpi=600,
+        format="png",
+        bbox_inches="tight",
+        transparent=False,
+    )
+
+    plt.show()
