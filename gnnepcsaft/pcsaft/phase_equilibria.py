@@ -11,6 +11,7 @@ import polars as pl
 import seaborn as sns
 import si_units as si
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from scipy.optimize import root_scalar
 
 from gnnepcsaft.data.rdkit_util import smilestoinchi
@@ -47,7 +48,7 @@ def co2_binary_px(
     epsilon_a1b2: Optional[float] = None,
     n_fractions: int = 50,
     n_pressure: int = 50,
-):
+) -> Tuple[Figure, List[List[Axes]]]:
     """Plot CO2 solubility in solvent from ThermoML data and GNNPCSAFT predictions.
 
     Args:
@@ -57,8 +58,11 @@ def co2_binary_px(
          InChI strings to PC-SAFT parameters.
         k_12 (Optional[float]): Binary interaction parameter between CO2 and solvent.
         epsilon_a1b2 (Optional[float]): Association energy parameter between CO2 and solvent.
-        n_fractions (int): number of fractions to check for vle.
-        n_pressure (int): number of pressure to calculate.
+        n_fractions (int): Number of fractions to check for VLE.
+        n_pressure (int): Number of pressure points to calculate.
+
+    Returns:
+      out (Tuple[Figure, List[List[Axes]]]): Matplotlib figure and List of axes containing the plot.
     """
 
     params = [inchi_to_params[inchi] for inchi in inchis]
@@ -103,10 +107,10 @@ def co2_binary_px(
     )
     if len(isotherms) == 0:
         raise ValueError("No data available for the given InChIs.")
-    fig, axs = plt.subplots(len(isotherms), 1, figsize=(6, 4 * len(isotherms)))
-    if isinstance(axs, Axes):
-        axs = [axs]
-    axs: List[Axes]
+    fig, axs = plt.subplots(
+        len(isotherms), 1, figsize=(6, 4 * len(isotherms)), squeeze=False
+    )
+
     feed_x1s = np.linspace(1e-5, 0.99, n_fractions)
     for ax, isotherm in zip(axs, isotherms.iter_rows(named=True)):
         temperature = isotherm["T_K"]
@@ -162,15 +166,15 @@ def co2_binary_px(
                 except RuntimeError:
                     continue
             pred_x.append(pred_x1)
-        ax.plot(exp_p, exp_x, "x", color="black", label="Exp")
-        ax.plot(pressures_kpa, pred_x, "-", color="r", label="Pred")
-        ax.axvline(vp, color="gray", linestyle="--", label="CO2 Vapor Pressure")
-        ax.set_xlabel("Pressure (kPa)")
-        ax.set_ylabel("Mole Fraction CO2 in Liquid Phase")
-        ax.set_title(f"T = {temperature} K")
-        ax.legend()
+        ax[0].plot(exp_p, exp_x, "x", color="black", label="Exp")
+        ax[0].plot(pressures_kpa, pred_x, "-", color="r", label="Pred")
+        ax[0].axvline(vp, color="gray", linestyle="--", label="CO2 Vapor Pressure")
+        ax[0].set_xlabel("Pressure (kPa)")
+        ax[0].set_ylabel("Mole Fraction CO2 in Liquid Phase")
+        ax[0].set_title(f"T = {temperature} K")
+        ax[0].legend()
     fig.tight_layout()
-    return fig, axs
+    return fig, axs.tolist()
 
 
 def co2_ternary_px(
@@ -179,9 +183,8 @@ def co2_ternary_px(
     inchi_to_params: Dict[str, List[float]],
     kij_matrix: Optional[List[List[float]]] = None,
     epsilon_ab: Optional[List[List[float]]] = None,
-):
-    """
-    Plot CO2 solubility in solvent mixtures from ThermoML data and GNNPCSAFT predictions.
+) -> Tuple[Figure, List[List[Axes]]]:
+    """Plot CO2 solubility in solvent mixtures from ThermoML data and GNNPCSAFT predictions.
 
     Args:
         smiles (List[str]): List of three SMILES strings.
@@ -191,6 +194,8 @@ def co2_ternary_px(
         kij_matrix (Optional[List[List[float]]]): Binary interaction parameter matrix.
         epsilon_ab (Optional[List[List[float]]]): Association energy parameter matrix.
 
+    Returns:
+      out (Tuple[Figure, List[List[Axes]]): Matplotlib figure and List of axes containing the plot.
     """
 
     params = [inchi_to_params[smilestoinchi(smi)] for smi in smiles]
@@ -215,10 +220,9 @@ def co2_ternary_px(
         .to_series()
         .to_list()
     )
-    fig, axs = plt.subplots(len(temperatures), 1, figsize=(6, 4 * len(temperatures)))
-    if isinstance(axs, Axes):
-        axs = [axs]
-    axs: List[Axes]
+    fig, axs = plt.subplots(
+        len(temperatures), 1, figsize=(6, 4 * len(temperatures)), squeeze=False
+    )
     feed_x1s = np.linspace(1e-5, 0.99, 10)
     for ax, t in zip(axs, temperatures):
         exp_x = []
@@ -244,17 +248,28 @@ def co2_ternary_px(
             exp_x.append(row[x1_name])
             pred_x.append(pred_x1)
             pressures.append(row["P_kPa"])
-        ax.plot(pressures, exp_x, "x", color="black", label="Exp")
-        ax.plot(pressures, pred_x, "o-", color="r", label="Pred")
-        ax.set_xlabel("Pressure (kPa)")
-        ax.set_ylabel("Mole Fraction CO2 in Liquid Phase")
-        ax.set_title(f"T = {t} K")
-        ax.legend()
+        ax[0].plot(pressures, exp_x, "x", color="black", label="Exp")
+        ax[0].plot(pressures, pred_x, "o-", color="r", label="Pred")
+        ax[0].set_xlabel("Pressure (kPa)")
+        ax[0].set_ylabel("Mole Fraction CO2 in Liquid Phase")
+        ax[0].set_title(f"T = {t} K")
+        ax[0].legend()
         fig.tight_layout()
-    return fig, axs
+    return fig, axs.tolist()
 
 
-def _get_mole_fraction_names(vle, smiles):
+def _get_mole_fraction_names(
+    vle: pl.DataFrame, smiles: List[str]
+) -> Tuple[str, str, str]:
+    """Map SMILES strings to their corresponding mole fraction column names in VLE data.
+
+    Args:
+        vle (pl.DataFrame): Polars DataFrame containing VLE data with InChI columns.
+        smiles (List[str]): List of three SMILES strings to match against InChI data.
+
+    Returns:
+        out (Tuple[str, str, str]): Column names for mole fractions of the three components.
+    """
     x1_name = (
         "mole_fraction_c1p2"
         if vle["inchi1"][0] == smilestoinchi(smiles[0])
@@ -286,7 +301,32 @@ def _get_mole_fraction_names(vle, smiles):
     return x1_name, x2_name, x3_name
 
 
-def _get_x1_ternary(kij_matrix, epsilon_ab, params, feed_x1s, t, x2, x3, p_pa):
+def _get_x1_ternary(
+    kij_matrix: Optional[List[List[float]]],
+    epsilon_ab: Optional[List[List[float]]],
+    params: List[List[float]],
+    feed_x1s: np.ndarray,
+    t: float,
+    x2: float,
+    x3: float,
+    p_pa: float,
+) -> float:
+    """Calculate mole fraction of component 1 in ternary mixture at flash conditions.
+
+    Args:
+        kij_matrix (Optional[List[List[float]]]): Binary interaction parameter matrix.
+        epsilon_ab (Optional[List[List[float]]]): Association energy parameter matrix.
+        params (List[List[float]]): PC-SAFT parameters for each component.
+        feed_x1s (np.ndarray): Array of feed mole fractions for component 1 to try.
+        t (float): Temperature in Kelvin.
+        x2 (float): Mole fraction of component 2.
+        x3 (float): Mole fraction of component 3.
+        p_pa (float): Pressure in Pascal.
+
+    Returns:
+        out (float): Mole fraction of component 1 in the liquid phase,
+          or np.nan if convergence fails.
+    """
     pred_x1 = np.nan
     for feed_x1 in feed_x1s:
         try:
@@ -327,8 +367,20 @@ def _get_x1_ternary(kij_matrix, epsilon_ab, params, feed_x1s, t, x2, x3, p_pa):
     return pred_x1
 
 
-def get_kij_matrix_ternary(kij_df, inchi1, inchi2, inchi3):
-    "get kij matrix ternary from kij_df"
+def get_kij_matrix_ternary(
+    kij_df: pl.DataFrame, inchi1: str, inchi2: str, inchi3: str
+) -> List[List[float]]:
+    """Extract binary interaction parameters from dataframe and construct ternary matrix.
+
+    Args:
+        kij_df (pl.DataFrame): Polars DataFrame containing binary interaction parameters.
+        inchi1 (str): InChI string for component 1.
+        inchi2 (str): InChI string for component 2.
+        inchi3 (str): InChI string for component 3.
+
+    Returns:
+        out (List[List[float]]): 3x3 symmetric matrix of binary interaction parameters.
+    """
     k_12 = (
         kij_df.filter(
             (pl.col("inchi1").is_in([inchi1, inchi2])),
@@ -514,20 +566,24 @@ def fit_kij_with_gamma(
     parameters: List[List[float]],
     comp_idx: int,
 ) -> np.ndarray:
-    """
+    """Calculate residuals for fitting binary interaction parameter using activity coefficients.
+
     Calculates the difference between the activity coefficient calculated from
     experimental data and the activity coefficient calculated from PC-SAFT
     for a given kij, pressure, and PC-SAFT parameters for a binary mixture.
     Used for fitting the binary interaction parameter kij.
 
     Args:
-      kij (np.ndarray): Interaction parameter between components i and j.
-      data (np.ndarray): Array of shape (n, 3) containing
-        mole fractions of component 2, melting temperature, and experimental
-        activity coefficient data.
-      pressure (float): Pressure in Pa.
-      parameters (List[List[float]]): PC-SAFT parameters for each component.
-      comp_idx (int): Index of the component for which to calculate the difference.
+        kij (np.ndarray): Interaction parameter between components i and j.
+        data (np.ndarray): Array of shape (n, 3) containing
+            mole fractions of component 2, melting temperature, and experimental
+            activity coefficient data.
+        pressure (float): Pressure in Pascal.
+        parameters (List[List[float]]): PC-SAFT parameters for each component.
+        comp_idx (int): Index of the component for which to calculate the difference.
+
+    Returns:
+        out (np.ndarray): Array of residuals (experimental minus predicted activity coefficients).
     """
 
     exp_gamma_i = data[:, 2]
@@ -556,17 +612,23 @@ def mape_tm(
     exp_tm_i: np.ndarray,
     exp_delta_h_sl: np.ndarray,
 ) -> np.floating:
-    """
+    """Calculate mean absolute percentage error (MAPE) for melting point predictions.
+
     Calculates the mean absolute percentage error (MAPE) between the experimental
     melting points and the melting points calculated from PC-SAFT for a binary mixture.
 
     Args:
-      tm_data (np.ndarray): Array of shape (n, 2) containing
-        mole fractions of component 2 and melting temperature data.
-      parameters (List[List[float]]): PC-SAFT parameters for each component.
-      k_ij (float): Interaction parameter between components i and j.
-      exp_tm_i (np.ndarray): Melting point of pure component i in Kelvin.
-      exp_delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+        tm_data (np.ndarray): Array of shape (n, 2) containing
+            mole fractions of component 2 and melting temperature data.
+        parameters (List[List[float]]): PC-SAFT parameters for each component.
+        k_ij (float): Interaction parameter between components i and j.
+        pressure (float): Pressure in Pascal.
+        exp_tm_i (np.ndarray): Melting point of pure component i in Kelvin.
+        exp_delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+
+    Returns:
+        out (np.floating): Mean absolute percentage error between experimental and
+          predicted melting points.
     """
 
     mape = []
@@ -587,6 +649,20 @@ def _get_tm(
     exp_tm_i: np.ndarray,
     exp_delta_h_sl: np.ndarray,
 ) -> Tuple[float, float]:
+    """Solve for melting temperatures of both components in a binary mixture.
+
+    Args:
+        parameters (List[List[float]]): PC-SAFT parameters for each component.
+        k_ij (float): Interaction parameter between components i and j.
+        x_i (float): Mole fraction of component 2.
+        pressure (float): Pressure in Pascal.
+        exp_tm_i (np.ndarray): Melting point of pure component i in Kelvin.
+        exp_delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+
+    Returns:
+        out (Tuple[float, float]): Melting temperatures for components 1 and 2 respectively.
+            Returns 0.0 for any component where convergence fails.
+    """
     mole_fraction_i = np.array([1 - x_i, x_i], dtype=np.float64)
     try:
         res = root_scalar(
@@ -651,10 +727,10 @@ def plot_tm(
     mole_fraction_step: float = 0.01,
     pressure: float = 101325.0,
     plot_tm0_tm1: bool = False,
-):
+) -> Tuple[Figure, List[List[Axes]]]:
     """
     Plots the melting temperatures and activity coefficients vs mole fractions
-    for a list of binary mixtures.This function generates a multi-panel figure
+    for a list of binary mixtures. This function generates a multi-panel figure
     comparing PC-SAFT predictions with ideal mixing behavior and experimental
     data for melting point depression and activity coefficients across
     a range of mole fractions.
@@ -683,6 +759,10 @@ def plot_tm(
 
     Saves the figure to "images/{fig_name}" and displays it.
 
+    Returns:
+      out (Tuple[Figure, List[List[Axes]]]):
+        Matplotlib figure and List of axes containing the plot.
+
     Notes
     -----
     - Each row in the figure corresponds to one mixture.
@@ -696,7 +776,7 @@ def plot_tm(
       rules at the computed melting point.
     """
 
-    _, axs = plt.subplots(
+    fig, axs = plt.subplots(
         len(all_parameters),
         2,
         figsize=(4.68, 2.22 * len(all_parameters)),
@@ -823,4 +903,4 @@ def plot_tm(
         transparent=False,
     )
 
-    plt.show()
+    return fig, axs.tolist()
