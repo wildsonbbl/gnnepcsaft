@@ -2,7 +2,7 @@
 Module to handle phase equilibria calculations.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ import seaborn as sns
 import si_units as si
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from scipy.optimize import root_scalar
+from scipy.optimize import minimize_scalar, root_scalar
 
 from gnnepcsaft.data.rdkit_util import smilestoinchi
 from gnnepcsaft.pcsaft.pcsaft_feos import (
@@ -651,6 +651,166 @@ def mape_tm(
             continue
         mape.append(np.abs((tm - tm_exp) / tm_exp))
     return np.mean(mape)
+
+
+def _get_eutectic_tm_values(
+    tm_getter: Callable[[float], Tuple[float, float]],
+    x_i: float,
+) -> Tuple[float, float, float]:
+    """Return (tm_0, tm_1, tm_0 - tm_1) for a given mole fraction."""
+
+    tm_0, tm_1 = tm_getter(x_i)
+    if tm_0 == 0.0 or tm_1 == 0.0:
+        return np.nan, np.nan, np.nan
+    return tm_0, tm_1, tm_0 - tm_1
+
+
+def _sample_eutectic_points(
+    x_grid: np.ndarray,
+    tm_values_getter: Callable[[float], Tuple[float, float, float]],
+    temperature_tolerance: float,
+) -> Tuple[List[Tuple[float, float, float, float]], Optional[Tuple[float, float]]]:
+    """Sample tm differences in x-grid and return points plus optional early solution."""
+    sampled_points: List[Tuple[float, float, float, float]] = []
+    for x_i in x_grid:
+        tm_0, tm_1, delta_tm = tm_values_getter(float(x_i))
+        if not np.isfinite(delta_tm):
+            continue
+        sampled_points.append((float(x_i), tm_0, tm_1, delta_tm))
+        if np.abs(delta_tm) <= temperature_tolerance:
+            return sampled_points, (float(0.5 * (tm_0 + tm_1)), float(x_i))
+    return sampled_points, None
+
+
+def _find_eutectic_candidates(
+    sampled_points: List[Tuple[float, float, float, float]],
+    tm_values_getter: Callable[[float], Tuple[float, float, float]],
+    temperature_tolerance: float,
+) -> List[Tuple[float, float]]:
+    """Find candidate eutectic points where tm difference changes sign."""
+    candidates: List[Tuple[float, float]] = []
+    prev_x, _, _, prev_delta = sampled_points[0]
+    for x_i, _, _, delta_tm in sampled_points[1:]:
+        if prev_delta * delta_tm < 0.0:
+            try:
+                root = root_scalar(
+                    lambda x: tm_values_getter(float(x))[2],
+                    bracket=[prev_x, x_i],
+                    method="brentq",
+                    xtol=1e-10,
+                )
+                if root.converged:
+                    tm_0, tm_1, delta_root = tm_values_getter(float(root.root))
+                    if (
+                        np.isfinite(delta_root)
+                        and np.abs(delta_root) <= temperature_tolerance
+                    ):
+                        candidates.append(
+                            (float(0.5 * (tm_0 + tm_1)), float(root.root))
+                        )
+            except (RuntimeError, ValueError):
+                pass
+        prev_x, prev_delta = x_i, delta_tm
+    return candidates
+
+
+def _find_eutectic_from_minimization(
+    tm_values_getter: Callable[[float], Tuple[float, float, float]],
+    mole_fraction_step: float,
+    temperature_tolerance: float,
+) -> Tuple[float, float]:
+    """Fallback search for eutectic point by minimizing absolute tm difference."""
+
+    def objective(x: float) -> float:
+        delta_tm = tm_values_getter(float(x))[2]
+        if not np.isfinite(delta_tm):
+            return 1e9
+        return float(np.abs(delta_tm))
+
+    minimization = minimize_scalar(
+        objective,
+        bounds=(0.001, 0.999),
+        method="bounded",
+        options={"xatol": mole_fraction_step * 0.1},
+    )
+    if not bool(getattr(minimization, "success", False)):
+        return np.nan, np.nan
+
+    x_min = float(getattr(minimization, "x", np.nan))
+    tm_0, tm_1, delta_tm = tm_values_getter(x_min)
+    if np.isfinite(delta_tm) and np.abs(delta_tm) <= temperature_tolerance:
+        return float(0.5 * (tm_0 + tm_1)), x_min
+    return np.nan, np.nan
+
+
+def get_eutectic_point(
+    parameters: List[List[float]],
+    k_ij: float,
+    pressure: float,
+    exp_tm_i: np.ndarray,
+    exp_delta_h_sl: np.ndarray,
+    mole_fraction_step: float = 0.001,
+    temperature_tolerance: float = 1e-3,
+) -> Tuple[float, float]:
+    """Calculate eutectic melting point and mole fraction.
+
+
+    Args:
+        parameters (List[List[float]]): PC-SAFT parameters for each component.
+        k_ij (float): Interaction parameter between components i and j.
+        pressure (float): Pressure in Pascal.
+        exp_tm_i (np.ndarray): Melting point of pure component i in Kelvin.
+        exp_delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+        mole_fraction_step (float): Step size used to scan for sign changes in delta T.
+        temperature_tolerance (float): Maximum allowed |tm_0 - tm_1| in Kelvin.
+
+    Returns:
+        out (Tuple[float, float]): Eutectic melting point in Kelvin and mole fraction
+    """
+
+    if mole_fraction_step <= 0.0:
+        raise ValueError("mole_fraction_step must be > 0.")
+
+    x_grid = np.arange(0.001, 1.0, mole_fraction_step, dtype=np.float64)
+
+    def tm_getter(x_i: float) -> Tuple[float, float]:
+        return _get_tm(
+            parameters,
+            k_ij,
+            x_i,
+            pressure,
+            exp_tm_i,
+            exp_delta_h_sl,
+        )
+
+    def tm_values_getter(x_i: float) -> Tuple[float, float, float]:
+        return _get_eutectic_tm_values(tm_getter, x_i)
+
+    sampled_points, early_solution = _sample_eutectic_points(
+        x_grid,
+        tm_values_getter,
+        temperature_tolerance,
+    )
+    if early_solution is not None:
+        return early_solution
+
+    if not sampled_points:
+        return np.nan, np.nan
+
+    candidates = _find_eutectic_candidates(
+        sampled_points,
+        tm_values_getter,
+        temperature_tolerance,
+    )
+
+    if candidates:
+        return min(candidates, key=lambda item: item[0])
+
+    return _find_eutectic_from_minimization(
+        tm_values_getter,
+        mole_fraction_step,
+        temperature_tolerance,
+    )
 
 
 def _get_tm(
