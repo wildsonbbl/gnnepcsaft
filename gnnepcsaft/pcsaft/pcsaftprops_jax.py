@@ -72,7 +72,7 @@ def pcsaft_Z(
 
     Returns
     -------
-    Z : float
+    out (float):
         Compressibility factor
     """
 
@@ -133,7 +133,7 @@ def pcsaft_fugcoef(x, t, rho, params):
 
     Returns
     -------
-    fugcoef : ndarray, shape (n,)
+    out (ndarray, shape (n,)):
         Fugacity coefficients of each component.
     """
 
@@ -197,7 +197,7 @@ def pcsaft_p(x, t, rho, params):
 
     Returns
     -------
-    P : float
+    out (float):
         Pressure (Pa)
     """
 
@@ -212,9 +212,16 @@ def pcsaft_p(x, t, rho, params):
 
 @jax.jit
 def density_from_nu(nu, t, x, params):
-    """
-    density calculation from reduced density nu
+    """Calculate molar density from reduced density ``nu``.
 
+    Args:
+        nu: Reduced density.
+        t: Temperature in Kelvin.
+        x: Mole-fraction vector.
+        params: PC-SAFT parameter dictionary.
+
+    Returns:
+        out (float): Molar density in mol/m^3.
     """
     m = params["m"]
     s = params["s"]
@@ -228,9 +235,16 @@ def density_from_nu(nu, t, x, params):
 
 @jax.jit
 def nu_from_density(rho, t, x, params):
-    """
-    reduced density calculation from density
+    """Calculate reduced density ``nu`` from molar density.
 
+    Args:
+        rho: Molar density in mol/m^3.
+        t: Temperature in Kelvin.
+        x: Mole-fraction vector.
+        params: PC-SAFT parameter dictionary.
+
+    Returns:
+        out (float): Reduced density.
     """
     m = params["m"]
     s = params["s"]
@@ -244,7 +258,18 @@ def nu_from_density(rho, t, x, params):
 
 @jax.jit
 def den_err(nu, x, t, p, params):
-    """Find root of this function to calculate the reduced density or pressure."""
+    """Pressure residual used to solve reduced density.
+
+    Args:
+        nu: Reduced density guess.
+        x: Mole-fraction vector.
+        t: Temperature in Kelvin.
+        p: Target pressure in Pascal.
+        params: PC-SAFT parameter dictionary.
+
+    Returns:
+        out (float): Relative pressure error ``(P_fit - p) / p``.
+    """
 
     rho_guess = density_from_nu(nu, t, x, params)
 
@@ -255,7 +280,18 @@ def den_err(nu, x, t, p, params):
 
 @jax.jit
 def den_errSQ(nu, x, t, p, params):
-    """Find root of this function to calculate the reduced density or pressure."""
+    """Squared pressure residual used in reduced-density minimization.
+
+    Args:
+        nu: Reduced density guess.
+        x: Mole-fraction vector.
+        t: Temperature in Kelvin.
+        p: Target pressure in Pascal.
+        params: PC-SAFT parameter dictionary.
+
+    Returns:
+        out (float): Squared relative pressure error.
+    """
 
     return den_err(nu, x, t, p, params) ** 2
 
@@ -317,7 +353,7 @@ def pcsaft_den(x, t, p, phase, params):
 
     Returns
     -------
-    rho : float
+    out (float):
         Molar density (mol / m^3)
     """
 
@@ -410,8 +446,8 @@ def dielc_water(t):
     """
     Return the permittivity of water at 1 bar and the given temperature.
 
-    t : float
-        Temperature (K)
+    Args:
+        t (float): Temperature in Kelvin.
 
     This equation was fit to values given in the reference over the temperature
     range of 263.15 to 368.15 K.
@@ -420,6 +456,9 @@ def dielc_water(t):
     D. G. Archer and P. Wang, “The permittivity of Water and Debye‐Hückel
     Limiting Law Slopes,” J. Phys. Chem. Ref. Data, vol. 19, no. 2, pp. 371–411,
     Mar. 1990.
+
+    Returns:
+        out (float): Relative permittivity of water.
     """
     dielc = 7.6555618295e-04 * t**2 - 8.1783881423e-01 * t + 2.5419616803e02
     return dielc
@@ -479,7 +518,7 @@ def pcsaft_hres(x, t, rho, params):
 
     Returns
     -------
-    hres : float
+    out (float):
         Residual enthalpy (J mol^-1)
     """
 
@@ -544,7 +583,7 @@ def pcsaft_gres(x, t, rho, params):
 
     Returns
     -------
-    hres : float
+    out (float):
         Residual Gibbs energy (J mol^-1)
     """
 
@@ -609,7 +648,7 @@ def pcsaft_sres(x, t, rho, params):
 
     Returns
     -------
-    hres : float
+    out (float):
         Residual entropy (J mol^-1)
     """
 
@@ -648,7 +687,17 @@ fungcoef_phase = jax.jit(
 
 @jax.jit
 def k_i(p_guess, x, t, params):
-    """Minimize this function to calculate the vapor pressure."""
+    """Return liquid-to-vapor fugacity-coefficient ratio at pressure guess.
+
+    Args:
+        p_guess: Pressure guess in Pascal.
+        x: Mole-fraction vector.
+        t: Temperature in Kelvin.
+        params: PC-SAFT parameter dictionary.
+
+    Returns:
+        out (float): Fugacity-coefficient ratio used in vapor-pressure root finding.
+    """
     phases = np.asarray([1.0, 0.0])
 
     rho = den_phase(x, t, p_guess, phases, params)
@@ -664,7 +713,13 @@ def k_i(p_guess, x, t, params):
 @jax.jit
 def pcsaft_VP(x, t, p_guess, params):
     """
-    Vapor pressure calculation
+    Vapor pressure calculation.
+
+    Args:
+        x: Mole-fraction vector.
+        t: Temperature in Kelvin.
+        p_guess: Initial pressure guess in Pascal.
+        params: PC-SAFT parameter dictionary.
 
     x : ndarray, shape (n,1)
         Mole fractions of each component. It has a length of n, where n is
@@ -708,7 +763,7 @@ def pcsaft_VP(x, t, p_guess, params):
 
     Returns
     -------
-    VP : float
+    out (float):
         Vapor Pressure (Pa)
     """
 

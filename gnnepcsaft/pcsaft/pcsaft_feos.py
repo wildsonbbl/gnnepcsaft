@@ -32,6 +32,9 @@ def pc_saft(parameters: List[float]) -> EquationOfState.pcsaft:
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
 
+    Returns:
+        out (EquationOfState.pcsaft): Configured PC-SAFT equation of state for a pure component.
+
     """
 
     return pc_saft_mixture([parameters])
@@ -51,6 +54,9 @@ def pc_saft_mixture(
          for each component of the mixture
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (EquationOfState.pcsaft): Configured PC-SAFT equation of state for a mixture.
     """
     records = get_records(mixture_parameters)
 
@@ -99,6 +105,9 @@ def get_records(mixture_parameters: List[List[float]]) -> list[PureRecord]:
         mixture_parameters: A list of
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
          for each component of the mixture
+
+    Returns:
+        out (list[PureRecord]): FEOS pure-component records for all mixture components.
     """
     records = []
     for idx, mol_parameters in enumerate(mixture_parameters):
@@ -202,6 +211,9 @@ def mix_ln_activity_coefficient(
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (List[float]): Natural logarithm of activity coefficients for each component.
     """
 
     t = state[0]  # Temperature, K
@@ -238,6 +250,9 @@ def mix_e_gibbs_energy(
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (float): Mixture excess Gibbs energy divided by RT.
     """
 
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
@@ -264,6 +279,9 @@ def mix_ln_fugacity_coefficient(
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (List[float]): Natural logarithm of fugacity coefficients for each component.
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
@@ -299,6 +317,9 @@ def mix_r_gibbs_energy(
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (float): Mixture residual Gibbs energy divided by RT.
     """
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     return np.sum(
@@ -323,6 +344,9 @@ def mix_den_feos(
          `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (float): Mixture liquid density in mol/m^3.
     """
 
     t = state[0]  # Temperature, K
@@ -352,6 +376,9 @@ def pure_den_feos(parameters: List[float], state: List[float]) -> float:
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K), Pressure (Pa)]`
+
+    Returns:
+        out (float): Pure-component liquid density in mol/m^3.
     """
 
     t = state[0]  # Temperature, K
@@ -387,6 +414,9 @@ def mix_vp_feos(
          `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (Tuple[float, float]): Bubble-point and dew-point pressures in Pascal.
     """
 
     t = state[0]  # Temperature, K
@@ -422,6 +452,9 @@ def pure_vp_feos(parameters: List[float], state: List[float]) -> float:
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K)]`
+
+    Returns:
+        out (float): Pure-component vapor pressure in Pascal.
     """
 
     t = state[0]  # Temperature, K
@@ -442,6 +475,9 @@ def pure_h_lv_feos(parameters: List[float], state: List[float]) -> float:
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K)]`
+
+    Returns:
+        out (float): Residual enthalpy of vaporization in kJ/mol.
     """
 
     t = state[0]  # Temperature, K
@@ -468,6 +504,9 @@ def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K)]`
+
+    Returns:
+        out (float): Residual entropy of vaporization in J/(mol*K).
     """
     t = state[0]  # Temperature, K
     eos = pc_saft(parameters)
@@ -488,6 +527,9 @@ def critical_points_feos(parameters: List[float]) -> List[float]:
     Args:
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+
+    Returns:
+        out (List[float]): Critical temperature (K), pressure (Pa), and density (mol/m^3).
     """
     eos = pc_saft(parameters)
     critical_point = State.critical_point(eos)
@@ -506,6 +548,9 @@ def pure_viscosity_feos(parameters: List[float], state: List[float]) -> float:
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
         state: A list with `[Temperature (K), Pressure (Pa)]`
+
+    Returns:
+        out (float): Dynamic viscosity from FEOS.
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pa
@@ -535,7 +580,7 @@ def phase_diagram_feos(
 
 
     Returns:
-        output (Dict):
+        out (Dict[str, List[float]]):
           - temperature: K
           - pressure: Pa
           - density [liquid/vapor]: mol / m³
@@ -571,6 +616,9 @@ def is_stable_feos(
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
         density_initialization: Initialization method for density ("liquid", "vapor", None)
+
+    Returns:
+        out (bool): True if the state is stable, otherwise False.
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -604,6 +652,9 @@ def mix_tp_flash_feos(
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (PhaseEquilibrium): TP flash result with coexisting phases.
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -641,6 +692,9 @@ def henry_constant_feos(
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
         density_initialization: Initialization method for density ("liquid", "vapor", None)
+
+    Returns:
+        out (np.ndarray): Henry constants for each component in Pascal.
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -677,7 +731,7 @@ def mix_lle_diagram_feos(
         epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
-        output (Dict):
+        out (Dict[str, List[float]]):
           - For LLE, vapor identifies the liquid phase 2.
           - temperature: K
           - pressure: Pa
@@ -728,7 +782,7 @@ def mix_lle_feos(
         epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
-        output (Dict):
+        out (Dict[str, List[float]]):
           - For LLE, vapor identifies the liquid phase 2.
           - temperature: K
           - pressure: Pa
@@ -780,7 +834,7 @@ def mix_vle_diagram_feos(
         epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
-        output (Dict):
+        out (Dict[str, List[float]]):
           - temperature: K
           - pressure: Pa
           - density [liquid/vapor]: mol / m³
@@ -824,7 +878,7 @@ def mix_vle_pxy_diagram_feos(
         epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
-        output (Dict):
+        out (Dict[str, List[float]]):
           - temperature: K
           - pressure: Pa
           - density [liquid/vapor]: mol / m³
@@ -867,6 +921,9 @@ def mix_vlle_diagram_feos(
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (Dict[str, List[float]]): VLLE diagram data returned by FEOS.
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -902,6 +959,9 @@ def mix_r_isobaric_heat_capacity_feos(
           A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (float): Residual molar isobaric heat capacity in J/(mol*K).
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -931,6 +991,10 @@ def pure_surface_tension_feos(
         parameters: A list with
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
         state: A list with `[Temperature (K)]`
+
+    Returns:
+        out (Tuple[np.ndarray, np.ndarray]): Surface tension (mN/m) and
+          corresponding temperatures (K).
     """
     t = state[0]  # Temperature, K
     records = get_records([parameters])
@@ -951,6 +1015,10 @@ def parameters_gc_pcsaft(smiles: str) -> List[float]:
 
     Args:
         smiles (str): SMILES of the compound
+
+    Returns:
+        out (List[float]): Estimated PC-SAFT parameters in the order
+            [m, sigma, epsilon_k, kappa_ab, epsilon_k_ab, mu, na, nb].
     """
 
     parameters = GcParameters.from_smiles(

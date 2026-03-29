@@ -418,6 +418,9 @@ def mix_melting_point_ideal(
         mole_fraction_i (np.ndarray): Mole fraction of component i in the mixture.
         tm_i (np.ndarray): Melting point of pure component i in Kelvin
         delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
+
+    Returns:
+        out (np.ndarray): Estimated melting temperature in Kelvin.
     """
 
     temperature = 1 / (
@@ -452,6 +455,9 @@ def fit_melting_point(
         tm_i (np.ndarray): Melting point of pure component i in Kelvin.
         delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
         comp_idx (int): Index of the component for which to calculate the difference.
+
+    Returns:
+        out (np.ndarray): Residual of the melting point equation for component ``comp_idx``.
     """
 
     gamma_i = np.exp(
@@ -496,6 +502,9 @@ def fit_kij_with_tm(
         tm_i (np.ndarray): Melting point of pure component i in Kelvin.
         delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
         comp_idx (int): Index of the component for which to calculate the difference.
+
+    Returns:
+        out (np.ndarray): Residual vector used to fit ``kij`` against melting temperature data.
     """
 
     x_all = data[:, 0][..., np.newaxis]
@@ -540,6 +549,9 @@ def gamma_from_exp_data(
         idx (int): Index of the data point where the activity coefficient
          changes from component 1 to component 2. This is used to determine which
          component's activity coefficient to calculate.
+
+    Returns:
+        out (np.ndarray): Experimental activity coefficients stitched for both components.
 
     """
 
