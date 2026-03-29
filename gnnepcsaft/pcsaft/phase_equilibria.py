@@ -26,6 +26,15 @@ from .pcsaft_feos import mix_ln_activity_coefficient
 LABEL_FS = 11
 TICKS_FS = 10
 TITLE_FS = 11
+CO2_INCHI = "InChI=1S/CO2/c2-1-3"
+CO2_CRITICAL_T_K = 304.2
+CO2_CRITICAL_P_KPA = 7377.3
+DEFAULT_ATM_PRESSURE_PA = 101325.0
+MOLE_FRACTION_SCAN_MIN = 1e-5
+MOLE_FRACTION_SCAN_MAX = 0.99
+MOLE_FRACTION_GRID_MIN = 0.001
+MOLE_FRACTION_GRID_MAX_EXCLUSIVE = 1.0
+MOLE_FRACTION_GRID_MAX_INCLUSIVE = 0.999
 mpl.rcParams.update(
     {
         "font.size": 11,
@@ -40,6 +49,49 @@ sns.set_theme(style="ticks")
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
+
+
+def _scan_pred_x1_from_feed(
+    params: List[List[float]],
+    feed_x1s: np.ndarray,
+    state_template: List[float],
+    feed_index: int,
+    complement_index: Optional[int] = None,
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+) -> float:
+    """Scan feed compositions and return x1 from first unstable flash solution."""
+
+    for feed_x1 in feed_x1s:
+        state = list(state_template)
+        state[feed_index] = float(feed_x1)
+        if complement_index is not None:
+            state[complement_index] = float(1.0 - feed_x1)
+        try:
+            if not is_stable_feos(
+                parameters=params,
+                state=state,
+                kij_matrix=kij_matrix,
+                epsilon_ab=epsilon_ab,
+                density_initialization=None,
+            ):
+                flash = mix_tp_flash_feos(
+                    params,
+                    state,
+                    kij_matrix=kij_matrix,
+                    epsilon_ab=epsilon_ab,
+                )
+
+                return (
+                    flash.liquid.molefracs[0].item()
+                    if flash.liquid.density > flash.vapor.density
+                    else flash.vapor.molefracs[0].item()
+                )
+        except RuntimeError:
+            continue
+    return np.nan
+
+
 def co2_binary_px(
     inchis: List[str],
     data: pl.DataFrame,
@@ -111,7 +163,7 @@ def co2_binary_px(
         len(isotherms), 1, figsize=(6, 4 * len(isotherms)), squeeze=False
     )
 
-    feed_x1s = np.linspace(1e-5, 0.99, n_fractions)
+    feed_x1s = np.linspace(MOLE_FRACTION_SCAN_MIN, MOLE_FRACTION_SCAN_MAX, n_fractions)
     for ax, isotherm in zip(axs, isotherms.iter_rows(named=True)):
         temperature = isotherm["T_K"]
         pressures_kpa = np.linspace(
@@ -129,42 +181,24 @@ def co2_binary_px(
 
         vp = (
             (
-                pure_vp_feos(
-                    parameters=inchi_to_params["InChI=1S/CO2/c2-1-3"],
-                    state=[temperature],
-                )
+                pure_vp_feos(parameters=inchi_to_params[CO2_INCHI], state=[temperature])
                 / 1e3
             )
-            if temperature < 304.2
-            else 7377.3
+            if temperature < CO2_CRITICAL_T_K
+            else CO2_CRITICAL_P_KPA
         )
 
         for pressure in pressures_kpa:
-            pred_x1 = np.nan
-            for feed_x1 in feed_x1s:
-                try:
-                    if not is_stable_feos(
-                        parameters=params,
-                        state=[temperature, pressure * 1e3, feed_x1, 1 - feed_x1],
-                        kij_matrix=kij_matrix,
-                        epsilon_ab=epsilon_ab,
-                        density_initialization=None,
-                    ):
-                        flash = mix_tp_flash_feos(
-                            params,
-                            [temperature, pressure * 1e3, feed_x1, 1 - feed_x1],
-                            kij_matrix=kij_matrix,
-                            epsilon_ab=epsilon_ab,
-                        )
-
-                        pred_x1 = (
-                            flash.liquid.molefracs[0].item()
-                            if flash.liquid.density > flash.vapor.density
-                            else flash.vapor.molefracs[0].item()
-                        )
-                        break
-                except RuntimeError:
-                    continue
+            pressure_pa = float(pressure * 1e3)
+            pred_x1 = _scan_pred_x1_from_feed(
+                params=params,
+                feed_x1s=feed_x1s,
+                state_template=[temperature, pressure_pa, np.nan, np.nan],
+                feed_index=2,
+                complement_index=3,
+                kij_matrix=kij_matrix,
+                epsilon_ab=epsilon_ab,
+            )
             pred_x.append(pred_x1)
         ax[0].plot(exp_p, exp_x, "x", color="black", label="Exp")
         ax[0].plot(pressures_kpa, pred_x, "-", color="r", label="Pred")
@@ -223,7 +257,7 @@ def co2_ternary_px(
     fig, axs = plt.subplots(
         len(temperatures), 1, figsize=(6, 4 * len(temperatures)), squeeze=False
     )
-    feed_x1s = np.linspace(1e-5, 0.99, 10)
+    feed_x1s = np.linspace(MOLE_FRACTION_SCAN_MIN, MOLE_FRACTION_SCAN_MAX, 10)
     for ax, t in zip(axs, temperatures):
         exp_x = []
         pred_x = []
@@ -327,44 +361,14 @@ def _get_x1_ternary(
         out (float): Mole fraction of component 1 in the liquid phase,
           or np.nan if convergence fails.
     """
-    pred_x1 = np.nan
-    for feed_x1 in feed_x1s:
-        try:
-            if not is_stable_feos(
-                parameters=params,
-                state=[
-                    t,
-                    p_pa,
-                    feed_x1,
-                    x2,
-                    x3,
-                ],
-                kij_matrix=kij_matrix,
-                epsilon_ab=epsilon_ab,
-                density_initialization=None,
-            ):
-                flash = mix_tp_flash_feos(
-                    params,
-                    [
-                        t,
-                        p_pa,
-                        feed_x1,
-                        x2,
-                        x3,
-                    ],
-                    kij_matrix=kij_matrix,
-                    epsilon_ab=epsilon_ab,
-                )
-
-                pred_x1 = (
-                    flash.liquid.molefracs[0].item()
-                    if flash.liquid.density > flash.vapor.density
-                    else flash.vapor.molefracs[0].item()
-                )
-                break
-        except RuntimeError:
-            continue
-    return pred_x1
+    return _scan_pred_x1_from_feed(
+        params=params,
+        feed_x1s=feed_x1s,
+        state_template=[t, p_pa, np.nan, x2, x3],
+        feed_index=2,
+        kij_matrix=kij_matrix,
+        epsilon_ab=epsilon_ab,
+    )
 
 
 def get_kij_matrix_ternary(
@@ -729,7 +733,7 @@ def _find_eutectic_from_minimization(
 
     minimization = minimize_scalar(
         objective,
-        bounds=(0.001, 0.999),
+        bounds=(MOLE_FRACTION_GRID_MIN, MOLE_FRACTION_GRID_MAX_INCLUSIVE),
         method="bounded",
         options={"xatol": mole_fraction_step * 0.1},
     )
@@ -771,7 +775,12 @@ def get_eutectic_point(
     if mole_fraction_step <= 0.0:
         raise ValueError("mole_fraction_step must be > 0.")
 
-    x_grid = np.arange(0.001, 1.0, mole_fraction_step, dtype=np.float64)
+    x_grid = np.arange(
+        MOLE_FRACTION_GRID_MIN,
+        MOLE_FRACTION_GRID_MAX_EXCLUSIVE,
+        mole_fraction_step,
+        dtype=np.float64,
+    )
 
     def tm_getter(x_i: float) -> Tuple[float, float]:
         return _get_tm(
@@ -897,7 +906,7 @@ def plot_tm(
     all_tm_data: List[pl.DataFrame],
     fig_name: str = "fig11.png",
     mole_fraction_step: float = 0.01,
-    pressure: float = 101325.0,
+    pressure: float = DEFAULT_ATM_PRESSURE_PA,
     plot_tm0_tm1: bool = False,
 ) -> Tuple[Figure, List[List[Axes]]]:
     """
@@ -970,7 +979,12 @@ def plot_tm(
         gammas = []
         gammas_exp = gamma_from_exp_data(tm_data.to_numpy(), exp_tm_i, exp_delta_h_sl)
 
-        for x_i in np.arange(0.001, 1.0, mole_fraction_step, dtype=np.float64):
+        for x_i in np.arange(
+            MOLE_FRACTION_GRID_MIN,
+            MOLE_FRACTION_GRID_MAX_EXCLUSIVE,
+            mole_fraction_step,
+            dtype=np.float64,
+        ):
             mole_fraction_i = np.array([1 - x_i, x_i], dtype=np.float64)
 
             tm_0, tm_1 = _get_tm(
@@ -987,7 +1001,7 @@ def plot_tm(
             gamma = np.exp(
                 mix_ln_activity_coefficient(
                     parameters=parameters,
-                    state=[tm, 101325.0, *mole_fraction_i],
+                    state=[tm, DEFAULT_ATM_PRESSURE_PA, *mole_fraction_i],
                     kij_matrix=[[0.0, k_ij], [k_ij, 0.0]],
                 )
             )
