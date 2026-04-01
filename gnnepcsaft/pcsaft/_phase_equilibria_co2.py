@@ -186,6 +186,115 @@ def co2_binary_px(
     return fig, axs.tolist()
 
 
+def co2_binary_tx(
+    inchis: List[str],
+    data: pl.DataFrame,
+    inchi_to_params: Dict[str, List[float]],
+    k_12: Optional[float] = None,
+    epsilon_a1b2: Optional[float] = None,
+    n_fractions: int = 50,
+    n_temperatures: int = 50,
+) -> Tuple[Figure, List[List[Axes]]]:
+    """Plot CO2 solubility in solvent from ThermoML data and GNNPCSAFT predictions (T-x).
+
+    Args:
+        inchis (List[str]): List of two InChI strings.
+        data (pl.DataFrame): Polars DataFrame containing ThermoML data.
+        inchi_to_params (Dict[str, List[float]]): Dictionary mapping
+         InChI strings to PC-SAFT parameters.
+        k_12 (Optional[float]): Binary interaction parameter between CO2 and solvent.
+        epsilon_a1b2 (Optional[float]): Association energy parameter between CO2 and solvent.
+        n_fractions (int): Number of fractions to check for VLE.
+        n_temperatures (int): Number of temperature points to calculate.
+
+    Returns:
+      out (Tuple[Figure, List[List[Axes]]]): Matplotlib figure and List of axes containing the plot.
+    """
+
+    params = [inchi_to_params[inchi] for inchi in inchis]
+
+    kij_matrix = (
+        [
+            [0.0, k_12],
+            [k_12, 0.0],
+        ]
+        if k_12 is not None
+        else None
+    )
+
+    epsilon_ab = (
+        [
+            [0.0, epsilon_a1b2],
+            [epsilon_a1b2, 0.0],
+        ]
+        if epsilon_a1b2 is not None
+        else None
+    )
+
+    vle = data.filter(
+        pl.col("inchi1").is_in(inchis),
+        pl.col("inchi2").is_in(inchis),
+        pl.col("mole_fraction_c1p2").is_not_null(),
+    )
+
+    x1_name = (
+        "mole_fraction_c1p2" if vle["inchi1"][0] == inchis[0] else "mole_fraction_c2p2"
+    )
+
+    isobars = (
+        vle.sort("P_kPa")
+        .group_by("P_kPa")
+        .agg(
+            pl.col("T_K").min().alias("min_t_k"),
+            pl.col("T_K").max().alias("max_t_k"),
+            pl.col("T_K").count().alias("n"),
+        )
+        .filter(pl.col("n") > 1)
+    )
+    if len(isobars) == 0:
+        raise ValueError("No data available for the given InChIs.")
+    fig, axs = plt.subplots(
+        len(isobars), 1, figsize=(6, 4 * len(isobars)), squeeze=False
+    )
+
+    feed_x1s = np.linspace(MOLE_FRACTION_SCAN_MIN, MOLE_FRACTION_SCAN_MAX, n_fractions)
+    for ax, isobar in zip(axs, isobars.iter_rows(named=True)):
+        pressure = isobar["P_kPa"]
+        temperatures_k = np.linspace(
+            isobar["min_t_k"], isobar["max_t_k"], n_temperatures, dtype=np.float64
+        )
+        pred_x = []
+
+        exp_vle = vle.filter(
+            pl.col("P_kPa") == pressure,
+        ).sort("T_K")
+        if len(exp_vle) < 2:
+            continue
+        exp_x = exp_vle[x1_name].to_list()
+        exp_t = exp_vle["T_K"].to_list()
+
+        for temperature in temperatures_k:
+            pressure_pa = float(pressure * 1e3)
+            pred_x1 = _scan_pred_x1_from_feed(
+                params=params,
+                feed_x1s=feed_x1s,
+                state_template=[temperature, pressure_pa, np.nan, np.nan],
+                feed_index=2,
+                complement_index=3,
+                kij_matrix=kij_matrix,
+                epsilon_ab=epsilon_ab,
+            )
+            pred_x.append(pred_x1)
+        ax[0].plot(exp_t, exp_x, "x", color="black", label="Exp")
+        ax[0].plot(temperatures_k, pred_x, "-", color="r", label="Pred")
+        ax[0].set_xlabel("Temperature (K)")
+        ax[0].set_ylabel("Mole Fraction CO2 in Liquid Phase")
+        ax[0].set_title(f"P = {pressure} kPa")
+        ax[0].legend()
+    fig.tight_layout()
+    return fig, axs.tolist()
+
+
 def co2_ternary_px(
     smiles: List[str],
     data: pl.DataFrame,
