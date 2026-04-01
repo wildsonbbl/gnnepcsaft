@@ -93,6 +93,34 @@ def fit_melting_point(
     return left_side[comp_idx] - right_side[comp_idx]
 
 
+def _phase_to_comp_idx(phase: float) -> int:
+    """Map phase identifier to component index.
+
+    Args:
+        phase (float): Phase code (1.0 for DES, 2.0 for ACID).
+
+    Returns:
+        int: Component index (0 for DES, 1 for ACID).
+    """
+    # Keep backward compatibility with previous string labels.
+    if isinstance(phase, str):
+        phase_map_str = {"DES": 0, "ACID": 1}
+        if phase in phase_map_str:
+            return phase_map_str[phase]
+
+    try:
+        phase_code = int(float(phase))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Unknown phase: {phase}. Must be 1.0 (DES) or 2.0 (ACID)."
+        ) from exc
+
+    phase_map = {1: 0, 2: 1}
+    if phase_code not in phase_map:
+        raise ValueError(f"Unknown phase: {phase}. Must be 1.0 (DES) or 2.0 (ACID).")
+    return phase_map[phase_code]
+
+
 def fit_kij_with_tm(
     kij: np.ndarray,
     data: np.ndarray,
@@ -100,7 +128,6 @@ def fit_kij_with_tm(
     parameters: List[List[float]],
     tm_i: np.ndarray,
     delta_h_sl: np.ndarray,
-    comp_idx: int,
 ) -> np.ndarray:
     """Calculates the difference between the left and right side of the
     melting point equation for a given kij, pressure, PC-SAFT parameters,
@@ -110,21 +137,21 @@ def fit_kij_with_tm(
 
     Args:
         kij (float): Interaction parameter between components i and j.
-        data (np.ndarray): Array of shape (n, 2) containing
-          mole fractions of component 2 and melting temperature data.
+        data (np.ndarray): Array of shape (n, 3) containing mole fractions,
+          melting temperature data, and phase code (1.0 for DES, 2.0 for ACID).
         pressure (float): Pressure in Pa.
         parameters (List[List[float]]): PC-SAFT parameters for each component.
         tm_i (np.ndarray): Melting point of pure component i in Kelvin.
         delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
-        comp_idx (int): Index of the component for which to calculate the difference.
 
     Returns:
         out (np.ndarray): Residual vector used to fit ``kij`` against melting temperature data.
     """
 
-    x_all = data[:, 0][..., np.newaxis]
-    tm_all = data[:, 1][..., np.newaxis]
-    mole_fractions_i = np.hstack([1 - x_all, x_all])
+    x_all = data[:, 0].astype(np.float64)[..., np.newaxis]
+    tm_all = data[:, 1].astype(np.float64)[..., np.newaxis]
+    phases = data[:, 2]
+    mole_fractions_i = np.hstack([1 - x_all, x_all], dtype=np.float64)
 
     gamma_i = np.array(
         [
@@ -135,7 +162,7 @@ def fit_kij_with_tm(
                     kij_matrix=[[0.0, kij.item()], [kij.item(), 0.0]],
                 )
             )
-            for x_i, tm in data
+            for x_i, tm in zip(x_all.ravel(), tm_all.ravel())
         ]
     )
 
@@ -146,33 +173,36 @@ def fit_kij_with_tm(
         * (1 / (tm_i * si.KELVIN) - 1 / (tm_all * si.KELVIN))
     )
 
-    return left_side[:, comp_idx] - right_side[:, comp_idx]
+    residuals = np.zeros(len(data))
+    for i, phase in enumerate(phases):
+        comp_idx = _phase_to_comp_idx(phase)
+        residuals[i] = left_side[i, comp_idx] - right_side[i, comp_idx]
+
+    return residuals
 
 
 def gamma_from_exp_data(
-    tm_data: np.ndarray, tm_i: np.ndarray, delta_h_sl: np.ndarray, idx: int = -5
+    tm_data: np.ndarray, tm_i: np.ndarray, delta_h_sl: np.ndarray
 ) -> np.ndarray:
     """Calculates activity coefficient from experimental data of
     melting points and pure component melting points and enthalpies of fusion
     for a binary mixture.
 
     Args:
-        tm_data (np.ndarray): Array of shape (n, 2) containing
-          mole fractions of component 2 and melting temperature data.
+        tm_data (np.ndarray): Array of shape (n, 3) containing mole fractions,
+          melting temperature data, and phase code (1.0 for DES, 2.0 for ACID).
         tm_i (np.ndarray): Melting point of pure component i in Kelvin.
         delta_h_sl (np.ndarray): Enthalpy of fusion of pure component i in kJ/mol.
-        idx (int): Index of the data point where the activity coefficient
-         changes from component 1 to component 2. This is used to determine which
-         component's activity coefficient to calculate.
 
     Returns:
-        out (np.ndarray): Experimental activity coefficients stitched for both components.
+        out (np.ndarray): Experimental activity coefficients based on phase information.
 
     """
 
-    x_all = tm_data[:, 0][..., np.newaxis]
-    tm_all = tm_data[:, 1][..., np.newaxis]
-    mole_fractions_i = np.hstack([1 - x_all, x_all])
+    x_all = tm_data[:, 0].astype(np.float64)[..., np.newaxis]
+    tm_all = tm_data[:, 1].astype(np.float64)[..., np.newaxis]
+    phases = tm_data[:, 2]
+    mole_fractions_i = np.hstack([1 - x_all, x_all], dtype=np.float64)
 
     gammas = (
         np.exp(
@@ -183,7 +213,13 @@ def gamma_from_exp_data(
         / mole_fractions_i
     )
 
-    return np.concatenate([gammas[:idx, 0], gammas[idx:, 1]])
+    # Extract activity coefficients based on phase
+    result = np.zeros(len(tm_data))
+    for i, phase in enumerate(phases):
+        comp_idx = _phase_to_comp_idx(phase)
+        result[i] = gammas[i, comp_idx]
+
+    return result
 
 
 def fit_kij_with_gamma(
@@ -191,7 +227,6 @@ def fit_kij_with_gamma(
     data: np.ndarray,
     pressure: float,
     parameters: List[List[float]],
-    comp_idx: int,
 ) -> np.ndarray:
     """Calculate residuals for fitting binary interaction parameter using activity coefficients.
 
@@ -202,18 +237,20 @@ def fit_kij_with_gamma(
 
     Args:
         kij (np.ndarray): Interaction parameter between components i and j.
-        data (np.ndarray): Array of shape (n, 3) containing
-            mole fractions of component 2, melting temperature, and experimental
-            activity coefficient data.
+        data (np.ndarray): Array of shape (n, 4) containing
+            mole fractions, melting temperature, phase code (1.0 for DES, 2.0 for ACID),
+            and experimental activity coefficient data.
         pressure (float): Pressure in Pascal.
         parameters (List[List[float]]): PC-SAFT parameters for each component.
-        comp_idx (int): Index of the component for which to calculate the difference.
 
     Returns:
         out (np.ndarray): Array of residuals (experimental minus predicted activity coefficients).
     """
 
-    exp_gamma_i = data[:, 2]
+    x_all = data[:, 0].astype(np.float64)
+    tm_all = data[:, 1].astype(np.float64)
+    exp_gamma_i = data[:, 3].astype(np.float64)
+    phases = data[:, 2]
 
     gamma_i = np.array(
         [
@@ -224,11 +261,16 @@ def fit_kij_with_gamma(
                     kij_matrix=[[0.0, kij.item()], [kij.item(), 0.0]],
                 )
             )
-            for x_i, tm, _ in data
+            for x_i, tm in zip(x_all, tm_all)
         ]
     )
 
-    return exp_gamma_i - gamma_i[:, comp_idx]
+    residuals = np.zeros(len(data))
+    for i, phase in enumerate(phases):
+        comp_idx = _phase_to_comp_idx(phase)
+        residuals[i] = exp_gamma_i[i] - gamma_i[i, comp_idx]
+
+    return residuals
 
 
 def mape_tm(
@@ -245,8 +287,8 @@ def mape_tm(
     melting points and the melting points calculated from PC-SAFT for a binary mixture.
 
     Args:
-        tm_data (np.ndarray): Array of shape (n, 2) containing
-            mole fractions of component 2 and melting temperature data.
+        tm_data (np.ndarray): Array of shape (n, 3) containing mole fractions,
+            melting temperature data, and phase code (1.0 for DES, 2.0 for ACID).
         parameters (List[List[float]]): PC-SAFT parameters for each component.
         k_ij (float): Interaction parameter between components i and j.
         pressure (float): Pressure in Pascal.
@@ -258,8 +300,11 @@ def mape_tm(
           predicted melting points.
     """
 
+    x_all = tm_data[:, 0].astype(np.float64)
+    tm_exp_all = tm_data[:, 1].astype(np.float64)
+
     mape = []
-    for x_i, tm_exp in tm_data:
+    for x_i, tm_exp in zip(x_all, tm_exp_all):
         tm_0, tm_1 = _get_tm(parameters, k_ij, x_i, pressure, exp_tm_i, exp_delta_h_sl)
         tm = max(tm_0, tm_1)
         if tm == 0.0:
@@ -477,8 +522,7 @@ def _get_tm(
         if not res.converged:
             raise ValueError("not converged")
 
-    except (RuntimeError, ValueError) as e:
-        print(x_i, e)
+    except (RuntimeError, ValueError):
         tm_0 = 0.0
 
     try:
@@ -502,8 +546,7 @@ def _get_tm(
         if not res.converged:
             raise ValueError("not converged")
 
-    except (RuntimeError, ValueError) as e:
-        print(x_i, e)
+    except (RuntimeError, ValueError):
         tm_1 = 0.0
 
     return tm_0, tm_1
