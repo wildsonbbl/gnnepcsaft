@@ -22,14 +22,14 @@ def get_config():
 
     config.accelerator = "auto"
     config.batch_size = 512
-    config.num_train_steps = 4_400_000
+    config.num_train_steps = 100_000
     config.log_every_steps = 500
     config.eval_every_steps = 2500
     config.dataset = "esper"
-    config.checkpoint = "wildson/gnn-pc-saft/model-ghbxup2c:v0"  # wandb artifact path
+    config.checkpoint = ""  # wandb artifact path
     config.resume_id = ""  # wandb run id
     config.model = "gnn"
-    config.model_name = "pna_msigmae_1.1"
+    config.model_name = "pna_msigmae_1.1.2"
 
     # GNN hyperparameters.
     ## General
@@ -39,6 +39,7 @@ def get_config():
     config.hidden_dim = 256
     config.dropout = 0.25
     config.num_para = 3
+    config.normalise = True
     ## PNA
     config.post_layers = 4
     config.pre_layers = 2

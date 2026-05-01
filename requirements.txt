@@ -1,5 +1,4 @@
 absl-py
-Cython
 jax
 matplotlib
 seaborn
@@ -11,17 +10,15 @@ rdkit
 scipy
 torch_geometric
 torchmetrics
-wandb
+wandb>=0.24.0
 lightning
-dvc-gs
 ConfigSpace
 hpbandster
-ray[train]
-ray[tune]
-wheel
+ray[train]==2.48.0
+ray[tune]==2.48.0
 teqp
 PCSAFTsuperanc
-feos==0.8.0
+feos>0.9.0
 si-units
 xgboost
 onnx

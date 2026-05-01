@@ -69,7 +69,7 @@ def pcsaft_ares(x, t, rho, params):
 
     Returns
     -------
-    ares : float
+    out (float):
         Residual Helmholtz energy (J mol^{-1})
     """
     m = params["m"]
@@ -231,13 +231,33 @@ def pcsaft_ares(x, t, rho, params):
 
 @jax.jit
 def xa_find(xa_guess, delta_ij, den, x):
-    """Iterate over this function in order to solve for XA"""
+    """Fixed-point update for association site fractions.
+
+    Args:
+        xa_guess: Current estimate of association site fractions.
+        delta_ij: Association strength matrix.
+        den: Number density.
+        x: Mole-fraction vector.
+
+    Returns:
+        out (np.ndarray): Updated estimate of association site fractions.
+    """
 
     return 1.0 / (1.0 + den * np.sum(x * xa_guess * delta_ij[..., np.newaxis], axis=1))
 
 
 def ares_polar(x, t, den, params):
-    "Polar term for PC-SAFT."
+    """Compute polar contribution to residual Helmholtz energy.
+
+    Args:
+        x: Mole-fraction vector.
+        t: Temperature in Kelvin.
+        den: Number density.
+        params: Tuple with polar-model parameters.
+
+    Returns:
+        out (float): Polar contribution to residual Helmholtz energy.
+    """
 
     # Dipole term (Gross and Vrabec term) --------------------------------------
     # Gross, Joachim, e Jadran Vrabec. “An Equation-of-State Contribution for
@@ -357,7 +377,17 @@ def ares_polar(x, t, den, params):
 
 # pylint: disable=invalid-name
 def ares_assoc(x, t, den, params):
-    "Association term for PC-SAFT."
+    """Compute association contribution to residual Helmholtz energy.
+
+    Args:
+        x: Mole-fraction vector.
+        t: Temperature in Kelvin.
+        den: Number density.
+        params: Tuple with association-model parameters.
+
+    Returns:
+        out (float): Association contribution to residual Helmholtz energy.
+    """
 
     # Association term -------------------------------------------------------
     # 2B association type
@@ -397,7 +427,17 @@ def ares_assoc(x, t, den, params):
 
 
 def ares_ion(x, t, den, params):
-    "Ion term for ePC-SAFT."
+    """Compute ionic contribution to residual Helmholtz energy.
+
+    Args:
+        x: Mole-fraction vector.
+        t: Temperature in Kelvin.
+        den: Number density.
+        params: Tuple with ionic-model parameters.
+
+    Returns:
+        out (float): Ionic contribution to residual Helmholtz energy.
+    """
 
     # Ion term ---------------------------------------------------------------
     s, z, dielc = params

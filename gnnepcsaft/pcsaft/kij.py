@@ -16,13 +16,26 @@ from gnnepcsaft.pcsaft.pcsaft_feos import (
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments,too-many-locals
 
+EPS = 1e-6
+
 
 def _pred_x1_worker(
     t: float, p: float, k_12: float, params: List[List[float]], feed_x1s: np.ndarray
 ) -> float:
-    """
-    Worker function for parallel x1 prediction.
+    """Predict liquid-phase mole fraction of component 1 for one state point.
+
     Must be at module level for pickle compatibility on Windows.
+
+    Args:
+        t (float): Temperature in Kelvin.
+        p (float): Pressure in kPa.
+        k_12 (float): Binary interaction parameter.
+        params (List[List[float]]): PC-SAFT parameters for the binary mixture.
+        feed_x1s (np.ndarray): Candidate feed mole fractions for component 1.
+
+    Returns:
+        out (float): Predicted mole fraction of component 1 in the denser phase.
+            Returns np.nan when no converged flash result is found.
     """
     for feed_x1 in feed_x1s:
         try:
@@ -42,8 +55,8 @@ def _pred_x1_worker(
                 )
                 # Return the composition of the denser phase (usually liquid)
                 if flash.liquid.density > flash.vapor.density:
-                    return flash.liquid.molefracs[0]
-                return flash.vapor.molefracs[0]
+                    return float(flash.liquid.molefracs[0])
+                return float(flash.vapor.molefracs[0])
         except RuntimeError:
             continue
     return np.nan
@@ -58,9 +71,20 @@ def _loss_fn(
     parallel: Parallel,
     feed_x1s: np.ndarray,
 ) -> np.ndarray:
-    """
-    Loss function for least_squares.
-    Returns: Vector of residuals (log-difference).
+    """Compute residual vector used in least-squares optimization.
+
+    Args:
+        k_12_arr (np.ndarray): Array containing a single optimization variable (k_12).
+        params (List[List[float]]): PC-SAFT parameters for the binary mixture.
+        x1 (np.ndarray): Experimental mole fractions of component 1.
+        temperature (np.ndarray): Temperatures in Kelvin.
+        pressure (np.ndarray): Pressures in kPa.
+        parallel (Parallel): Active joblib parallel pool.
+        feed_x1s (np.ndarray): Candidate feed mole fractions for flash calculations.
+
+    Returns:
+        out (np.ndarray): Residual vector defined as log(predicted/experimental).
+            Failed flash evaluations are penalized with a large residual.
     """
     k_12 = k_12_arr[0]
 
@@ -73,7 +97,7 @@ def _loss_fn(
     )
 
     # Calculate residuals: log(pred) - log(exp) = log(pred/exp)
-    residuals = np.log((pred_x1 + 1e-6) / (x1 + 1e-6))
+    residuals = np.log((pred_x1 + EPS) / (x1 + EPS))
 
     # Handle NaNs (failed flash) by assigning a large penalty
     nan_mask = np.isnan(residuals)
@@ -85,7 +109,18 @@ def _loss_fn(
 def optimize_kij(
     binary_vle_tml: pl.DataFrame, inchi_to_params: Dict[str, List[float]], n: int = 50
 ) -> pl.DataFrame:
-    """Optimize binary interaction parameters (kij) for mixtures using VLE data."""
+    """Optimize binary interaction parameters (kij) for mixtures using VLE data.
+
+    Args:
+        binary_vle_tml (pl.DataFrame): VLE dataset with columns including
+            inchi1, inchi2, T_K, P_kPa, and mole_fraction_c1p2.
+        inchi_to_params (Dict[str, List[float]]): Mapping from InChI to PC-SAFT parameters.
+        n (int): Number of candidate feed mole fractions used in flash scans.
+
+    Returns:
+        out (pl.DataFrame): DataFrame with optimized k_12 and error metrics per binary pair.
+            Columns: inchi1, inchi2, k_12, loss, loss_nonan, mape, n_nan.
+    """
 
     k_12_data = {
         "inchi1": [],
@@ -171,11 +206,11 @@ def optimize_kij(
                         for T, P in zip(temperature, pressure)
                     )
                 )
-                loss_vec = np.log((pred_x1 + 1e-6) / (x1 + 1e-6))
+                loss_vec = np.log((pred_x1 + EPS) / (x1 + EPS))
                 n_nan = np.isnan(loss_vec).sum()
                 loss_vec = loss_vec[~np.isnan(loss_vec)]
                 loss_nonan = np.abs(loss_vec).mean() if loss_vec.size > 0 else 1.0
-                mape_vec = (pred_x1 - x1) / x1
+                mape_vec = (pred_x1 - x1) / (x1 + EPS)
                 mape_vec = mape_vec[~np.isnan(mape_vec)]
                 mape_nonan = np.abs(mape_vec).mean() if mape_vec.size > 0 else 1.0
 
