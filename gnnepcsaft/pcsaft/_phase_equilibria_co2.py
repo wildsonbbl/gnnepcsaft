@@ -9,6 +9,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from gnnepcsaft.data.rdkit_util import smilestoinchi
+from gnnepcsaft.pcsaft.feos.equilibria import mix_vp_feos
 from gnnepcsaft.pcsaft.pcsaft_feos import (
     is_stable_feos,
     mix_tp_flash_feos,
@@ -326,30 +327,43 @@ def co2_ternary_px(
 
     x1_name, x2_name, x3_name = _get_mole_fraction_names(vle, smiles)
 
-    temperatures = (
-        vle.filter(
+    vle_with_ratio = vle.with_columns(
+        (pl.col(x2_name) / (pl.col(x2_name) + pl.col(x3_name))).alias("ratio").round(2)
+    )
+
+    temperature_ratio_groups = (
+        vle_with_ratio.filter(
             pl.col(x1_name) > 1e-10,
             pl.col(x2_name) > 1e-10,
             pl.col(x3_name) > 1e-10,
         )
-        .select("T_K")
-        .sort("T_K")
-        .unique("T_K")
-        .to_series()
-        .to_list()
+        .group_by(["T_K", "ratio"])
+        .agg(
+            pl.col("P_kPa").min().alias("min_p_kpa"),
+            pl.col("P_kPa").max().alias("max_p_kpa"),
+            pl.col("P_kPa").count().alias("n"),
+        )
+        .filter(pl.col("n") > 1)
+        .sort(["ratio", "T_K"])
     )
     fig, axs = plt.subplots(
-        len(temperatures), 1, figsize=(6, 4 * len(temperatures)), squeeze=False
+        len(temperature_ratio_groups),
+        1,
+        figsize=(6, 4 * len(temperature_ratio_groups)),
+        squeeze=False,
     )
-    feed_x1s = np.linspace(MOLE_FRACTION_SCAN_MIN, MOLE_FRACTION_SCAN_MAX, 10)
-    for ax, t in zip(axs, temperatures):
+
+    for ax, group in zip(axs, temperature_ratio_groups.iter_rows(named=True)):
+        t = group["T_K"]
+        ratio = group["ratio"]
         exp_x = []
-        pred_x = []
+        pred_bubble_points = []
         pressures = []
         for row in (
-            vle.filter(
+            vle_with_ratio.filter(
                 pl.col(x1_name).is_not_null(),
                 pl.col("T_K") == t,
+                pl.col("ratio").round(2) == ratio,
                 pl.col(x1_name) > 1e-10,
                 pl.col(x2_name) > 1e-10,
                 pl.col(x3_name) > 1e-10,
@@ -357,20 +371,23 @@ def co2_ternary_px(
             .sort("P_kPa")
             .iter_rows(named=True)
         ):
+            x1 = row[x1_name]
             x2 = row[x2_name]
             x3 = row[x3_name]
-            p_pa = row["P_kPa"] * 1e3
-            pred_x1 = _get_x1_ternary(
-                kij_matrix, epsilon_ab, params, feed_x1s, t, x2, x3, p_pa
+            pred_bubble_point, _ = mix_vp_feos(
+                parameters=params,
+                state=[t, np.nan, x1, x2, x3],
+                kij_matrix=kij_matrix,
+                epsilon_ab=epsilon_ab,
             )
             exp_x.append(row[x1_name])
-            pred_x.append(pred_x1)
+            pred_bubble_points.append(pred_bubble_point / 1e3)
             pressures.append(row["P_kPa"])
         ax[0].plot(pressures, exp_x, "x", color="black", label="Exp")
-        ax[0].plot(pressures, pred_x, "o-", color="r", label="Pred")
+        ax[0].plot(pred_bubble_points, exp_x, "o-", color="r", label="Pred")
         ax[0].set_xlabel("Pressure (kPa)")
         ax[0].set_ylabel("Mole Fraction CO2 in Liquid Phase")
-        ax[0].set_title(f"T = {t} K")
+        ax[0].set_title(f"T = {t} K, ratio = {ratio:.2f}")
         ax[0].legend()
         fig.tight_layout()
     return fig, axs.tolist()
