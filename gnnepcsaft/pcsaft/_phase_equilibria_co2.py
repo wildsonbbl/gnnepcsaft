@@ -7,6 +7,7 @@ import numpy as np
 import polars as pl
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from scipy.optimize import minimize_scalar, root_scalar
 
 from gnnepcsaft.data.rdkit_util import smilestoinchi
 from gnnepcsaft.pcsaft.feos.equilibria import mix_vp_feos
@@ -132,6 +133,61 @@ def co2_binary_px(
     return fig, axs.tolist()
 
 
+def _solve_co2_binary_tx_temperature(
+    x1: float,
+    pressure_kpa: float,
+    params: List[List[float]],
+    kij_matrix: Optional[List[List[float]]],
+    epsilon_ab: Optional[List[List[float]]],
+    temp_min: float,
+    temp_max: float,
+) -> float:
+    """Find the temperature where the predicted bubble pressure matches the target pressure."""
+
+    def pressure_residual(temp: float) -> float:
+        pred_bp, _ = mix_vp_feos(
+            parameters=params,
+            state=[temp, np.nan, x1, 1 - x1],
+            kij_matrix=kij_matrix,
+            epsilon_ab=epsilon_ab,
+        )
+        return pred_bp / 1e3 - pressure_kpa
+
+    try:
+        lower_residual = pressure_residual(temp_min)
+        upper_residual = pressure_residual(temp_max)
+
+        if np.isfinite(lower_residual) and lower_residual == 0.0:
+            return temp_min
+        if np.isfinite(upper_residual) and upper_residual == 0.0:
+            return temp_max
+
+        if (
+            np.isfinite(lower_residual)
+            and np.isfinite(upper_residual)
+            and (lower_residual * upper_residual < 0.0)
+        ):
+            root = root_scalar(
+                pressure_residual,
+                bracket=[temp_min, temp_max],
+                method="brentq",
+                xtol=1e-8,
+            )
+            if root.converged:
+                return float(root.root)
+            return np.nan
+
+        minimization = minimize_scalar(
+            lambda temp: float(np.abs(pressure_residual(temp))),
+            bounds=(temp_min, temp_max),
+            method="bounded",
+            options={"xatol": 1e-4},
+        )
+        return float(getattr(minimization, "x", np.nan))
+    except (RuntimeError, ValueError):
+        return np.nan
+
+
 def co2_binary_tx(
     inchis: List[str],
     data: pl.DataFrame,
@@ -212,6 +268,22 @@ def co2_binary_tx(
             continue
         exp_x = exp_vle[x1_name].to_list()
         exp_t = exp_vle["T_K"].to_list()
+
+        temp_min = max(1.0, float(min(exp_t)) - 25.0)
+        temp_max = float(max(exp_t)) + 25.0
+
+        for x1 in exp_x:
+            pred_t.append(
+                _solve_co2_binary_tx_temperature(
+                    x1=x1,
+                    pressure_kpa=pressure,
+                    params=params,
+                    kij_matrix=kij_matrix,
+                    epsilon_ab=epsilon_ab,
+                    temp_min=temp_min,
+                    temp_max=temp_max,
+                )
+            )
 
         ax[0].plot(exp_t, exp_x, "x", color="black", label="Exp")
         ax[0].plot(pred_t, exp_x, "-", color="r", label="Pred")
