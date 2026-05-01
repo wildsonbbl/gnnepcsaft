@@ -11,8 +11,6 @@ from matplotlib.figure import Figure
 from gnnepcsaft.data.rdkit_util import smilestoinchi
 from gnnepcsaft.pcsaft.feos.equilibria import mix_vp_feos
 from gnnepcsaft.pcsaft.pcsaft_feos import (
-    is_stable_feos,
-    mix_tp_flash_feos,
     pure_vp_feos,
 )
 
@@ -20,52 +18,9 @@ from ._phase_equilibria_style import (
     CO2_CRITICAL_P_KPA,
     CO2_CRITICAL_T_K,
     CO2_INCHI,
-    MOLE_FRACTION_SCAN_MAX,
-    MOLE_FRACTION_SCAN_MIN,
 )
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
-
-
-def _scan_pred_x1_from_feed(
-    params: List[List[float]],
-    feed_x1s: np.ndarray,
-    state_template: List[float],
-    feed_index: int,
-    complement_index: Optional[int] = None,
-    kij_matrix: Optional[List[List[float]]] = None,
-    epsilon_ab: Optional[List[List[float]]] = None,
-) -> float:
-    """Scan feed compositions and return x1 from first unstable flash solution."""
-
-    for feed_x1 in feed_x1s:
-        state = list(state_template)
-        state[feed_index] = float(feed_x1)
-        if complement_index is not None:
-            state[complement_index] = float(1.0 - feed_x1)
-        try:
-            if not is_stable_feos(
-                parameters=params,
-                state=state,
-                kij_matrix=kij_matrix,
-                epsilon_ab=epsilon_ab,
-                density_initialization=None,
-            ):
-                flash = mix_tp_flash_feos(
-                    params,
-                    state,
-                    kij_matrix=kij_matrix,
-                    epsilon_ab=epsilon_ab,
-                )
-
-                return (
-                    flash.liquid.molefracs[0].item()
-                    if flash.liquid.density > flash.vapor.density
-                    else flash.vapor.molefracs[0].item()
-                )
-        except RuntimeError:
-            continue
-    return np.nan
 
 
 def co2_binary_px(
@@ -74,8 +29,6 @@ def co2_binary_px(
     inchi_to_params: Dict[str, List[float]],
     k_12: Optional[float] = None,
     epsilon_a1b2: Optional[float] = None,
-    n_fractions: int = 50,
-    n_pressure: int = 50,
 ) -> Tuple[Figure, List[List[Axes]]]:
     """Plot CO2 solubility in solvent from ThermoML data and GNNPCSAFT predictions.
 
@@ -139,13 +92,9 @@ def co2_binary_px(
         len(isotherms), 1, figsize=(6, 4 * len(isotherms)), squeeze=False
     )
 
-    feed_x1s = np.linspace(MOLE_FRACTION_SCAN_MIN, MOLE_FRACTION_SCAN_MAX, n_fractions)
     for ax, isotherm in zip(axs, isotherms.iter_rows(named=True)):
         temperature = isotherm["T_K"]
-        pressures_kpa = np.linspace(
-            isotherm["min_p_kpa"], isotherm["max_p_kpa"], n_pressure, dtype=np.float64
-        )
-        pred_x = []
+        pred_bubble_points = []
 
         exp_vle = vle.filter(
             pl.col("T_K") == temperature,
@@ -164,20 +113,16 @@ def co2_binary_px(
             else CO2_CRITICAL_P_KPA
         )
 
-        for pressure in pressures_kpa:
-            pressure_pa = float(pressure * 1e3)
-            pred_x1 = _scan_pred_x1_from_feed(
-                params=params,
-                feed_x1s=feed_x1s,
-                state_template=[temperature, pressure_pa, np.nan, np.nan],
-                feed_index=2,
-                complement_index=3,
+        for x1 in exp_x:
+            pred_bp, _ = mix_vp_feos(
+                parameters=params,
+                state=[temperature, np.nan, x1, 1 - x1],
                 kij_matrix=kij_matrix,
                 epsilon_ab=epsilon_ab,
             )
-            pred_x.append(pred_x1)
+            pred_bubble_points.append(pred_bp / 1e3)
         ax[0].plot(exp_p, exp_x, "x", color="black", label="Exp")
-        ax[0].plot(pressures_kpa, pred_x, "-", color="r", label="Pred")
+        ax[0].plot(pred_bubble_points, exp_x, "-", color="r", label="Pred")
         ax[0].axvline(vp, color="gray", linestyle="--", label="CO2 Vapor Pressure")
         ax[0].set_xlabel("Pressure (kPa)")
         ax[0].set_ylabel("Mole Fraction CO2 in Liquid Phase")
@@ -193,8 +138,6 @@ def co2_binary_tx(
     inchi_to_params: Dict[str, List[float]],
     k_12: Optional[float] = None,
     epsilon_a1b2: Optional[float] = None,
-    n_fractions: int = 50,
-    n_temperatures: int = 50,
 ) -> Tuple[Figure, List[List[Axes]]]:
     """Plot CO2 solubility in solvent from ThermoML data and GNNPCSAFT predictions (T-x).
 
@@ -258,13 +201,9 @@ def co2_binary_tx(
         len(isobars), 1, figsize=(6, 4 * len(isobars)), squeeze=False
     )
 
-    feed_x1s = np.linspace(MOLE_FRACTION_SCAN_MIN, MOLE_FRACTION_SCAN_MAX, n_fractions)
     for ax, isobar in zip(axs, isobars.iter_rows(named=True)):
         pressure = isobar["P_kPa"]
-        temperatures_k = np.linspace(
-            isobar["min_t_k"], isobar["max_t_k"], n_temperatures, dtype=np.float64
-        )
-        pred_x = []
+        pred_t = []
 
         exp_vle = vle.filter(
             pl.col("P_kPa") == pressure,
@@ -274,20 +213,8 @@ def co2_binary_tx(
         exp_x = exp_vle[x1_name].to_list()
         exp_t = exp_vle["T_K"].to_list()
 
-        for temperature in temperatures_k:
-            pressure_pa = float(pressure * 1e3)
-            pred_x1 = _scan_pred_x1_from_feed(
-                params=params,
-                feed_x1s=feed_x1s,
-                state_template=[temperature, pressure_pa, np.nan, np.nan],
-                feed_index=2,
-                complement_index=3,
-                kij_matrix=kij_matrix,
-                epsilon_ab=epsilon_ab,
-            )
-            pred_x.append(pred_x1)
         ax[0].plot(exp_t, exp_x, "x", color="black", label="Exp")
-        ax[0].plot(temperatures_k, pred_x, "-", color="r", label="Pred")
+        ax[0].plot(pred_t, exp_x, "-", color="r", label="Pred")
         ax[0].set_xlabel("Temperature (K)")
         ax[0].set_ylabel("Mole Fraction CO2 in Liquid Phase")
         ax[0].set_title(f"P = {pressure} kPa")
@@ -434,42 +361,6 @@ def _get_mole_fraction_names(
     )
 
     return x1_name, x2_name, x3_name
-
-
-def _get_x1_ternary(
-    kij_matrix: Optional[List[List[float]]],
-    epsilon_ab: Optional[List[List[float]]],
-    params: List[List[float]],
-    feed_x1s: np.ndarray,
-    t: float,
-    x2: float,
-    x3: float,
-    p_pa: float,
-) -> float:
-    """Calculate mole fraction of component 1 in ternary mixture at flash conditions.
-
-    Args:
-        kij_matrix (Optional[List[List[float]]]): Binary interaction parameter matrix.
-        epsilon_ab (Optional[List[List[float]]]): Association energy parameter matrix.
-        params (List[List[float]]): PC-SAFT parameters for each component.
-        feed_x1s (np.ndarray): Array of feed mole fractions for component 1 to try.
-        t (float): Temperature in Kelvin.
-        x2 (float): Mole fraction of component 2.
-        x3 (float): Mole fraction of component 3.
-        p_pa (float): Pressure in Pascal.
-
-    Returns:
-        out (float): Mole fraction of component 1 in the liquid phase,
-          or np.nan if convergence fails.
-    """
-    return _scan_pred_x1_from_feed(
-        params=params,
-        feed_x1s=feed_x1s,
-        state_template=[t, p_pa, np.nan, x2, x3],
-        feed_index=2,
-        kij_matrix=kij_matrix,
-        epsilon_ab=epsilon_ab,
-    )
 
 
 def get_kij_matrix_ternary(

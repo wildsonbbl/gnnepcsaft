@@ -6,8 +6,6 @@ is split into smaller logical modules.
 
 from ._phase_equilibria_co2 import (  # noqa: F401
     _get_mole_fraction_names,
-    _get_x1_ternary,
-    _scan_pred_x1_from_feed,
     co2_binary_px,
     co2_binary_tx,
     co2_ternary_px,
@@ -56,12 +54,10 @@ __all__ = [
     "MOLE_FRACTION_GRID_MIN",
     "MOLE_FRACTION_GRID_MAX_EXCLUSIVE",
     "MOLE_FRACTION_GRID_MAX_INCLUSIVE",
-    "_scan_pred_x1_from_feed",
     "co2_binary_px",
     "co2_binary_tx",
     "co2_ternary_px",
     "_get_mole_fraction_names",
-    "_get_x1_ternary",
     "get_kij_matrix_ternary",
     "mix_melting_point_ideal",
     "fit_melting_point",
