@@ -478,6 +478,11 @@ def plot_ternary_lle_diagram(
                     lle["y0"] + lle["y1"] + lle["y2"],
                     lle["x0"] + lle["x1"] + lle["x2"],
                 ]
+                if lle["density liquid"][0] > lle["density vapor"][0]
+                else [
+                    lle["x0"] + lle["x1"] + lle["x2"],
+                    lle["y0"] + lle["y1"] + lle["y2"],
+                ]
             )
         return np.asarray(lines).round(4)
 
