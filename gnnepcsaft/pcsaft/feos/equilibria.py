@@ -203,8 +203,8 @@ def mix_lle_diagram_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: phase 1 liquid molefraction of component i
-          - yi: phase 2 liquid molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -254,8 +254,8 @@ def mix_lle_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: phase 1 liquid molefraction of component i
-          - yi: phase 2 liquid molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -305,8 +305,8 @@ def mix_vle_diagram_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: liquid molefraction of component i
-          - yi: vapor molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
     p = state[0]  # Pressure, Pa
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
@@ -349,8 +349,8 @@ def mix_vle_pxy_diagram_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: liquid molefraction of component i
-          - yi: vapor molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
 
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
