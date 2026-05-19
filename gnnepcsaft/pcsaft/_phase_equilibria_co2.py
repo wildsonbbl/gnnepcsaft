@@ -115,12 +115,21 @@ def co2_binary_px(
         )
 
         for x1 in exp_x:
-            pred_bp, _ = mix_vp_feos(
-                parameters=params,
-                state=[temperature, np.nan, x1, 1 - x1],
-                kij_matrix=kij_matrix,
-                epsilon_ab=epsilon_ab,
-            )
+            try:
+                pred_bp, _ = mix_vp_feos(
+                    parameters=params,
+                    state=[temperature, np.nan, x1, 1 - x1],
+                    kij_matrix=kij_matrix,
+                    epsilon_ab=epsilon_ab,
+                )
+            except RuntimeError:
+                pred_bp = np.nan
+            except BaseException as exc:  # pylint: disable=W0718
+                exception_type = type(exc).__name__
+                if exception_type == "PanicException":
+                    pred_bp = np.nan
+                else:
+                    raise
             pred_bubble_points.append(pred_bp / 1e3)
         ax[0].plot(exp_p, exp_x, "x", color="black", label="Exp")
         ax[0].plot(pred_bubble_points, exp_x, "-", color="r", label="Pred")
