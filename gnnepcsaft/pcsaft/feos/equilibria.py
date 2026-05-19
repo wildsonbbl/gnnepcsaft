@@ -178,6 +178,7 @@ def mix_lle_diagram_feos(
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
     epsilon_ab: Optional[List[List[float]]] = None,
+    npoints: int = 500,
 ) -> Dict[str, List[float]]:
     """
     Calculates mixture LLE phase diagram at
@@ -191,6 +192,7 @@ def mix_lle_diagram_feos(
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+        npoints: Number of data points in the LLE diagram (default: 500)
 
     Returns:
         out (Dict[str, List[float]]):
@@ -203,8 +205,8 @@ def mix_lle_diagram_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: phase 1 liquid molefraction of component i
-          - yi: phase 2 liquid molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -216,7 +218,7 @@ def mix_lle_diagram_feos(
         feed=x * si.MOL,
         min_tp=t * si.KELVIN,
         max_tp=(t + 50) * si.KELVIN,
-        npoints=200,
+        npoints=npoints,
     )
 
     if len(dia_t.states) == 0:
@@ -254,8 +256,8 @@ def mix_lle_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: phase 1 liquid molefraction of component i
-          - yi: phase 2 liquid molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
@@ -281,6 +283,7 @@ def mix_vle_diagram_feos(
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
     epsilon_ab: Optional[List[List[float]]] = None,
+    npoints: int = 500,
 ) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLE phase diagram at
@@ -294,6 +297,7 @@ def mix_vle_diagram_feos(
          A list with `[Pressure (Pa)]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+        npoints: Number of data points in the VLE diagram (default: 500)
 
     Returns:
         out (Dict[str, List[float]]):
@@ -305,14 +309,15 @@ def mix_vle_diagram_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: liquid molefraction of component i
-          - yi: vapor molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
     p = state[0]  # Pressure, Pa
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.binary_vle(
         eos,
         temperature_or_pressure=p * si.PASCAL,
+        npoints=npoints,
     )
 
     if len(dia_t.states) == 0:
@@ -326,6 +331,7 @@ def mix_vle_pxy_diagram_feos(
     temperature: float,
     kij_matrix: Optional[List[List[float]]] = None,
     epsilon_ab: Optional[List[List[float]]] = None,
+    npoints: int = 500,
 ) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLE phase diagram at
@@ -338,6 +344,7 @@ def mix_vle_pxy_diagram_feos(
         temperature: Temperature (K)
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+        npoints: Number of data points in the VLE diagram (default: 500)
 
     Returns:
         out (Dict[str, List[float]]):
@@ -349,14 +356,15 @@ def mix_vle_pxy_diagram_feos(
           - residual molar entropy [liquid/vapor]: kJ / mol / K
           - residual specific enthalpy [liquid/vapor]: kJ / kg
           - residual specific entropy [liquid/vapor]: kJ / kg / K
-          - xi: liquid molefraction of component i
-          - yi: vapor molefraction of component i
+          - xi: phase 1 molefraction of component i
+          - yi: phase 2 molefraction of component i
     """
 
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_p = PhaseDiagram.binary_vle(
         eos,
         temperature_or_pressure=temperature * si.KELVIN,
+        npoints=npoints,
     )
 
     if len(dia_p.states) == 0:
@@ -370,6 +378,7 @@ def mix_vlle_diagram_feos(
     state: List[float],
     kij_matrix: Optional[List[List[float]]] = None,
     epsilon_ab: Optional[List[List[float]]] = None,
+    npoints: int = 500,
 ) -> Dict[str, List[float]]:
     """
     Calculates binary mixture VLLE phase diagram at
@@ -383,6 +392,7 @@ def mix_vlle_diagram_feos(
          A list with `[Temperature (K), Pressure (Pa), mole_fractions_1]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
+        npoints: Number of data points in the VLLE diagram (default: 500)
 
     Returns:
         out (Dict[str, List[float]]): VLLE diagram data returned by FEOS.
@@ -397,6 +407,7 @@ def mix_vlle_diagram_feos(
         x_lle=x,
         tp_lim_lle=t * si.KELVIN,
         tp_init_vlle=t * si.KELVIN,
+        npoints=npoints,
     )
     if len(dia_t.states) == 0:
         raise ValueError("No VLLE found at the given conditions.")

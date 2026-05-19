@@ -256,7 +256,8 @@ def plot_binary_lle_phase_diagram(
         ),
     )
 
-    fig, axs = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
+    fig, axs_array = plt.subplots(1, 2, figsize=(12, 5), sharex=True, squeeze=False)
+    axs = axs_array.tolist()
     axs: List[Axes]
 
     # --- Subplot 1: T vs x / y ---
@@ -477,8 +478,13 @@ def plot_ternary_lle_diagram(
                     lle["y0"] + lle["y1"] + lle["y2"],
                     lle["x0"] + lle["x1"] + lle["x2"],
                 ]
+                if lle["density liquid"][0] > lle["density vapor"][0]
+                else [
+                    lle["x0"] + lle["x1"] + lle["x2"],
+                    lle["y0"] + lle["y1"] + lle["y2"],
+                ]
             )
-        return np.asarray(lines)
+        return np.asarray(lines).round(4)
 
     x1, x2, x3, mask = _grid()
     tl = _collect_tie_lines(x1, x2, x3, mask)
