@@ -379,7 +379,7 @@ def mix_vlle_diagram_feos(
     kij_matrix: Optional[List[List[float]]] = None,
     epsilon_ab: Optional[List[List[float]]] = None,
     npoints: int = 500,
-) -> Dict[str, List[float]]:
+) -> Tuple[Dict[str, List[float]], Dict[str, List[float]], Dict[str, List[float]]]:
     """
     Calculates binary mixture VLLE phase diagram at
     state constant pressure and variable temperature with PCSAFT.
@@ -395,11 +395,12 @@ def mix_vlle_diagram_feos(
         npoints: Number of data points in the VLLE diagram (default: 500)
 
     Returns:
-        out (Dict[str, List[float]]): VLLE diagram data returned by FEOS.
+        out (Tuple[Dict[str, List[float]], Dict[str, List[float]], Dict[str, List[float]]]):
+          VLLE diagram data returned by FEOS.
     """
     t = state[0]  # Temperature, K
     p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+    x = tuple(state[2:])  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.binary_vlle(
         eos,
@@ -407,9 +408,18 @@ def mix_vlle_diagram_feos(
         x_lle=x,
         tp_lim_lle=t * si.KELVIN,
         tp_init_vlle=t * si.KELVIN,
-        npoints=npoints,
+        npoints_vle=npoints,
+        npoints_lle=npoints,
     )
-    if len(dia_t.states) == 0:
+    if len(dia_t.vle1.states) == 0:
+        raise ValueError("No VLLE found at the given conditions.")
+    if len(dia_t.vle2.states) == 0:
+        raise ValueError("No VLLE found at the given conditions.")
+    if len(dia_t.lle.states) == 0:
         raise ValueError("No VLLE found at the given conditions.")
 
-    return dia_t.to_dict(Contributions.Residual)
+    return (
+        dia_t.vle1.to_dict(Contributions.Residual),
+        dia_t.vle2.to_dict(Contributions.Residual),
+        dia_t.lle.to_dict(Contributions.Residual),
+    )
