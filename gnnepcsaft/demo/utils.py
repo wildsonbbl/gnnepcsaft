@@ -228,7 +228,7 @@ def plot_binary_lle_phase_diagram(
          for the two components.
         state:
          List containing initial state
-         `[T (K), P (Pa), mole_fractions_1, mole_fractions_2]` for the plot.
+         `[T_min (K), T_max (K), P (Pa), mole_fractions_1, mole_fractions_2]` for the plot.
         k_12: Binary interaction parameter.
         epsilon_a1b2: Cross-association energy parameter (in K).
 

@@ -189,7 +189,8 @@ def mix_lle_diagram_feos(
          `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
          for each component of the mixture
         state:
-         A list with `[Temperature (K), Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
+         A list with `[Minimum Temperature (K), Maximum Temperature (K),
+         Pressure (Pa), mole_fractions_1, mole_fractions_2, ...]`
         kij_matrix: A matrix of binary interaction parameters
         epsilon_ab: A matrix of cross association energy parameters
         npoints: Number of data points in the LLE diagram (default: 500)
@@ -208,16 +209,17 @@ def mix_lle_diagram_feos(
           - xi: phase 1 molefraction of component i
           - yi: phase 2 molefraction of component i
     """
-    t = state[0]  # Temperature, K
-    p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+    t_min = state[0]  # Temperature, K
+    t_max = state[1]
+    p = state[2]  # Pressure, Pa
+    x = np.asarray(state[3:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
     dia_t = PhaseDiagram.lle(
         eos,
         temperature_or_pressure=p * si.PASCAL,
         feed=x * si.MOL,
-        min_tp=t * si.KELVIN,
-        max_tp=(t + 50) * si.KELVIN,
+        min_tp=t_min * si.KELVIN,
+        max_tp=t_max * si.KELVIN,
         npoints=npoints,
     )
 
