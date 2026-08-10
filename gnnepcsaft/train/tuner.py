@@ -62,7 +62,7 @@ def main(argv):
                 "dropout": 0.0,
             }
         ],
-        seed=77,
+        # seed=77,
     )
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
