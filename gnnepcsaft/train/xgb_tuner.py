@@ -12,9 +12,6 @@ from .xgb_training import training
 FLAGS = flags.FLAGS
 flags.DEFINE_float("num_cpu", 1.0, "Fraction of CPU threads per trial for ray")
 flags.DEFINE_float("num_gpus", 1.0, "Fraction of GPUs per trial for ray")
-flags.DEFINE_integer(
-    "max_concurrent", 2, "Maximum concurrent samples from the underlying searcher."
-)
 
 
 def main(argv):

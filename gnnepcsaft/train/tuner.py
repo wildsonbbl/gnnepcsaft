@@ -25,9 +25,6 @@ flags.DEFINE_string(
     "Directory path to restore the state of a searcher from previous tuning results",
 )
 flags.DEFINE_string("resumedir", None, "Directory path to resume unfinished tuning")
-flags.DEFINE_integer(
-    "max_concurrent", 4, "Maximum concurrent samples from the underlying searcher."
-)
 flags.DEFINE_integer("num_samples", 100, "Number of trials")
 flags.DEFINE_float(
     "time_budget_s",
@@ -65,7 +62,7 @@ def main(argv):
                 "dropout": 0.0,
             }
         ],
-        seed=77,
+        # seed=77,
     )
     if FLAGS.restoredir:
         search_alg.restore_from_dir(FLAGS.restoredir)
