@@ -39,7 +39,6 @@ def get_config():
     config.hidden_dim = 256
     config.dropout = 0.25
     config.num_para = 3
-    config.normalise = True
     ## PNA
     config.post_layers = 4
     config.pre_layers = 2
