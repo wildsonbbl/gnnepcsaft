@@ -152,8 +152,8 @@ def build_train_dataset(workdir, dataset, transform=None) -> Union[Esper, Ramire
                 as_idx.append(i)
         return train_dataset[as_idx]  # type: ignore
     raise ValueError(
-        "dataset is either ramirez, esper, esper_assoc "
-        f"or esper_assoc_only, got >>> {dataset} <<< instead"
+        "dataset is either ramirez, esper, esper_assoc"
+        f" or esper_assoc_only, got >>> {dataset} <<< instead"
     )
 
 
