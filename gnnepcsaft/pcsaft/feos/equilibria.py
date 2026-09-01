@@ -119,7 +119,7 @@ def mix_dp_at_fixed_pressure_feos(
         epsilon_ab: A matrix of cross association energy parameters
 
     Returns:
-        out (Tuple[float, float]): Dew-point temperature in Kelvin.
+        out (float): Dew-point temperature in Kelvin.
     """
 
     temperature = state[0]  # Temperature, K
