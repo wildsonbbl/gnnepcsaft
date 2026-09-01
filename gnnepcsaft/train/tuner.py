@@ -11,6 +11,7 @@ from ray.tune.schedulers import HyperBandForBOHB
 from ray.tune.search.bohb import TuneBOHB
 
 from ..configs.search_space import get_search_space
+from .dependency_check import check_dev_dependencies
 from .train import training_updated
 
 os.environ["WANDB_SILENT"] = "true"
@@ -37,6 +38,9 @@ def main(argv):
     """Execution from command line"""
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
+
+    # Check for required dev dependencies
+    check_dev_dependencies()
 
     logging.info("Calling tuner!")
     torch.set_float32_matmul_precision("medium")
