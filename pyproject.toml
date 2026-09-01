@@ -1,6 +1,6 @@
 [project]
 name = "gnnepcsaft"
-version = "0.5.1"
+version = "0.5.2"
 description = "The GNNPCSAFT Project focuses on using Graph Neural Networks to estimate the pure-component parameters of the Equation of State PC-SAFT"
 authors = [
     {name = "wildsonbbl", email = "wil_bbl@hotmail.com"}
@@ -70,8 +70,15 @@ dev = [
     "plotly",
     "nbformat",
     "matplotlib-venn",
-    "torch @ https://download.pytorch.org/whl/cu126",
+    "torch",
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu126"
 
 [project.urls]
 Repository = "https://github.com/wildsonbbl/gnnepcsaft"

@@ -1,6 +1,6 @@
 """Dependency checking module for training scripts.
 
-This module only uses standard library imports to ensure it can be imported
+This module only uses standard library imports (except absl-py) to ensure it can be imported
 and run even if dev dependencies are not installed.
 """
 
