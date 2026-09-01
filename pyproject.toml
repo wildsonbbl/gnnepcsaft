@@ -1,6 +1,6 @@
 [project]
 name = "gnnepcsaft"
-version = "0.5.1"
+version = "0.5.2"
 description = "The GNNPCSAFT Project focuses on using Graph Neural Networks to estimate the pure-component parameters of the Equation of State PC-SAFT"
 authors = [
     {name = "wildsonbbl", email = "wil_bbl@hotmail.com"}
