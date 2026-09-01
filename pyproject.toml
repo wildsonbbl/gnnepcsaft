@@ -1,20 +1,85 @@
 [project]
 name = "gnnepcsaft"
-version = "0.5.0"
-description = "GNNPCSAFT Project."
+version = "0.5.1"
+description = "The GNNPCSAFT Project focuses on using Graph Neural Networks to estimate the pure-component parameters of the Equation of State PC-SAFT"
 authors = [
-    {name = "Wildson Lima"}
+    {name = "wildsonbbl", email = "wil_bbl@hotmail.com"}
 ]
-license = {text = "GNU"}
+maintainers = [
+    {name = "wildsonbbl", email = "wil_bbl@hotmail.com"}
+]
+license = "GPL-3.0-or-later"
 readme = "README.md"
 requires-python = ">=3.10"
+
 dependencies = [
     "feos (>=0.9.0,<0.10.0)",
     "rdkit (>=2024.9.6,<2025.0.0)",
     "numpy (>=2.2.4,<3.0.0)",
-    "si-units (>=0.11.0,<0.12.0)"
+    "si-units (>=0.11.0,<0.12.0)",
+    "absl-py",
 ]
 
+keywords = [
+    "pcsaft", 
+    "graph-neural-network", 
+    "gnn", 
+    "equation-of-state", 
+    "chemical-engineering", 
+    "thermodynamics",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pylint", 
+    "pytest",
+    "ipywidgets",
+    "matplotlib",
+    "jax",
+    "seaborn",
+    "ml_collections",
+    "ogb",
+    "polars",
+    "scipy",
+    "torch_geometric",
+    "torchmetrics",
+    "wandb>=0.24.0",
+    "lightning",
+    "ConfigSpace",
+    "hpbandster",
+    "ray[train]",
+    "ray[tune]",
+    "teqp",
+    "PCSAFTsuperanc",
+    "xgboost",
+    "onnx",
+    "onnxscript",
+    "onnxruntime",
+    "plotly",
+    "nbformat",
+    "matplotlib-venn",
+    "torch @ https://download.pytorch.org/whl/cu126",
+]
+
+[project.urls]
+Repository = "https://github.com/wildsonbbl/gnnepcsaft"
+Issues = "https://github.com/wildsonbbl/gnnepcsaft/issues"
+
+[project.scripts]
+gnnpcsaft-train = 'gnnepcsaft.train.dependency_check:train_entry_point'
+gnnpcsaft-tune = 'gnnepcsaft.train.dependency_check:tune_entry_point'
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

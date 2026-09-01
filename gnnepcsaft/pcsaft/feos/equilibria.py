@@ -35,6 +35,7 @@ def mix_vp_feos(
     """
 
     t = state[0]  # Temperature, K
+    _pressure = state[1]  # Pressure, Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
 
     eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
@@ -57,6 +58,84 @@ def mix_vp_feos(
         vle_bubble_point.liquid.pressure() / si.PASCAL,
         vle_dew_point.vapor.pressure() / si.PASCAL,
     )
+
+
+def mix_bp_at_fixed_pressure_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+) -> float:
+    """
+    Calculates mixture `Bubble point (K)` with PCSAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`.
+          The temperature (K) here is used as starting value.
+        kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (float): Bubble-point temperature in Kelvin.
+    """
+
+    temperature = state[0]  # Temperature, K
+    pressure = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
+
+    vle_bubble_point = PhaseEquilibrium.bubble_point(
+        eos,
+        temperature_or_pressure=pressure * si.PASCAL,
+        liquid_molefracs=x,
+        tp_init=temperature * si.KELVIN,
+    )
+
+    return vle_bubble_point.liquid.temperature / si.KELVIN
+
+
+def mix_dp_at_fixed_pressure_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+) -> float:
+    """
+    Calculates mixture `Dew point (K)` with PCSAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`.
+          The temperature (K) here is used as starting value.
+        kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (Tuple[float, float]): Dew-point temperature in Kelvin.
+    """
+
+    temperature = state[0]  # Temperature, K
+    pressure = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
+
+    vle_dew_point = PhaseEquilibrium.dew_point(
+        eos,
+        temperature_or_pressure=pressure * si.PASCAL,
+        vapor_molefracs=x,
+        tp_init=temperature * si.KELVIN,
+    )
+
+    return vle_dew_point.vapor.temperature / si.KELVIN
 
 
 def is_stable_feos(

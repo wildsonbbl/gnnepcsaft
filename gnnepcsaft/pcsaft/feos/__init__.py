@@ -4,6 +4,8 @@ from .core import get_records, pc_saft, pc_saft_mixture
 from .equilibria import (
     henry_constant_feos,
     is_stable_feos,
+    mix_bp_at_fixed_pressure_feos,
+    mix_dp_at_fixed_pressure_feos,
     mix_lle_diagram_feos,
     mix_lle_feos,
     mix_tp_flash_feos,
@@ -47,6 +49,8 @@ __all__ = [
     "mix_den_feos",
     "pure_den_feos",
     "mix_vp_feos",
+    "mix_bp_at_fixed_pressure_feos",
+    "mix_dp_at_fixed_pressure_feos",
     "pure_vp_feos",
     "pure_h_lv_feos",
     "pure_s_lv_feos",
