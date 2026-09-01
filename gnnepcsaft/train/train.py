@@ -19,7 +19,6 @@ from ray.train.torch import TorchTrainer
 from torch_geometric.loader import DataLoader
 
 from ..configs.configs_parallel import get_configs
-from .dependency_check import check_dev_dependencies
 from .models import GNNePCSAFTL, HabitchNNL, create_model
 from .utils import (
     CustomRayTrainReportCallback,
@@ -281,9 +280,6 @@ def main(argv):
     """Execution from command line"""
     if len(argv) > 1:
         raise app.UsageError("Too many command-line arguments.")
-
-    # Check for required dev dependencies
-    check_dev_dependencies()
 
     logging.info("Calling train and evaluate!")
     torch.set_float32_matmul_precision("medium")
