@@ -33,7 +33,6 @@ def check_dev_dependencies():
         "hpbandster": "hpbandster",
         "ray": "ray[train,tune]",
         "teqp": "teqp",
-        "PCSAFTsuperanc": "PCSAFTsuperanc",
         "xgboost": "xgboost",
         "onnx": "onnx",
         "onnxscript": "onnxscript",

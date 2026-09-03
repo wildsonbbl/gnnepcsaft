@@ -62,7 +62,6 @@ dev = [
     "ray[train]",
     "ray[tune]",
     "teqp",
-    "PCSAFTsuperanc",
     "xgboost",
     "onnx",
     "onnxscript",
