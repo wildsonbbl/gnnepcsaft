@@ -7,9 +7,9 @@ import si_units as si
 from feos import Contributions  # pyright: ignore[reportAttributeAccessIssue]
 from feos import PhaseDiagram  # pyright: ignore[reportAttributeAccessIssue]
 from feos import PhaseEquilibrium  # pyright: ignore[reportAttributeAccessIssue]
-from feos import State  # pyright: ignore[reportAttributeAccessIssue]
 
 from .core import pc_saft_mixture
+from .mixture import state_npt_feos
 
 
 def mix_vp_feos(
@@ -161,15 +161,11 @@ def is_stable_feos(
     Returns:
         out (bool): True if the state is stable, otherwise False.
     """
-    t = state[0]  # Temperature, K
-    p = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
-    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
-    statenpt = State(
-        eos,
-        temperature=t * si.KELVIN,
-        pressure=p * si.PASCAL,
-        molefracs=x,
+    statenpt = state_npt_feos(
+        parameters=parameters,
+        state=state,
+        kij_matrix=kij_matrix,
+        epsilon_ab=epsilon_ab,
         density_initialization=density_initialization,
     )
     return statenpt.is_stable()
@@ -320,14 +316,13 @@ def henry_constant_feos(
         out (np.ndarray): Henry constants for each component in Pascal.
     """
     t = state[0]  # Temperature, K
-    p = state[1]  # Pressure, Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
-    statenpt = State(
-        eos,
-        temperature=t * si.KELVIN,
-        pressure=p * si.PASCAL,
-        molefracs=x,
+    statenpt = state_npt_feos(
+        parameters=parameters,
+        state=state,
+        kij_matrix=kij_matrix,
+        epsilon_ab=epsilon_ab,
         density_initialization=density_initialization,
     )
 
