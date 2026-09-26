@@ -1,6 +1,6 @@
 [project]
 name = "gnnepcsaft"
-version = "0.5.4"
+version = "0.5.5"
 description = "The GNNPCSAFT Project focuses on using Graph Neural Networks to estimate the pure-component parameters of the Equation of State PC-SAFT"
 authors = [
     {name = "wildsonbbl", email = "wil_bbl@hotmail.com"}
@@ -13,7 +13,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "feos (>=0.9.0)",
+    "feos (>=0.10.1)",
     "rdkit (>=2024.9.6)",
     "numpy (>=2.2.4)",
     "si-units (>=0.11.0)",
