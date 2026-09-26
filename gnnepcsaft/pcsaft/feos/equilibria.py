@@ -212,6 +212,88 @@ def mix_tp_flash_feos(
     return tp_flash
 
 
+def mix_ph_flash_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+):
+    """
+    Calculates mixture phase equilibrium with
+    state initial temperature, enthalpy and pressure with PCSAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+         for each component of the mixture
+        state:
+         A list with
+         `[temperature (K), Pressure (Pa), enthalpy (kJ/mol),
+           mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (PhaseEquilibrium): PH flash result with coexisting phases.
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    h = state[2]  # enthalpy, kJ / mol
+    x = np.asarray(state[3:], dtype=np.float64)  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
+    ph_flash = PhaseEquilibrium.ph_flash(
+        eos,
+        pressure=p * si.PASCAL,
+        molar_enthalpy=h * si.KILO * si.JOULE / si.MOL,
+        initial_temperature=t * si.KELVIN,
+        feed=x * si.MOL,
+        max_iter=1_000,
+    )
+
+    return ph_flash
+
+
+def mix_ps_flash_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+):
+    """
+    Calculates mixture phase equilibrium with
+    state initial temperature, entropy and pressure with PCSAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+         for each component of the mixture
+        state:
+         A list with
+         `[temperature (K), Pressure (Pa), entropy (kJ / mol K),
+           mole_fractions_1, mole_fractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (PhaseEquilibrium): PS flash result with coexisting phases.
+    """
+    t = state[0]  # Temperature, K
+    p = state[1]  # Pressure, Pa
+    s = state[2]  # entropy, kJ / mol K
+    x = np.asarray(state[3:], dtype=np.float64)  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
+    ps_flash = PhaseEquilibrium.ps_flash(
+        eos,
+        pressure=p * si.PASCAL,
+        molar_entropy=s * si.KILO * si.JOULE / (si.MOL * si.KELVIN),
+        initial_temperature=t * si.KELVIN,
+        feed=x * si.MOL,
+        max_iter=1_000,
+    )
+
+    return ps_flash
+
+
 def henry_constant_feos(
     parameters: List[List[float]],
     state: List[float],
@@ -344,7 +426,7 @@ def mix_lle_feos(
     p = state[1]  # Pressure, Pa
     x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
     eos = pc_saft_mixture(parameters, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab)
-    dia_t = PhaseDiagram.lle(
+    dia_t = PhaseDiagram.lle(  # this is the same as tp_flash
         eos,
         temperature_or_pressure=p * si.PASCAL,
         feed=x * si.MOL,
