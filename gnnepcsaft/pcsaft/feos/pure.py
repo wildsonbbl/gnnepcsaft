@@ -11,6 +11,7 @@ from feos import (
 from feos import Parameters  # pyright: ignore[reportAttributeAccessIssue]
 from feos import PhaseDiagram  # pyright: ignore[reportAttributeAccessIssue]
 from feos import PhaseEquilibrium  # pyright: ignore[reportAttributeAccessIssue]
+from feos import PlanarInterface  # pyright: ignore[reportAttributeAccessIssue]
 from feos import State  # pyright: ignore[reportAttributeAccessIssue]
 from feos import SurfaceTensionDiagram  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -122,6 +123,42 @@ def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
     ) * (si.MOL * si.KELVIN / si.JOULE)
 
 
+def pure_vle_at_t_feos(parameters: List[float], temperature: float) -> PhaseEquilibrium:
+    """
+    Calcules a pure component VLE with PCSAFT.
+
+    Args:
+        parameters: A list with
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+        temperature: Temperature (K)
+
+    Returns:
+        out (feos.PhaseEquilibrium): System at Vapor Liquid Equilibrium
+    """
+
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=temperature * si.KELVIN)
+    return vle
+
+
+def pure_vle_at_p_feos(parameters: List[float], pressure: float) -> PhaseEquilibrium:
+    """
+    Calcules a pure component VLE with PCSAFT.
+
+    Args:
+        parameters: A list with
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+        pressure: Pressure (Pa)
+
+    Returns:
+        out (feos.PhaseEquilibrium): System at Vapor Liquid Equilibrium
+    """
+
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=pressure * si.PASCAL)
+    return vle
+
+
 def critical_points_feos(parameters: List[float]) -> List[float]:
     """
     Calculates critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]` with PCSAFT.
@@ -226,3 +263,36 @@ def pure_surface_tension_feos(
     st = st_diagram.surface_tension / (si.MILLI * si.NEWTON / si.METER)
     temp = st_diagram.liquid.temperature / si.KELVIN
     return st, temp
+
+
+def pure_surface_tension_at_t_feos(
+    parameters: List[float], temperature: float
+) -> float:
+    """
+    Calculates pure component `Surface Tension (mN/m)` with PCSAFT
+    at state temperature.
+
+    Args:
+        parameters (List[float]): A list with
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+        temperature (float): Temperature (K)
+
+    Returns:
+        out (float): Surface tension (mN/m)
+    """
+
+    records = get_records([parameters])
+    pcsaftparameters = Parameters.from_records(records)
+    pc_saft_functional = HelmholtzEnergyFunctional.pcsaft(pcsaftparameters)
+    cp = State.critical_point(pc_saft_functional)
+    vle = PhaseEquilibrium.pure(pc_saft_functional, temperature * si.KELVIN)
+    interface = PlanarInterface.from_tanh(
+        vle=vle,
+        n_grid=512,
+        l_grid=100 * si.ANGSTROM,
+        critical_temperature=cp.temperature,
+    )
+    surface_tension = interface.solve().surface_tension
+
+    st = surface_tension / (si.MILLI * si.NEWTON / si.METER)
+    return st
