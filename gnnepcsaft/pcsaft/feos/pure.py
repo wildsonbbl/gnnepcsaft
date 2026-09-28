@@ -123,6 +123,42 @@ def pure_s_lv_feos(parameters: List[float], state: List[float]) -> float:
     ) * (si.MOL * si.KELVIN / si.JOULE)
 
 
+def pure_vle_at_t_feos(parameters: List[float], temperature: float) -> PhaseEquilibrium:
+    """
+    Calcules a pure component VLE with PCSAFT.
+
+    Args:
+        parameters: A list with
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+        temperature: Temperature (K)
+
+    Returns:
+        out (feos.PhaseEquilibrium): System at Vapor Liquid Equilibrium
+    """
+
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=temperature * si.KELVIN)
+    return vle
+
+
+def pure_vle_at_p_feos(parameters: List[float], pressure: float) -> PhaseEquilibrium:
+    """
+    Calcules a pure component VLE with PCSAFT.
+
+    Args:
+        parameters: A list with
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, mw]`
+        pressure: Pressure (Pa)
+
+    Returns:
+        out (feos.PhaseEquilibrium): System at Vapor Liquid Equilibrium
+    """
+
+    eos = pc_saft(parameters)
+    vle = PhaseEquilibrium.pure(eos, temperature_or_pressure=pressure * si.PASCAL)
+    return vle
+
+
 def critical_points_feos(parameters: List[float]) -> List[float]:
     """
     Calculates critical points `[Tc (K), Pc (Pa), Dc (mol/m³)]` with PCSAFT.
