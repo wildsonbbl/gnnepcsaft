@@ -61,7 +61,6 @@ dev = [
     "hpbandster",
     "ray[train]",
     "ray[tune]",
-    "teqp",
     "xgboost",
     "onnx",
     "onnxscript",
