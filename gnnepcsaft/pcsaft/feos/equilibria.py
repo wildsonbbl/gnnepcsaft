@@ -12,6 +12,68 @@ from .core import pc_saft_mixture
 from .mixture import state_npt_feos
 
 
+def mix_bp_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+) -> float:
+    """
+    Calculates mixture `Bubble point (Pa)` with PCSAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (float): Bubble-point pressure in Pascal.
+    """
+    t = state[0]  # Temperature, K
+    _pressure = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
+    vle_bubble_point = PhaseEquilibrium.bubble_point(
+        eos, temperature_or_pressure=t * si.KELVIN, liquid_molefracs=x
+    )
+    return vle_bubble_point.liquid.pressure() / si.PASCAL
+
+
+def mix_dp_feos(
+    parameters: List[List[float]],
+    state: List[float],
+    kij_matrix: Optional[List[List[float]]] = None,
+    epsilon_ab: Optional[List[List[float]]] = None,
+) -> float:
+    """
+    Calculates mixture `Dew point (Pa)` with PCSAFT.
+
+    Args:
+        parameters: A list of
+         `[m, sigma, epsilon/kB, kappa_ab, epsilon_ab/kB, dipole moment, na, nb, MW]`
+         for each component of the mixture
+        state: A list with
+         `[Temperature (K), Pressure (Pa), mole_fractions_1, molefractions_2, ...]`
+        kij_matrix: A matrix of binary interaction parameters
+        epsilon_ab: A matrix of cross association energy parameters
+
+    Returns:
+        out (float): Dew-point pressure in Pascal.
+    """
+    t = state[0]  # Temperature, K
+    _pressure = state[1]  # Pressure, Pa
+    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
+    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
+    vle_dew_point = PhaseEquilibrium.dew_point(
+        eos, temperature_or_pressure=t * si.KELVIN, vapor_molefracs=x
+    )
+    return vle_dew_point.vapor.pressure() / si.PASCAL
+
+
 def mix_vp_feos(
     parameters: List[List[float]],
     state: List[float],
@@ -34,30 +96,13 @@ def mix_vp_feos(
         out (Tuple[float, float]): Bubble-point and dew-point pressures in Pascal.
     """
 
-    t = state[0]  # Temperature, K
-    _pressure = state[1]  # Pressure, Pa
-    x = np.asarray(state[2:], dtype=np.float64)  # mole fractions
-
-    eos = pc_saft_mixture(parameters, kij_matrix, epsilon_ab)
-
-    vle_bubble_point = PhaseEquilibrium.bubble_point(
-        eos, temperature_or_pressure=t * si.KELVIN, liquid_molefracs=x
+    bp = mix_bp_feos(
+        parameters=parameters, state=state, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab
     )
-
-    vle_dew_point = PhaseEquilibrium.dew_point(
-        eos, temperature_or_pressure=t * si.KELVIN, vapor_molefracs=x
+    dp = mix_dp_feos(
+        parameters=parameters, state=state, kij_matrix=kij_matrix, epsilon_ab=epsilon_ab
     )
-
-    assert (
-        t == vle_bubble_point.liquid.temperature / si.KELVIN
-    ), "Temperature mismatch for bubble point"
-    assert (
-        t == vle_dew_point.vapor.temperature / si.KELVIN
-    ), "Temperature mismatch for dew point"
-    return (
-        vle_bubble_point.liquid.pressure() / si.PASCAL,
-        vle_dew_point.vapor.pressure() / si.PASCAL,
-    )
+    return bp, dp
 
 
 def mix_bp_vapor_fracs_at_t_feos(
