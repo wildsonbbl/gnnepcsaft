@@ -21,3 +21,19 @@ Implementations with GNNPCSAFT:
 - [GNNPCSAFT MCP](https://github.com/wildsonbbl/gnnepcsaft_mcp_server)
 - [GNNPCSAFT Webapp](https://github.com/wildsonbbl/gnnepcsaftwebapp)
 - [GNNPCSAFT Chat](https://github.com/wildsonbbl/gnnpcsaftchat)
+- [GNNPCSAFT CAPE-OPEN](https://github.com/wildsonbbl/GNNPCSAFTcapeopen)
+
+## Citation
+
+```bibliography
+@article{lima2026,
+    title={Estimating PC-SAFT Pure-Component Parameters by Using Graph Neural Networks: Application to Ionic Liquids and Deep Eutectic Solvents},
+    author={Wildson Bernardino de Brito Lima and Osvaldo Chiavone-Filho and Everaldo Silvino dos Santos},
+    journal={J. Chem. Eng. Data},
+    year={2026},
+    volume={71},
+    number={6},
+    pages={2533--2544},
+    doi={10.1021/acs.jced.6c00027}
+}
+```

@@ -33,7 +33,6 @@ def check_dev_dependencies():
         "ConfigSpace": "ConfigSpace",
         "hpbandster": "hpbandster",
         "ray": "ray[train,tune]",
-        "teqp": "teqp",
         "xgboost": "xgboost",
         "onnx": "onnx",
         "onnxscript": "onnxscript",

@@ -60,18 +60,18 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         train_dataset,
         batch_size=config["batch_size"],
         shuffle=True,
-        num_workers=os.cpu_count(),
+        num_workers=min(8, os.cpu_count() or 1),
     )
 
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=len(val_dataset),
-        num_workers=os.cpu_count(),
+        num_workers=min(8, os.cpu_count() or 1),
     )
     train_val_dataloader = DataLoader(
         train_val_dataset,
         batch_size=len(train_val_dataset),
-        num_workers=os.cpu_count(),
+        num_workers=min(8, os.cpu_count() or 1),
     )
 
     # trainer callback and logger
@@ -98,7 +98,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         enable_checkpointing=config["job_type"] == "train",
     )
 
-    ckpt_path = get_ckpt_path(config, workdir, model, logger)
+    ckpt_path = get_ckpt_path(config, workdir, model, logger, trainer)
 
     # training run
     logging.info("Training run!")
@@ -114,7 +114,7 @@ def ltrain_and_evaluate(  # pylint:  disable=too-many-locals
         weights_only=False,
     )
 
-    if config["job_type"] == "train":
+    if config["job_type"] == "train" and trainer.is_global_zero:
         wandb.finish()
 
 
@@ -123,6 +123,7 @@ def get_ckpt_path(
     workdir: str,
     model: Union[GNNePCSAFTL, HabitchNNL],
     logger: Union[WandbLogger, None],
+    trainer: L.Trainer,
 ):
     "gets checkpoint path for resuming training"
     ckpt_path = None
@@ -137,17 +138,28 @@ def get_ckpt_path(
         elif config["checkpoint"]:
             ckpt_path = Path(workdir) / f"train/checkpoints/{config['checkpoint']}"
     elif config["checkpoint"]:
-        if logger:
-            ckpt_dir = Path(workdir) / f"train/checkpoints/{config['model_name']}"
+        ckpt_dir = Path(workdir) / f"train/checkpoints/{config['model_name']}"
+        if trainer.is_global_zero:
+            if logger is None:
+                raise RuntimeError("A W&B logger is required to download a checkpoint.")
             artifact = logger.use_artifact(config["checkpoint"], "model")
+            if artifact is None:
+                raise RuntimeError(
+                    "W&B did not return the requested checkpoint artifact "
+                    f"{config['checkpoint']!r}."
+                )
             artifact.download(ckpt_dir)
-            ckpt_path = ckpt_dir / "model.ckpt"
-            if config["change_opt"]:
 
-                ckpt = torch.load(ckpt_path, weights_only=True)
-                model.load_state_dict(ckpt["state_dict"])
+        # Only rank zero accesses W&B. All ranks share the work directory,
+        # so wait until the artifact is available before loading it.
+        trainer.strategy.barrier("checkpoint_download")
+        ckpt_path = ckpt_dir / "model.ckpt"
+        if config["change_opt"]:
 
-                ckpt_path = None
+            ckpt = torch.load(ckpt_path, weights_only=True)
+            model.load_state_dict(ckpt["state_dict"])
+
+            ckpt_path = None
     return ckpt_path
 
 
