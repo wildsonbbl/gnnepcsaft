@@ -193,7 +193,7 @@ def get_callbacks_and_logger(config, workdir):
 
         checkpoint_train_loss = ModelCheckpoint(
             dirpath=osp.join(workdir, "train/checkpoints"),
-            filename=config.model_name + "-{epoch}-{train_mape:.4f}",
+            filename=config.model_name + "-{epoch}-train_mape",
             save_last=False,
             monitor="train_mape",
             save_top_k=1,
